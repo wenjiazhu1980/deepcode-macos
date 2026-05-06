@@ -7,7 +7,6 @@ docs/*.md
 !docs/tools/
 *.tgz
 *.log
-.github/
 .gitignore
 
 # Xcode (macOS app generated artifacts)
