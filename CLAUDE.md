@@ -23,6 +23,64 @@ node dist/cli.cjs --version  # smoke-test the bundled binary directly
 
 Requirements: Node ≥ 18.17. The CLI refuses to start without a TTY (`process.stdin.isTTY`).
 
+## Release Process
+
+Releases are versioned `v{major}.{minor}.{patch}`. Never skip steps or combine versions.
+
+### 1. Prepare & test
+```bash
+npm test                    # must pass 100%
+npm run typecheck           # zero errors
+npm run build               # produces dist/cli.cjs
+```
+
+### 2. Bump version & build
+Edit `package.json` → `"version": "X.Y.Z"`, then:
+```bash
+npm run build
+git add package.json dist/
+git commit -m "release: vX.Y.Z"
+git tag vX.Y.Z
+git push && git push --tags
+```
+
+### 3. Create GitHub Release
+```bash
+gh release create vX.Y.Z \
+  --title "vX.Y.Z" \
+  --notes "## vX.Y.Z
+
+### 🚀 Feature
+- ...
+
+### 🐛 Fixes
+- ..."
+```
+
+### 4. Trigger CI binaries (platform CLI archives)
+Push triggers the `release-cli.yml` workflow on `v*` tags automatically.  
+To re-run manually:
+```bash
+gh workflow run release-cli.yml -f tag_name=vX.Y.Z
+```
+This produces `linux-x64`, `darwin-arm64`, `darwin-x64`, `win-x64` tarballs and attaches them to the release.
+
+### 5. Trigger macOS native app build (optional)
+macOS `.app` + `.dmg` is built by the `release-macos.yml` workflow, triggered by `macos-v*` tags:
+```bash
+git tag macos-vX.Y.Z
+git push origin macos-vX.Y.Z
+```
+The DMG is auto-attached to a release named `macos-vX.Y.Z`.
+
+### Rollback
+If a release is bad, delete the tag and re-tag the previous commit:
+```bash
+git tag -d vX.Y.Z
+git push --delete origin vX.Y.Z
+gh release delete vX.Y.Z --yes
+```
+
 ## Architecture (read this before changing core logic)
 
 The data flow is: **`cli.tsx` → Ink `<App />` → `SessionManager` → OpenAI streaming → `ToolExecutor` → tool handlers**.
@@ -77,4 +135,4 @@ Each `SKILL.md` is parsed with `gray-matter`; the `name` and `description` front
 - **`isInvisibleExecution`**: tool messages with `name === "bash"` and `ok !== true` are hidden from the UI. If you add a new tool whose failures should also be silent, extend that helper rather than tagging at the call site.
 - **Windows**: every shell-out path goes through `shell-utils.ts`. Use `findGitBashPath()` / `resolveShellPath()` instead of spawning `bash` directly, and remember `setShellIfWindows()` runs once at startup. Test new shell logic on both POSIX and Windows code paths (or at minimum, exercise the helpers in `shell-utils.ts`).
 - **Reasoning content replay**: `buildOpenAIMessages` injects `reasoning_content: ""` on every replayed assistant message when `thinkingEnabled` is true. Some providers reject the request without it. Don't strip this branch when refactoring message construction.
-- **AbortController plumbing**: `activePromptController` (one global) and `sessionControllers` (per session) coexist. `interruptActiveSession` aborts both plus kills any tracked child PIDs. New long-running async work in `SessionManager` must check `isInterrupted(sessionId)` between awaits or accept an `AbortSignal`.
+- **AbortController plumbing**: `activePromptController` (one global) and `sessionControllers` (per session) coexist. `interruptActiveSession` aborts both plus kills any tracked child PIDs. `createChatCompletionStream` also checks `signal.aborted` **inside the `for await` loop** to break out immediately mid-stream — this is critical for sub-second interrupt latency. Any new streaming loops must include the same guard. New long-running async work in `SessionManager` must check `isInterrupted(sessionId)` between awaits or accept an `AbortSignal`.
