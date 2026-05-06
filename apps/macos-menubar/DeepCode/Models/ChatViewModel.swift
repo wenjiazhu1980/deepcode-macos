@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import AppKit
 
 struct DisplayMessage: Identifiable, Equatable {
     let id: String
@@ -12,6 +13,12 @@ struct DisplayMessage: Identifiable, Equatable {
     let toolResult: String?
 }
 
+struct AttachedImage: Identifiable, Equatable {
+    let id: String
+    let dataUrl: String
+    let thumbnail: NSImage?
+}
+
 @MainActor
 final class ChatViewModel: ObservableObject {
     @Published var messages: [DisplayMessage] = []
@@ -22,29 +29,34 @@ final class ChatViewModel: ObservableObject {
     @Published var startupError: String?
     @Published var settingsHint: String?
     @Published var modelLabel: String = ""
+    @Published var projectRoot: String = ""
+    @Published var showCommandPanel: Bool = false
+    @Published var slashCommands: [SlashCommandItem] = []
+    @Published var attachedImages: [AttachedImage] = []
+    @Published var sessionList: [ServerSessionEntry] = []
 
     private let sidecar = SidecarProcess()
     private var pendingSubmitId: String?
     private var pumpTask: Task<Void, Never>?
     private var didStart = false
 
+    // MARK: - Lifecycle
+
     func start() async {
-        // Idempotent: ChatPopover.onAppear fires every time the user opens the
-        // menu bar popover. Re-running launch() would spawn a second sidecar
-        // process sharing the same inputPipe and silently break stdin writes,
-        // making the second user message vanish.
         guard !didStart else { return }
         didStart = true
 
-        // Read settings (sync, fast).
         let settings = SettingsLoader.load()
         modelLabel = settings.model
         if !settings.hasApiKey {
             settingsHint = "请先编辑 ~/.deepcode/settings.json 配置 env.API_KEY"
         }
 
+        let root = SettingsLoader.defaultProjectRoot()
+        projectRoot = root
+
         do {
-            try sidecar.launch(projectRoot: SettingsLoader.defaultProjectRoot())
+            try sidecar.launch(projectRoot: root)
             statusText = "ready"
         } catch {
             startupError = error.localizedDescription
@@ -66,26 +78,136 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    // MARK: - User actions
+
     func submit() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, settingsHint == nil else { return }
+        guard (!text.isEmpty || !attachedImages.isEmpty), settingsHint == nil else { return }
         let id = UUID().uuidString
         pendingSubmitId = id
-        appendUser(text)
+
+        var displayContent = text
+        if !attachedImages.isEmpty {
+            let imageNote = attachedImages.count == 1 ? "📎 1 image" : "📎 \(attachedImages.count) images"
+            displayContent = text.isEmpty ? imageNote : "\(text)\n\(imageNote)"
+        }
+        appendUser(displayContent)
+
+        let imageUrls = attachedImages.isEmpty ? nil : attachedImages.map { $0.dataUrl }
         inputText = ""
+        attachedImages = []
+        showCommandPanel = false
         isStreaming = true
         statusText = "processing"
-        sidecar.send(.submit(id: id, text: text))
+        sidecar.send(.submit(id: id, text: text, imageUrls: imageUrls))
     }
 
     func interrupt() {
         sidecar.send(.interrupt(id: UUID().uuidString))
     }
 
+    // MARK: - PWD management
+
+    func selectProjectRoot() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "选择项目目录"
+        panel.message = "选择要切换的项目根目录"
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let path = url.path
+        let id = UUID().uuidString
+        sidecar.send(.changeProjectRoot(id: id, path: path))
+    }
+
+    // MARK: - Slash commands
+
+    func refreshSlashCommands() {
+        let id = UUID().uuidString
+        sidecar.send(.listSlashCommands(id: id))
+    }
+
+    func executeSlashCommand(_ command: SlashCommandItem) {
+        showCommandPanel = false
+        switch command.kind {
+        case "new":
+            let id = UUID().uuidString
+            sidecar.send(.newSession(id: id))
+            messages = []
+            appendSystem("开始新会话")
+        case "skills":
+            refreshSlashCommands()
+        case "skill":
+            // Insert skill name into input for submission
+            inputText = "/\(command.name) "
+        default:
+            break
+        }
+    }
+
+    var filteredSlashCommands: [SlashCommandItem] {
+        guard inputText.hasPrefix("/") else { return [] }
+        let query = String(inputText.dropFirst()).lowercased()
+        if query.isEmpty { return slashCommands }
+        return slashCommands.filter { $0.name.lowercased().contains(query) }
+    }
+
+    // MARK: - Image attachment
+
+    func pasteImage() {
+        let pasteboard = NSPasteboard.general
+        guard let image = pasteboard.readObjects(forClasses: [NSImage.self], options: nil)?.first as? NSImage else {
+            return
+        }
+        addImageAttachment(image)
+    }
+
+    func addImageAttachment(_ image: NSImage) {
+        guard let tiffData = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmap.representation(using: .png, properties: [:]) else {
+            return
+        }
+        let base64 = pngData.base64EncodedString()
+        let dataUrl = "data:image/png;base64,\(base64)"
+
+        // Create thumbnail
+        let thumbnail = resizeImage(image, maxSize: 80)
+
+        let attached = AttachedImage(id: UUID().uuidString, dataUrl: dataUrl, thumbnail: thumbnail)
+        attachedImages.append(attached)
+    }
+
+    func removeAttachedImage(_ id: String) {
+        attachedImages.removeAll { $0.id == id }
+    }
+
+    func clearAttachedImages() {
+        attachedImages.removeAll()
+    }
+
+    private func resizeImage(_ image: NSImage, maxSize: CGFloat) -> NSImage {
+        let aspect = image.size.width / image.size.height
+        let size: NSSize = aspect > 1
+            ? NSSize(width: maxSize, height: maxSize / aspect)
+            : NSSize(width: maxSize * aspect, height: maxSize)
+        let resized = NSImage(size: size)
+        resized.lockFocus()
+        image.draw(in: NSRect(origin: .zero, size: size), from: .zero, operation: .copy, fraction: 1.0)
+        resized.unlockFocus()
+        return resized
+    }
+
+    // MARK: - Server event handling
+
     private func handle(_ event: ServerEvent) async {
         switch event {
-        case let .ready(version, _, _):
+        case let .ready(version, _, projectRoot):
+            projectRoot = projectRoot
             statusText = "ready · v\(version)"
+            refreshSlashCommands()
         case .session:
             break
         case let .stream(phase, _, formatted, _):
@@ -101,10 +223,31 @@ final class ChatViewModel: ObservableObject {
             }
         case let .message(message):
             apply(message: message)
-        case .sessionsList:
-            break
-        case .sessionLoaded:
-            break
+        case let .sessionsList(_, sessions):
+            sessionList = sessions
+        case let .sessionLoaded(_, _, messages):
+            // Restore message history
+            self.messages = messages.compactMap { serverMsg in
+                guard serverMsg.visible ?? true else { return nil }
+                let rawContent = serverMsg.content ?? ""
+                let reasoning = serverMsg.messageParams?.reasoningContent ?? ""
+                let content = rawContent.isEmpty ? reasoning : rawContent
+                if content.isEmpty { return nil }
+                if serverMsg.role == "tool" {
+                    return DisplayMessage(
+                        id: serverMsg.id, role: "tool", content: "",
+                        isThinking: false, isTool: true,
+                        toolName: serverMsg.meta?.function?.name ?? "tool",
+                        toolParams: serverMsg.meta?.paramsMd ?? "",
+                        toolResult: serverMsg.meta?.resultMd ?? content
+                    )
+                }
+                return DisplayMessage(
+                    id: serverMsg.id, role: serverMsg.role, content: content,
+                    isThinking: serverMsg.meta?.asThinking ?? false,
+                    isTool: false, toolName: nil, toolParams: nil, toolResult: nil
+                )
+            }
         case let .error(_, message):
             appendSystem("Error: \(message)")
         case let .done(_, status):
@@ -113,30 +256,47 @@ final class ChatViewModel: ObservableObject {
             pendingSubmitId = nil
         case .ack:
             break
+        case let .projectRootChanged(_, path, skills):
+            projectRoot = path
+            SettingsLoader.saveLastProjectRoot(path)
+            // Rebuild slash commands from the new project's skills
+            self.slashCommands = skills.map { skill in
+                SlashCommandItem(kind: "skill", name: skill.name, label: "/\(skill.name)", description: skill.description, skill: skill)
+            }
+            refreshSlashCommands() // also get built-in commands
+        case let .slashCommands(_, commands):
+            slashCommands = commands
+        case let .clipboardImage(_, dataUrl, error):
+            if let error = error {
+                appendSystem("剪贴板图片: \(error)")
+            } else if let dataUrl = dataUrl {
+                // Convert dataUrl back to NSImage
+                if let base64Range = dataUrl.range(of: ";base64,") {
+                    let base64 = String(dataUrl[base64Range.upperBound...])
+                    if let data = Data(base64Encoded: base64),
+                       let image = NSImage(data: data) {
+                        addImageAttachment(image)
+                    }
+                }
+            }
         case let .unknown(rawType):
             appendSystem("Unknown event: \(rawType)")
         }
     }
 
+    // MARK: - Message display
+
     private func apply(message: ServerMessage) {
         guard message.visible ?? true else { return }
         let role = message.role
         let rawContent = message.content ?? ""
-        // Thinking-only models (e.g. deepseek-v3.2) return the full reply in
-        // messageParams.reasoning_content with content="". Fall back to it.
         let reasoning = message.messageParams?.reasoningContent ?? ""
         let content = rawContent.isEmpty ? reasoning : rawContent
         if role == "user" {
-            // The CLI echoes user messages but we already appended locally on submit;
-            // skip duplicates by checking the latest entry.
             if messages.last?.role == "user", messages.last?.content == content { return }
             messages.append(.init(id: message.id, role: "user", content: content, isThinking: false, isTool: false, toolName: nil, toolParams: nil, toolResult: nil))
         } else if role == "assistant" {
-            // Empty assistant message with no reasoning fallback → skip (avoid blank bubble).
             if content.isEmpty { return }
-            // Only treat as a "Thinking" summary bubble when the sidecar explicitly tags it.
-            // For thinking-only models like deepseek-v3.2 where reasoning_content IS the
-            // primary reply (content==""), render it as a normal assistant bubble.
             let isThinking = message.meta?.asThinking ?? false
             messages.append(.init(id: message.id, role: "assistant", content: content, isThinking: isThinking, isTool: false, toolName: nil, toolParams: nil, toolResult: nil))
         } else if role == "tool" {
@@ -145,8 +305,6 @@ final class ChatViewModel: ObservableObject {
             let result = message.meta?.resultMd ?? content
             messages.append(.init(id: message.id, role: "tool", content: "", isThinking: false, isTool: true, toolName: name, toolParams: params, toolResult: result))
         } else if role == "system" {
-            // Skip implicit system messages (skill loads, agent instructions, summaries).
-            // Only show if visible == true and content is non-empty.
             if (message.visible ?? false), !content.isEmpty {
                 messages.append(.init(id: message.id, role: "system", content: content, isThinking: false, isTool: false, toolName: nil, toolParams: nil, toolResult: nil))
             }
