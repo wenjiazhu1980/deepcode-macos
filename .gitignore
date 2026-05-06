@@ -8,6 +8,7 @@ docs/*.md
 *.tgz
 *.log
 .github/
+.gitignore
 
 # Xcode (macOS app generated artifacts)
 apps/macos-menubar/DeepCode.xcodeproj/

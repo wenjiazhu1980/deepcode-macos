@@ -83,6 +83,64 @@ deepcode
 
 ---
 
+## 🖥️ DeepCode 原生 Mac App — 菜单栏里的 AI 编程助手
+
+除了终端和 VSCode，DeepCode 还提供了**原生 macOS 菜单栏应用**，点击菜单栏 ✨ 图标即可唤起 AI 对话窗口，无需打开终端。
+
+```
+[ 菜单栏 ✨ 图标 ]  ←点击→  [ ChatPopover 窗口 ]  ←pipe→  [ deepcode CLI (sidecar) ]
+                                                              │
+                                                              ↓
+                                                     [ SessionManager / AI 引擎 ]
+```
+
+### 🎯 为什么用 Mac App？
+
+| 场景 | 终端 `deepcode` | Mac App |
+|------|:---:|:---:|
+| 重度 CLI 用户 | ✅ 最佳 | — |
+| VSCode 里写代码 | ✅ 扩展 | — |
+| **随手唤出 AI 问问题** | 需要切终端 | ✅ **一键呼出** |
+| **不熟悉命令行的用户** | 门槛高 | ✅ **零门槛** |
+| **想随时查看历史会话** | `/resume` | ✅ **图形化会话列表** |
+| **多项目快速切换** | `cd` 切换目录 | ✅ **菜单一键切换** |
+
+### ✨ Mac App 特性
+
+- 🖥️ **原生 SwiftUI 构建** — 轻量、流畅、macOS 13+ 原生体验
+- 📌 **菜单栏常驻** — 点击 sparkles 图标，480×640 弹出式聊天窗口
+- 🔗 **三端共享配置** — 读取 `~/.deepcode/settings.json`，与 CLI、VSCode 扩展**同一份配置**
+- 📂 **会话互通** — 在 Mac App 创建的会话，终端 `/resume` 也能看到，反之亦然
+- 📦 **零依赖打包** — App 内置 Node.js 运行时 + deepcode CLI，用户无需安装 Node.js
+- 🧠 **完整 AI 能力** — 联网搜索、Bug 修复、Agent Skills、Thinking Mode 全部可用
+- 📋 **会话历史管理** — 图形化列表查看、切换、新建会话
+
+### 📥 下载安装
+
+从 [GitHub Releases](https://github.com/lessweb/deepcode-cli/releases) 下载最新 DMG：
+
+```bash
+# 1. 下载 DeepCode-vX.X.X.dmg
+# 2. 双击挂载，拖入 Applications 文件夹
+# 3. 首次打开时右键 → "打开"（未公证版本）
+```
+
+> 💡 Mac App 首次启动会自动检测 `~/.deepcode/settings.json`，如果尚未配置，会提示先运行 `deepcode --setup`。
+
+### 🛠️ 本地构建
+
+```bash
+brew install xcodegen          # 安装 XcodeGen
+cd apps/macos-menubar
+bash scripts/stage-sidecar.sh  # 构建 CLI + 复制到 sidecar
+xcodegen generate              # 生成 Xcode 工程
+open DeepCode.xcodeproj        # Cmd+R 运行
+```
+
+> 源码位于 `apps/macos-menubar/`，MIT 开源，欢迎贡献。
+
+---
+
 ## 🚀 快速上手
 
 ```bash
@@ -130,6 +188,7 @@ deepcode
 | 📜 **Agent Skills** | 用户级（`~/.agents/skills/`）+ 项目级（`./.deepcode/skills/`）|
 | 🖼️ **图片理解** | `Ctrl+V` 直接粘贴剪贴板图片（推荐 Volcano Ark `Doubao-Seed-2.0-pro`）|
 | 🔔 **任务通知** | 支持 Slack/钉钉 Webhook 脚本，任务完成后自动推送 |
+| 🖥️ **原生 Mac App** | macOS 菜单栏应用，点击即聊，与 CLI/VSCode 共享配置和会话 |
 | 🤖 **OpenAI 兼容** | 同时支持火山方舟 Coding Plan、Ollama、自托管模型 |
 
 ---
@@ -173,6 +232,7 @@ deepcode
 | Agent Skills | ✅ 双级支持 | ⚠️ 有限 | ❌ |
 | 联网搜索内置 | ✅ 免费 | ❌ | ⚠️ 需配置 |
 | VSCode 扩展 | ✅ | ✅ | ❌ |
+| 原生 Mac App | ✅ | ❌ | ❌ |
 
 ---
 
@@ -180,6 +240,9 @@ deepcode
 
 **Q: DeepCode 有 VSCode 扩展吗？**
 A: 有！在 [VSCode Marketplace](https://marketplace.visualstudio.com/items?itemName=vegamo.deepcode-vscode) 搜索 `DeepCode`。配置文件 `~/.deepcode/settings.json` **两边共用**，终端和编辑器无缝切换。
+
+**Q: DeepCode 有 Mac 桌面 App 吗？**
+A: 有！原生 macOS 菜单栏应用，点击 ✨ 图标即可使用。从 [GitHub Releases](https://github.com/lessweb/deepcode-cli/releases) 下载 DMG 安装。配置和会话与 CLI / VSCode 三端共享。
 
 **Q: 如何开启联网搜索？**
 A: DeepCode 内置免费 Web Search 工具，开箱即用。如需自定义，配置 `webSearchTool` 指向你的脚本路径。
@@ -211,6 +274,7 @@ npm link   # 本地测试
 ## 🔗 相关链接
 
 - 🌐 GitHub: [github.com/lessweb/deepcode-cli](https://github.com/lessweb/deepcode-cli)
+- 🖥️ Mac App 下载: [GitHub Releases](https://github.com/lessweb/deepcode-cli/releases)
 - 💾 VSCode 扩展: [DeepCode on Marketplace](https://marketplace.visualstudio.com/items?itemName=vegamo.deepcode-vscode)
 - 🐛 问题反馈: [GitHub Issues](https://github.com/lessweb/deepcode-cli/issues)
 - 💬 讨论区: [GitHub Discussions](https://github.com/lessweb/deepcode-cli/discussions)
