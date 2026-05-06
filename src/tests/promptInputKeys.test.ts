@@ -104,11 +104,13 @@ test("renderBufferWithCursor hides the simulated cursor when unfocused", () => {
 });
 
 test("renderBufferWithCursor draws the simulated cursor when focused", () => {
-  assert.equal(renderBufferWithCursor({ text: "", cursor: 0 }, true), " ");
-  assert.equal(renderBufferWithCursor({ text: "hello", cursor: 5 }, true), "hello ");
-  assert.equal(renderBufferWithCursor({ text: "hello", cursor: 1 }, true), "hello");
-  assert.equal(renderBufferWithCursor({ text: "hello\n", cursor: 6 }, true), "hello\n ");
-  assert.equal(renderBufferWithCursor({ text: "\n", cursor: 1 }, true), "\n ");
+  // chalk.inverse wraps the cursor character with ANSI reverse-video codes
+  const inv = (c: string) => `\x1B[7m${c}\x1B[27m`;
+  assert.equal(renderBufferWithCursor({ text: "", cursor: 0 }, true), inv(" "));
+  assert.equal(renderBufferWithCursor({ text: "hello", cursor: 5 }, true), "hello" + inv(" "));
+  assert.equal(renderBufferWithCursor({ text: "hello", cursor: 1 }, true), "h" + inv("e") + "llo");
+  assert.equal(renderBufferWithCursor({ text: "hello\n", cursor: 6 }, true), "hello\n" + inv(" "));
+  assert.equal(renderBufferWithCursor({ text: "\n", cursor: 1 }, true), "\n" + inv(" "));
 });
 
 test("getPromptCursorPlacement targets the prompt row above divider and footer", () => {

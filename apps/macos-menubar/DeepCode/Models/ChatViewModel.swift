@@ -34,6 +34,7 @@ final class ChatViewModel: ObservableObject {
     @Published var slashCommands: [SlashCommandItem] = []
     @Published var attachedImages: [AttachedImage] = []
     @Published var sessionList: [ServerSessionEntry] = []
+    @Published var showSessionList: Bool = false
 
     private let sidecar = SidecarProcess()
     private var pendingSubmitId: String?
@@ -154,6 +155,26 @@ final class ChatViewModel: ObservableObject {
         return slashCommands.filter { $0.name.lowercased().contains(query) }
     }
 
+    // MARK: - Session management
+
+    func refreshSessions() {
+        let id = UUID().uuidString
+        sidecar.send(.listSessions(id: id))
+    }
+
+    func loadSession(_ sessionId: String) {
+        let id = UUID().uuidString
+        sidecar.send(.loadSession(id: id, sessionId: sessionId))
+    }
+
+    func createNewSession() {
+        let id = UUID().uuidString
+        sidecar.send(.newSession(id: id))
+        messages = []
+        attachedImages = []
+        appendSystem("开始新会话")
+    }
+
     // MARK: - Image attachment
 
     func pasteImage() {
@@ -208,6 +229,7 @@ final class ChatViewModel: ObservableObject {
             projectRoot = projectRoot
             statusText = "ready · v\(version)"
             refreshSlashCommands()
+            refreshSessions()
         case .session:
             break
         case let .stream(phase, _, formatted, _):

@@ -1,4 +1,5 @@
 import * as readline from "readline";
+import * as fs from "fs";
 import {
   SessionManager,
   type LlmStreamProgress,
@@ -255,6 +256,17 @@ export async function runHeadlessWithOptions(
         const newPath = inbound.path.trim();
         if (!newPath) {
           emit({ type: "error", id: inbound.id, error: "path must be a non-empty string" });
+          return;
+        }
+        try {
+          const stat = fs.statSync(newPath);
+          if (!stat.isDirectory()) {
+            emit({ type: "error", id: inbound.id, error: `path is not a directory: ${newPath}` });
+            return;
+          }
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          emit({ type: "error", id: inbound.id, error: `cannot access directory: ${message}` });
           return;
         }
         try {

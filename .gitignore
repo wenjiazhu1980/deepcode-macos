@@ -3,8 +3,11 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+docs/*.md
+!docs/tools/
 *.tgz
 *.log
+.github/
 
 # Xcode (macOS app generated artifacts)
 apps/macos-menubar/DeepCode.xcodeproj/

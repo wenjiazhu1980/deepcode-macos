@@ -225,3 +225,194 @@ test("interrupt with no active session is a no-op and emits ack", async () => {
   const ack = events.find((event) => event.type === "ack" && event.id === "i1");
   assert.ok(ack, "ack event for interrupt missing");
 });
+
+test("change_project_root emits project_root_changed with skills", async () => {
+  createTempHome();
+  const oldRoot = fs.mkdtempSync(path.join(os.tmpdir(), "deepcode-proj-"));
+  tempDirs.push(oldRoot);
+  const newRoot = fs.mkdtempSync(path.join(os.tmpdir(), "deepcode-proj2-"));
+  tempDirs.push(newRoot);
+
+  const { input, output, push, end } = makeStreams();
+  const collector = collectOutput(output);
+
+  const promise = runHeadlessWithOptions(
+    {
+      projectRoot: oldRoot,
+      input,
+      output,
+      createOpenAIClient: () => NULL_CLIENT,
+      exitOnClose: false
+    },
+    "test"
+  );
+
+  push(JSON.stringify({ type: "change_project_root", id: "c1", path: newRoot }));
+  end();
+  await promise;
+
+  const events = collector.lines().map((line) => JSON.parse(line));
+  const changed = events.find((event) => event.type === "project_root_changed");
+  assert.ok(changed, "project_root_changed event missing");
+  assert.equal(changed.id, "c1");
+  assert.equal(changed.path, newRoot);
+  assert.ok(Array.isArray(changed.skills), "skills should be an array");
+});
+
+test("change_project_root with empty path emits error", async () => {
+  createTempHome();
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "deepcode-proj-"));
+  tempDirs.push(projectRoot);
+
+  const { input, output, push, end } = makeStreams();
+  const collector = collectOutput(output);
+
+  const promise = runHeadlessWithOptions(
+    {
+      projectRoot,
+      input,
+      output,
+      createOpenAIClient: () => NULL_CLIENT,
+      exitOnClose: false
+    },
+    "test"
+  );
+
+  push(JSON.stringify({ type: "change_project_root", id: "c2", path: "   " }));
+  end();
+  await promise;
+
+  const events = collector.lines().map((line) => JSON.parse(line));
+  const error = events.find((event) => event.type === "error" && event.id === "c2");
+  assert.ok(error, "error event for empty path missing");
+  assert.match(error.error, /non-empty/);
+});
+
+test("list_slash_commands returns commands array", async () => {
+  createTempHome();
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "deepcode-proj-"));
+  tempDirs.push(projectRoot);
+
+  const { input, output, push, end } = makeStreams();
+  const collector = collectOutput(output);
+
+  const promise = runHeadlessWithOptions(
+    {
+      projectRoot,
+      input,
+      output,
+      createOpenAIClient: () => NULL_CLIENT,
+      exitOnClose: false
+    },
+    "test"
+  );
+
+  push(JSON.stringify({ type: "list_slash_commands", id: "l1" }));
+  end();
+  await promise;
+
+  const events = collector.lines().map((line) => JSON.parse(line));
+  const cmd = events.find((event) => event.type === "slash_commands");
+  assert.ok(cmd, "slash_commands event missing");
+  assert.equal(cmd.id, "l1");
+  assert.ok(Array.isArray(cmd.commands), "commands should be an array");
+  // Built-in commands should always be present
+  const builtins = cmd.commands.filter((c: { kind: string }) => c.kind !== "skill");
+  assert.ok(builtins.length >= 4, "expected at least 4 built-in commands");
+});
+
+test("read_clipboard_image emits clipboard_image response", async () => {
+  createTempHome();
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "deepcode-proj-"));
+  tempDirs.push(projectRoot);
+
+  const { input, output, push, end } = makeStreams();
+  const collector = collectOutput(output);
+
+  const promise = runHeadlessWithOptions(
+    {
+      projectRoot,
+      input,
+      output,
+      createOpenAIClient: () => NULL_CLIENT,
+      exitOnClose: false
+    },
+    "test"
+  );
+
+  push(JSON.stringify({ type: "read_clipboard_image", id: "r1" }));
+  end();
+  await promise;
+
+  const events = collector.lines().map((line) => JSON.parse(line));
+  const img = events.find((event) => event.type === "clipboard_image");
+  assert.ok(img, "clipboard_image event missing");
+  assert.equal(img.id, "r1");
+  // Either dataUrl or error must be present
+  assert.ok(
+    typeof img.dataUrl === "string" || typeof img.error === "string",
+    "expected dataUrl or error in clipboard_image response"
+  );
+});
+
+test("submit with imageUrls passes through to SessionManager", async () => {
+  createTempHome();
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "deepcode-proj-"));
+  tempDirs.push(projectRoot);
+
+  const { input, output, push, end } = makeStreams();
+  const collector = collectOutput(output);
+
+  const promise = runHeadlessWithOptions(
+    {
+      projectRoot,
+      input,
+      output,
+      createOpenAIClient: () => NULL_CLIENT,
+      exitOnClose: false
+    },
+    "test"
+  );
+
+  push(JSON.stringify({
+    type: "submit",
+    id: "u99",
+    text: "describe this image",
+    imageUrls: ["data:image/png;base64,abc123"]
+  }));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  end();
+  await promise;
+
+  const events = collector.lines().map((line) => JSON.parse(line));
+  const done = events.find((event) => event.type === "done" && event.id === "u99");
+  assert.ok(done, "done event missing for submit with imageUrls");
+});
+
+test("unknown inbound type emits error", async () => {
+  createTempHome();
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "deepcode-proj-"));
+  tempDirs.push(projectRoot);
+
+  const { input, output, push, end } = makeStreams();
+  const collector = collectOutput(output);
+
+  const promise = runHeadlessWithOptions(
+    {
+      projectRoot,
+      input,
+      output,
+      createOpenAIClient: () => NULL_CLIENT,
+      exitOnClose: false
+    },
+    "test"
+  );
+
+  push(JSON.stringify({ type: "nonexistent_command", id: "x1" }));
+  end();
+  await promise;
+
+  const events = collector.lines().map((line) => JSON.parse(line));
+  const error = events.find((event) => event.type === "error" && event.error?.includes("Unknown inbound"));
+  assert.ok(error, "unknown inbound type should emit error");
+});
