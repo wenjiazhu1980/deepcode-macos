@@ -57,15 +57,7 @@ gh release create vX.Y.Z \
 - ..."
 ```
 
-### 4. Trigger CI binaries (platform CLI archives)
-Push triggers the `release-cli.yml` workflow on `v*` tags automatically.  
-To re-run manually:
-```bash
-gh workflow run release-cli.yml -f tag_name=vX.Y.Z
-```
-This produces `linux-x64`, `darwin-arm64`, `darwin-x64`, `win-x64` tarballs and attaches them to the release.
-
-### 5. Trigger macOS native app build (optional)
+### 4. Trigger macOS native app build (optional)
 macOS `.app` + `.dmg` is built by the `release-macos.yml` workflow, triggered by `macos-v*` tags:
 ```bash
 git tag macos-vX.Y.Z
