@@ -81,9 +81,9 @@ test("parseTerminalInput recognizes ctrl+x as the image attachment clear shortcu
 
 test("formatImageAttachmentStatus formats the image count label", () => {
   assert.equal(formatImageAttachmentStatus(0), "");
-  assert.equal(formatImageAttachmentStatus(1), "📎 1 image attached");
-  assert.equal(formatImageAttachmentStatus(2), "📎 2 images attached");
-  assert.equal(IMAGE_ATTACHMENT_CLEAR_HINT, "ctrl+x clear images");
+  assert.equal(formatImageAttachmentStatus(1), "🖼  1 image attached");
+  assert.equal(formatImageAttachmentStatus(2), "🖼  2 images attached");
+  assert.equal(IMAGE_ATTACHMENT_CLEAR_HINT, "Ctrl+X to clear");
 });
 
 test("selected skill helpers format, dedupe, toggle, and clear slash tokens", () => {

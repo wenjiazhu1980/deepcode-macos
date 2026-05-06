@@ -159,7 +159,7 @@ export function App({ projectRoot, version = "" }: AppProps): React.ReactElement
       const selectedSkillNames = submission.selectedSkills?.map((skill) => skill.name).filter(Boolean) ?? [];
       const userDisplayContent = trimmedText
         || (selectedSkillNames.length > 0 ? `Use skills: ${selectedSkillNames.join(", ")}` : "")
-        || (submission.imageUrls.length > 0 ? "[Image]" : "");
+        || (submission.imageUrls.length > 0 ? "🖼 Image" : "");
 
       if (userDisplayContent) {
         setMessages((prev) => [

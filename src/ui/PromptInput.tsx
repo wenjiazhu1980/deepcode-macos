@@ -558,9 +558,14 @@ export function PromptInput({
   return (
     <Box flexDirection="column">
       {imageUrls.length > 0 ? (
-        <Box>
-          <Text color="magenta">{formatImageAttachmentStatus(imageUrls.length)}</Text>
-          <Text dimColor>{` (${IMAGE_ATTACHMENT_CLEAR_HINT})`}</Text>
+        <Box flexDirection="column" borderStyle="round" borderColor="magenta" paddingX={1}>
+          <Text color="magentaBright" bold>
+            🖼  Image Attached
+          </Text>
+          <Text color="magenta">
+            {`${imageUrls.length} image${imageUrls.length === 1 ? "" : "s"} pasted`}
+          </Text>
+          <Text dimColor>{IMAGE_ATTACHMENT_CLEAR_HINT}</Text>
         </Box>
       ) : null}
       {selectedSkills.length > 0 ? (
@@ -622,13 +627,13 @@ export function PromptInput({
   );
 }
 
-export const IMAGE_ATTACHMENT_CLEAR_HINT = "ctrl+x clear images";
+export const IMAGE_ATTACHMENT_CLEAR_HINT = "Ctrl+X to clear";
 
 export function formatImageAttachmentStatus(count: number): string {
   if (count <= 0) {
     return "";
   }
-  return `📎 ${count} image${count === 1 ? "" : "s"} attached`;
+  return `🖼  ${count} image${count === 1 ? "" : "s"} attached`;
 }
 
 export function formatSelectedSkillsStatus(skills: SkillInfo[]): string {

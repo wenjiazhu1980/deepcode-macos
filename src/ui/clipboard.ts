@@ -1,4 +1,4 @@
-import { spawnSync } from "child_process";
+import { spawnSync, execSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -41,15 +41,6 @@ function tryRun(command: string, args: string[]): Buffer | null {
   }
 }
 
-function tryRunStatus(command: string, args: string[]): boolean {
-  try {
-    const result = spawnSync(command, args, { encoding: "buffer", maxBuffer: 32 * 1024 * 1024 });
-    return result.status === 0;
-  } catch {
-    return false;
-  }
-}
-
 function readImageFile(filePath: string): ClipboardImage | null {
   try {
     if (!isImageFilePath(filePath)) {
@@ -66,39 +57,99 @@ function readImageFile(filePath: string): ClipboardImage | null {
   }
 }
 
+/**
+ * Parse hex data output from osascript's «class ...» format.
+ * Example: «data PNGf89504E47...» → Buffer of decoded bytes
+ */
+function parseOsascriptHexData(output: string, format: string): Buffer | null {
+  const prefix = `«data ${format}`;
+  const idx = output.indexOf(prefix);
+  if (idx === -1) return null;
+  const hexStart = idx + prefix.length;
+  const hexEnd = output.indexOf("»", hexStart);
+  if (hexEnd === -1) return null;
+  let hexStr = output.slice(hexStart, hexEnd).trim();
+  if (hexStr.length === 0) return null;
+  // Ensure even-length hex string
+  if (hexStr.length % 2 !== 0) {
+    hexStr = "0" + hexStr;
+  }
+  try {
+    return Buffer.from(hexStr, "hex");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read clipboard image from macOS via osascript, with PNG and TIFF fallback.
+ * Uses sips (built-in macOS tool) to convert TIFF to PNG when needed.
+ */
 function readMacClipboardImage(): ClipboardImage | null {
+  // Option 1: pngpaste (external tool, rarely installed)
   const pngpaste = tryRun("pngpaste", ["-"]);
   if (pngpaste && pngpaste.length > 0) {
     return { dataUrl: bufferToDataUrl(pngpaste, PNG_MIME), mimeType: PNG_MIME };
   }
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "deepcode-clipboard-"));
-  const screenshotPath = path.join(tempDir, "clipboard.png");
-  try {
-    const saved = tryRunStatus("osascript", [
-      "-e",
-      "set png_data to (the clipboard as «class PNGf»)",
-      "-e",
-      `set fp to open for access POSIX file "${screenshotPath}" with write permission`,
-      "-e",
-      "write png_data to fp",
-      "-e",
-      "close access fp"
-    ]);
+  // Option 2: osascript «class PNGf» → parse hex in Node.js
+  const pngOutput = tryRun("osascript", ["-e", "the clipboard as «class PNGf»"]);
+  if (pngOutput) {
+    const pngBuffer = parseOsascriptHexData(pngOutput.toString("utf8"), "PNGf");
+    if (pngBuffer && pngBuffer.length > 0) {
+      return { dataUrl: bufferToDataUrl(pngBuffer, PNG_MIME), mimeType: PNG_MIME };
+    }
+  }
 
-    if (saved) {
-      const image = readImageFile(screenshotPath);
-      if (image) {
-        return image;
+  // Option 3: osascript «class TIFF» → parse hex → sips convert to PNG
+  const tiffOutput = tryRun("osascript", ["-e", "the clipboard as «class TIFF»"]);
+  if (tiffOutput) {
+    const tiffBuffer = parseOsascriptHexData(tiffOutput.toString("utf8"), "TIFF");
+    if (tiffBuffer && tiffBuffer.length > 0) {
+      const pngBuffer = convertTiffToPng(tiffBuffer);
+      if (pngBuffer) {
+        return { dataUrl: bufferToDataUrl(pngBuffer, PNG_MIME), mimeType: PNG_MIME };
       }
     }
+  }
 
-    const fileUrl = tryRun("osascript", ["-e", "get POSIX path of (the clipboard as «class furl»)"]);
-    const filePath = fileUrl?.toString("utf8").trim();
-    if (filePath) {
-      return readImageFile(filePath);
+  // Option 4: osascript «class furl» for file references (Finder copy)
+  const fileUrl = tryRun("osascript", ["-e", "get POSIX path of (the clipboard as «class furl»)"]);
+  const filePath = fileUrl?.toString("utf8").trim();
+  if (filePath) {
+    return readImageFile(filePath);
+  }
+
+  return null;
+}
+
+/**
+ * Convert TIFF buffer to PNG using macOS built-in sips tool.
+ * Writes TIFF to a temp file, converts with sips, reads back PNG.
+ */
+function convertTiffToPng(tiffBuffer: Buffer): Buffer | null {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "deepcode-tiff-"));
+  try {
+    const tiffPath = path.join(tempDir, "clipboard.tiff");
+    const pngPath = path.join(tempDir, "clipboard.png");
+    fs.writeFileSync(tiffPath, tiffBuffer);
+
+    try {
+      execSync(`sips -s format png "${tiffPath}" --out "${pngPath}"`, {
+        encoding: "buffer",
+        stdio: "pipe",
+        timeout: 10000
+      });
+    } catch {
+      return null;
     }
 
+    if (!fs.existsSync(pngPath)) {
+      return null;
+    }
+    const pngBuffer = fs.readFileSync(pngPath);
+    return pngBuffer.length > 0 ? pngBuffer : null;
+  } catch {
     return null;
   } finally {
     try {

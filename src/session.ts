@@ -275,6 +275,9 @@ export class SessionManager {
       return response as { choices?: Array<{ message?: Record<string, unknown> }>; usage?: unknown };
     }
 
+    const signal =
+      options?.signal instanceof AbortSignal ? (options.signal as AbortSignal) : null;
+
     let content = "";
     let reasoningContent = "";
     let refusal: string | null = null;
@@ -295,6 +298,12 @@ export class SessionManager {
 
     try {
       for await (const chunk of response as AsyncIterable<Record<string, unknown>>) {
+        if (signal?.aborted) {
+          const abortError = new Error("Request was aborted.");
+          abortError.name = "AbortError";
+          throw abortError;
+        }
+
         if ("usage" in chunk && chunk.usage != null) {
           usage = chunk.usage;
         }
@@ -669,7 +678,7 @@ The candidate skills are as follows:\n\n`;
     const index = this.loadSessionsIndex();
     const entry: SessionEntry = {
       id: sessionId,
-      summary: userPrompt.text ? userPrompt.text.slice(0, 100) : "[Image Prompt]",
+      summary: userPrompt.text ? userPrompt.text.slice(0, 100) : "🖼 Image Prompt",
       assistantReply: null,
       assistantThinking: null,
       assistantRefusal: null,

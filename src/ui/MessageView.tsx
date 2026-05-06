@@ -14,12 +14,28 @@ export function MessageView({ message }: Props): React.ReactElement | null {
   }
 
   if (message.role === "user") {
-    const text = message.content || "(no content)";
+    const text = message.content || "";
+    const imageParams = Array.isArray(message.contentParams) ? message.contentParams : null;
+    const hasImages = imageParams !== null && imageParams.length > 0;
     return (
       <Box flexDirection="column" marginY={0}>
-        <Text color="green">{`❯ ${text}`}</Text>
-        {Array.isArray(message.contentParams) && message.contentParams.length > 0 ? (
-          <Text color="green">{`  📎 ${message.contentParams.length} image attachment(s)`}</Text>
+        <Text color="green">
+          {text ? `❯ ${text}` : hasImages ? "❯" : "❯ (no content)"}
+        </Text>
+        {hasImages ? (
+          <Box
+            borderStyle="round"
+            borderColor="magenta"
+            paddingX={1}
+            marginLeft={2}
+          >
+            <Text color="magentaBright" bold>
+              🖼  Image Attached
+            </Text>
+            <Text color="magenta">
+              {`${imageParams.length} image${imageParams.length === 1 ? "" : "s"}`}
+            </Text>
+          </Box>
         ) : null}
       </Box>
     );
