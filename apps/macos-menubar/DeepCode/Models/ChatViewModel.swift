@@ -225,8 +225,8 @@ final class ChatViewModel: ObservableObject {
 
     private func handle(_ event: ServerEvent) async {
         switch event {
-        case let .ready(version, _, projectRoot):
-            projectRoot = projectRoot
+        case let .ready(version, _, root):
+            projectRoot = root
             statusText = "ready · v\(version)"
             refreshSlashCommands()
             refreshSessions()
