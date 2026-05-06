@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import chalk from "chalk";
 import {
   IMAGE_ATTACHMENT_CLEAR_HINT,
   addUniqueSkill,
@@ -104,8 +105,9 @@ test("renderBufferWithCursor hides the simulated cursor when unfocused", () => {
 });
 
 test("renderBufferWithCursor draws the simulated cursor when focused", () => {
-  // chalk.inverse wraps the cursor character with ANSI reverse-video codes
-  const inv = (c: string) => `\x1B[7m${c}\x1B[27m`;
+  // Use chalk.inverse directly so the test matches the implementation
+  // regardless of whether chalk detects a TTY (CI) or not.
+  const inv = (c: string) => chalk.inverse(c);
   assert.equal(renderBufferWithCursor({ text: "", cursor: 0 }, true), inv(" "));
   assert.equal(renderBufferWithCursor({ text: "hello", cursor: 5 }, true), "hello" + inv(" "));
   assert.equal(renderBufferWithCursor({ text: "hello", cursor: 1 }, true), "h" + inv("e") + "llo");
