@@ -15,6 +15,7 @@ export type DeepcodingSettings = {
   reasoningEffort?: ReasoningEffort;
   notify?: string;
   webSearchTool?: string;
+  lastProjectRoot?: string;
 };
 
 export type ResolvedDeepcodingSettings = {

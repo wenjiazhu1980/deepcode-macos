@@ -70,7 +70,7 @@ export type ToolCallExecution = {
 };
 
 export class ToolExecutor {
-  private readonly projectRoot: string;
+  private projectRoot: string;
   private readonly createOpenAIClient?: CreateOpenAIClient;
   private readonly toolHandlers = new Map<string, ToolHandler>();
 
@@ -78,6 +78,10 @@ export class ToolExecutor {
     this.projectRoot = projectRoot;
     this.createOpenAIClient = createOpenAIClient;
     this.registerToolHandlers();
+  }
+
+  setProjectRoot(projectRoot: string): void {
+    this.projectRoot = projectRoot;
   }
 
   async executeToolCalls(

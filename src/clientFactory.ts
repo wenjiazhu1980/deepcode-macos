@@ -27,6 +27,35 @@ export function resolveCurrentSettings(): ReturnType<typeof resolveSettings> {
   });
 }
 
+export function readLastProjectRoot(): string | undefined {
+  const settings = readSettings();
+  if (!settings || typeof settings.lastProjectRoot !== "string") {
+    return undefined;
+  }
+  const trimmed = settings.lastProjectRoot.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+export function writeLastProjectRoot(projectRoot: string): void {
+  const settingsPath = path.join(os.homedir(), ".deepcode", "settings.json");
+
+  let settings: DeepcodingSettings = {};
+  try {
+    if (fs.existsSync(settingsPath)) {
+      const raw = fs.readFileSync(settingsPath, "utf8");
+      settings = JSON.parse(raw) as DeepcodingSettings;
+    }
+  } catch {
+    // use defaults
+  }
+
+  settings.lastProjectRoot = projectRoot;
+
+  const dir = path.dirname(settingsPath);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf8");
+}
+
 export type ResolvedClient = {
   client: OpenAI | null;
   model: string;

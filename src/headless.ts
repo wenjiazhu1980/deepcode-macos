@@ -3,27 +3,44 @@ import {
   SessionManager,
   type LlmStreamProgress,
   type SessionEntry,
-  type SessionMessage
+  type SessionMessage,
+  type SkillInfo,
+  type UserPromptContent
 } from "./session";
 import {
   createOpenAIClient as defaultCreateOpenAIClient,
   getMachineId,
-  resolveCurrentSettings
+  resolveCurrentSettings,
+  writeLastProjectRoot
 } from "./clientFactory";
 import type { CreateOpenAIClient } from "./tools/executor";
+import { buildSlashCommands, type SlashCommandItem } from "./ui/slashCommands";
+import { readClipboardImage } from "./ui/clipboard";
 
-type SubmitMsg = { type: "submit"; id: string; text: string };
+type SubmitMsg = {
+  type: "submit";
+  id: string;
+  text: string;
+  imageUrls?: string[];
+  skills?: SkillInfo[];
+};
 type InterruptMsg = { type: "interrupt"; id?: string };
 type ListSessionsMsg = { type: "list_sessions"; id: string };
 type LoadSessionMsg = { type: "load_session"; id: string; sessionId: string };
 type NewSessionMsg = { type: "new_session"; id: string };
+type ChangeProjectRootMsg = { type: "change_project_root"; id: string; path: string };
+type ListSlashCommandsMsg = { type: "list_slash_commands"; id: string };
+type ReadClipboardImageMsg = { type: "read_clipboard_image"; id: string };
 
 type Inbound =
   | SubmitMsg
   | InterruptMsg
   | ListSessionsMsg
   | LoadSessionMsg
-  | NewSessionMsg;
+  | NewSessionMsg
+  | ChangeProjectRootMsg
+  | ListSlashCommandsMsg
+  | ReadClipboardImageMsg;
 
 type Outbound =
   | { type: "ready"; version: string; machineId?: string; projectRoot: string }
@@ -45,7 +62,10 @@ type Outbound =
     }
   | { type: "error"; id?: string; error: string }
   | { type: "done"; id: string; status: string }
-  | { type: "ack"; id: string };
+  | { type: "ack"; id: string }
+  | { type: "project_root_changed"; id: string; path: string; skills: SkillInfo[] }
+  | { type: "slash_commands"; id: string; commands: SlashCommandItem[] }
+  | { type: "clipboard_image"; id: string; dataUrl?: string; error?: string };
 
 type SerializableSessionEntry = Omit<SessionEntry, "processes"> & {
   processes: Record<string, { startTime: string; command: string }> | null;
@@ -211,7 +231,12 @@ export async function runHeadlessWithOptions(
       }
       case "submit": {
         try {
-          await manager.handleUserPrompt({ text: inbound.text });
+          const prompt: UserPromptContent = {
+            text: inbound.text,
+            imageUrls: inbound.imageUrls,
+            skills: inbound.skills
+          };
+          await manager.handleUserPrompt(prompt);
           const sessionId = manager.getActiveSessionId();
           const session = sessionId ? manager.getSession(sessionId) : null;
           emit({
@@ -223,6 +248,50 @@ export async function runHeadlessWithOptions(
           const message = error instanceof Error ? error.message : String(error);
           emit({ type: "error", id: inbound.id, error: message });
           emit({ type: "done", id: inbound.id, status: "failed" });
+        }
+        return;
+      }
+      case "change_project_root": {
+        const newPath = inbound.path.trim();
+        if (!newPath) {
+          emit({ type: "error", id: inbound.id, error: "path must be a non-empty string" });
+          return;
+        }
+        try {
+          manager.interruptActiveSession();
+          manager.changeProjectRoot(newPath);
+          writeLastProjectRoot(newPath);
+          const skills = await manager.listSkills();
+          emit({ type: "project_root_changed", id: inbound.id, path: newPath, skills });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          emit({ type: "error", id: inbound.id, error: `Failed to change project root: ${message}` });
+        }
+        return;
+      }
+      case "list_slash_commands": {
+        try {
+          const sessionId = manager.getActiveSessionId() ?? undefined;
+          const skills = await manager.listSkills(sessionId);
+          const commands = buildSlashCommands(skills);
+          emit({ type: "slash_commands", id: inbound.id, commands });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          emit({ type: "error", id: inbound.id, error: `Failed to list slash commands: ${message}` });
+        }
+        return;
+      }
+      case "read_clipboard_image": {
+        try {
+          const image = readClipboardImage();
+          if (image) {
+            emit({ type: "clipboard_image", id: inbound.id, dataUrl: image.dataUrl });
+          } else {
+            emit({ type: "clipboard_image", id: inbound.id, error: "No image in clipboard" });
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          emit({ type: "clipboard_image", id: inbound.id, error: message });
         }
         return;
       }

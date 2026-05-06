@@ -146,7 +146,7 @@ export type LlmStreamProgress = {
 };
 
 export class SessionManager {
-  private readonly projectRoot: string;
+  private projectRoot: string;
   private readonly createOpenAIClient: CreateOpenAIClient;
   private readonly getResolvedSettings: () => { webSearchTool?: string };
   private readonly onAssistantMessage: (message: SessionMessage, shouldConnect: boolean) => void;
@@ -165,6 +165,11 @@ export class SessionManager {
     this.onSessionEntryUpdated = options.onSessionEntryUpdated;
     this.onLlmStreamProgress = options.onLlmStreamProgress;
     this.toolExecutor = new ToolExecutor(this.projectRoot, this.createOpenAIClient);
+  }
+
+  changeProjectRoot(newRoot: string): void {
+    this.projectRoot = newRoot;
+    this.toolExecutor.setProjectRoot(newRoot);
   }
 
   private estimateStreamTokens(text: string): number {
