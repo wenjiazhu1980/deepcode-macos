@@ -34,9 +34,10 @@ type View = "chat" | "session-list";
 type AppProps = {
   projectRoot: string;
   version?: string;
+  onRestart?: () => void;
 };
 
-export function App({ projectRoot, version = "" }: AppProps): React.ReactElement {
+export function App({ projectRoot, version = "", onRestart }: AppProps): React.ReactElement {
   const { exit } = useApp();
   const { stdout, write } = useStdout();
   const [view, setView] = useState<View>("chat");
@@ -129,6 +130,10 @@ export function App({ projectRoot, version = "" }: AppProps): React.ReactElement
         return;
       }
       if (submission.command === "new") {
+        if (onRestart) {
+          onRestart();
+          return;
+        }
         write("\u001B[2J\u001B[3J\u001B[H");
         sessionManager.setActiveSessionId(null);
         setMessages([]);

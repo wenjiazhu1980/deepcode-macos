@@ -59,7 +59,6 @@ if (args[0] === "headless") {
     process.exit(1);
   });
 } else {
-  const projectRoot = process.cwd();
   configureWindowsShell();
 
   if (!process.stdin.isTTY) {
@@ -70,23 +69,42 @@ if (args[0] === "headless") {
     process.exit(1);
   }
 
-  void main(projectRoot);
+  void main();
 }
 
-async function main(projectRoot: string): Promise<void> {
+async function main(): Promise<void> {
   const updatePromptResult = await promptForPendingUpdate(packageInfo);
 
-  const inkInstance = render(<App projectRoot={projectRoot} version={packageInfo.version} />, {
-    exitOnCtrlC: false
-  });
+  const restartRef: { current: (() => void) | null } = { current: null };
+
+  function startApp(): void {
+    const inkInstance = render(
+      <App
+        projectRoot={process.cwd()}
+        version={packageInfo.version}
+        onRestart={() => restartRef.current?.()}
+      />,
+      { exitOnCtrlC: false }
+    );
+
+    restartRef.current = () => {
+      process.stdout.write("\u001B[2J\u001B[3J\u001B[H");
+      inkInstance.unmount();
+      startApp();
+    };
+
+    inkInstance.waitUntilExit().then(() => {
+      if (!restartRef.current) {
+        process.exit(0);
+      }
+    });
+  }
 
   if (!updatePromptResult.installed) {
     void checkForNpmUpdate(packageInfo);
   }
 
-  inkInstance.waitUntilExit().then(() => {
-    process.exit(0);
-  });
+  startApp();
 }
 
 function configureWindowsShell(): void {
