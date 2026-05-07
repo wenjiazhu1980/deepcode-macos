@@ -31,7 +31,7 @@ var require_package = __commonJS({
   "package.json"(exports2, module2) {
     module2.exports = {
       name: "@vegamo/deepcode-cli",
-      version: "0.2.1",
+      version: "0.2.2",
       description: "Deep Code CLI - Vibe coding for the deepseek-v4 model in your terminal",
       license: "MIT",
       repository: {
@@ -87,9 +87,9 @@ var import_react5 = require("react");
 var import_ink6 = require("ink");
 
 // src/session.ts
-var fs7 = __toESM(require("fs"));
-var path6 = __toESM(require("path"));
-var os3 = __toESM(require("os"));
+var fs8 = __toESM(require("fs"));
+var path7 = __toESM(require("path"));
+var os4 = __toESM(require("os"));
 var crypto = __toESM(require("crypto"));
 var import_gray_matter = __toESM(require("gray-matter"));
 
@@ -169,6 +169,7 @@ var import_child_process3 = require("child_process");
 var fs2 = __toESM(require("fs"));
 var os2 = __toESM(require("os"));
 var path2 = __toESM(require("path"));
+var import_url = require("url");
 
 // src/tools/shell-utils.ts
 var import_child_process2 = require("child_process");
@@ -331,6 +332,7 @@ function findWindowsExecutable(executable) {
 }
 
 // src/prompt.ts
+var import_meta = {};
 var AGENT_DRIFT_GUARD_SKILL = `
 ---
 name: agent-drift-guard
@@ -707,7 +709,11 @@ function getUnameInfo() {
   }
 }
 function getExtensionRoot() {
-  return path2.resolve(__dirname, "..");
+  if (typeof __dirname !== "undefined") {
+    return path2.resolve(__dirname, "..");
+  }
+  const currentFilePath = (0, import_url.fileURLToPath)(import_meta.url);
+  return path2.resolve(path2.dirname(currentFilePath), "..");
 }
 function getTools(options = {}) {
   const tools = [
@@ -1341,8 +1347,8 @@ function formatZodError(error) {
   if (!issue) {
     return "Invalid tool input.";
   }
-  const path11 = issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
-  return `${path11}${issue.message}`;
+  const path12 = issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
+  return `${path12}${issue.message}`;
 }
 
 // src/tools/state.ts
@@ -3238,6 +3244,90 @@ var ToolExecutor = class {
   }
 };
 
+// src/error-logger.ts
+var fs7 = __toESM(require("fs"));
+var path6 = __toESM(require("path"));
+var os3 = __toESM(require("os"));
+var LOG_DIR = path6.join(os3.homedir(), ".deepcode", "logs");
+var ERROR_LOG_PATH = path6.join(LOG_DIR, "error.log");
+function ensureLogDir() {
+  if (!fs7.existsSync(LOG_DIR)) {
+    fs7.mkdirSync(LOG_DIR, { recursive: true });
+  }
+}
+function maskSensitive(text) {
+  return text.replace(
+    /(Authorization:\s*Bearer\s+)[^\s\r\n]+/gi,
+    "$1***MASKED***"
+  ).replace(
+    /((?:api[Kk]ey|api_key|secret)\s*[:=]\s*"?)[^",}\s]+/gi,
+    "$1***MASKED***"
+  );
+}
+var CONTENT_TRUNCATE_PREVIEW = 100;
+function truncateContent(value) {
+  if (value.length <= CONTENT_TRUNCATE_PREVIEW) {
+    return value;
+  }
+  return `${value.slice(0, CONTENT_TRUNCATE_PREVIEW)}...(total ${value.length} chars)`;
+}
+function sanitizeRequestPayload(request) {
+  function walk(value) {
+    if (!value || typeof value !== "object") {
+      return value;
+    }
+    if (Array.isArray(value)) {
+      return value.map(walk);
+    }
+    const record = value;
+    const result = {};
+    for (const [key, val] of Object.entries(record)) {
+      if (key === "content" && typeof val === "string") {
+        result[key] = truncateContent(val);
+      } else {
+        result[key] = walk(val);
+      }
+    }
+    return result;
+  }
+  return walk(request);
+}
+function logApiError(entry) {
+  try {
+    ensureLogDir();
+    const logLine = {
+      timestamp: entry.timestamp,
+      location: entry.location,
+      requestId: entry.requestId,
+      sessionId: entry.sessionId,
+      model: entry.model,
+      baseURL: entry.baseURL,
+      error: {
+        name: entry.error.name,
+        message: maskSensitive(entry.error.message),
+        stack: entry.error.stack ? maskSensitive(entry.error.stack) : void 0
+      },
+      request: sanitizeRequestPayload(entry.request)
+    };
+    if (entry.response !== void 0) {
+      logLine.response = typeof entry.response === "string" ? maskSensitive(entry.response) : entry.response;
+    }
+    const newLine = JSON.stringify(logLine) + "\n";
+    fs7.appendFileSync(ERROR_LOG_PATH, newLine, "utf8");
+    const MAX_ENTRIES = 20;
+    const raw = fs7.readFileSync(ERROR_LOG_PATH, "utf8");
+    const lines = raw.split("\n").filter((line) => line.trim().length > 0);
+    if (lines.length > MAX_ENTRIES) {
+      fs7.writeFileSync(
+        ERROR_LOG_PATH,
+        lines.slice(-MAX_ENTRIES).join("\n") + "\n",
+        "utf8"
+      );
+    }
+  } catch {
+  }
+}
+
 // src/session.ts
 var MAX_SESSION_ENTRIES = 50;
 var DEFAULT_NEW_PROMPT_API_URL = "https://deepcode.vegamo.cn/api/plugin/new";
@@ -3364,6 +3454,19 @@ var SessionManager = class {
     try {
       response = await client.chat.completions.create(streamRequest, options);
     } catch (error) {
+      logApiError({
+        timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+        location: "SessionManager.createChatCompletionStream:create",
+        requestId,
+        sessionId,
+        model: typeof request.model === "string" ? request.model : void 0,
+        error: {
+          name: error instanceof Error ? error.name : "UnknownError",
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : void 0
+        },
+        request: streamRequest
+      });
       this.emitLlmStreamProgress(requestId, startedAt, estimatedTokens, "end", sessionId);
       throw error;
     }
@@ -3371,12 +3474,12 @@ var SessionManager = class {
       this.emitLlmStreamProgress(requestId, startedAt, estimatedTokens, "end", sessionId);
       return response;
     }
-    const signal = options?.signal instanceof AbortSignal ? options.signal : null;
     let content = "";
     let reasoningContent = "";
     let refusal = null;
     let usage = null;
     const toolCallsByIndex = /* @__PURE__ */ new Map();
+    const signal = options?.signal instanceof AbortSignal ? options.signal : null;
     const trackText = (value) => {
       if (typeof value !== "string" || value.length === 0) {
         return;
@@ -3445,6 +3548,21 @@ var SessionManager = class {
           }
         }
       }
+    } catch (error) {
+      logApiError({
+        timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+        location: "SessionManager.createChatCompletionStream:stream",
+        requestId,
+        sessionId,
+        model: typeof request.model === "string" ? request.model : void 0,
+        error: {
+          name: error instanceof Error ? error.name : "UnknownError",
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : void 0
+        },
+        request: streamRequest
+      });
+      throw error;
     } finally {
       this.emitLlmStreamProgress(requestId, startedAt, estimatedTokens, "end", sessionId);
     }
@@ -3519,17 +3637,17 @@ The candidate skills are as follows:
     }
   }
   async listSkills(sessionId) {
-    const homeDir = os3.homedir();
-    const agentsRoot = path6.join(homeDir, ".agents", "skills");
-    const projectSkillsRoot = path6.join(this.projectRoot, ".deepcode", "skills");
+    const homeDir = os4.homedir();
+    const agentsRoot = path7.join(homeDir, ".agents", "skills");
+    const projectSkillsRoot = path7.join(this.projectRoot, ".deepcode", "skills");
     const skillsByName = /* @__PURE__ */ new Map();
     const collectSkills = (root, displayRoot) => {
-      if (!fs7.existsSync(root)) {
+      if (!fs8.existsSync(root)) {
         return [];
       }
       let entries = [];
       try {
-        entries = fs7.readdirSync(root, { withFileTypes: true });
+        entries = fs8.readdirSync(root, { withFileTypes: true });
       } catch {
         return [];
       }
@@ -3539,12 +3657,12 @@ The candidate skills are as follows:
           continue;
         }
         const skillName = entry.name;
-        const skillPath = path6.join(root, skillName, "SKILL.md");
+        const skillPath = path7.join(root, skillName, "SKILL.md");
         try {
-          if (!fs7.existsSync(skillPath)) {
+          if (!fs8.existsSync(skillPath)) {
             continue;
           }
-          const stat = fs7.statSync(skillPath);
+          const stat = fs8.statSync(skillPath);
           if (!stat.isFile()) {
             continue;
           }
@@ -3573,21 +3691,21 @@ The candidate skills are as follows:
   }
   resolveSkillPath(skillPath) {
     if (skillPath.startsWith("~/")) {
-      return path6.join(os3.homedir(), skillPath.slice(2));
+      return path7.join(os4.homedir(), skillPath.slice(2));
     }
     if (skillPath.startsWith("~\\")) {
-      return path6.join(os3.homedir(), skillPath.slice(2));
+      return path7.join(os4.homedir(), skillPath.slice(2));
     }
     if (skillPath.startsWith("./")) {
-      return path6.join(this.projectRoot, skillPath.slice(2));
+      return path7.join(this.projectRoot, skillPath.slice(2));
     }
     if (skillPath.startsWith(".\\")) {
-      return path6.join(this.projectRoot, skillPath.slice(2));
+      return path7.join(this.projectRoot, skillPath.slice(2));
     }
-    if (path6.isAbsolute(skillPath)) {
+    if (path7.isAbsolute(skillPath)) {
       return skillPath;
     }
-    return path6.join(os3.homedir(), skillPath);
+    return path7.join(os4.homedir(), skillPath);
   }
   readSkillInfo(skillPath, displayPath, fallbackName) {
     const fallbackSkill = {
@@ -3596,7 +3714,7 @@ The candidate skills are as follows:
       description: ""
     };
     try {
-      const skillMd = fs7.readFileSync(skillPath, "utf8");
+      const skillMd = fs8.readFileSync(skillPath, "utf8");
       const parsed = (0, import_gray_matter.default)(skillMd);
       return {
         name: typeof parsed.data.name === "string" && parsed.data.name.trim() ? parsed.data.name.trim() : fallbackSkill.name,
@@ -3763,7 +3881,7 @@ The candidate skills are as follows:
         if (skill.isLoaded) {
           continue;
         }
-        const skillMd = fs7.readFileSync(this.resolveSkillPath(skill.path), "utf8");
+        const skillMd = fs8.readFileSync(this.resolveSkillPath(skill.path), "utf8");
         const skillPrompt = `Use the skill document below to assist the user:
 
 <${skill.name}-skill path="${this.resolveSkillPath(skill.path)}">
@@ -3792,7 +3910,6 @@ ${skillMd}
       await this.createSession(userPrompt, controller);
       return;
     }
-    this.closePendingToolCalls(sessionId, "Previous tool call did not complete.");
     this.reportNewPrompt();
     if (userPrompt.text) {
       const skills = await this.listSkills(sessionId);
@@ -3815,7 +3932,7 @@ ${skillMd}
         if (skill.isLoaded) {
           continue;
         }
-        const skillMd = fs7.readFileSync(this.resolveSkillPath(skill.path), "utf8");
+        const skillMd = fs8.readFileSync(this.resolveSkillPath(skill.path), "utf8");
         const skillPrompt = `Use the skill document below to assist the user:
 
 <${skill.name}-skill path="${this.resolveSkillPath(skill.path)}">
@@ -3864,7 +3981,6 @@ ${skillMd}
       updateTime: now
     }));
     this.sessionControllers.set(sessionId, sessionController);
-    this.closePendingToolCalls(sessionId, "Previous tool call did not complete.");
     try {
       const maxIterations = 8e4;
       let toolCalls = null;
@@ -3953,10 +4069,6 @@ ${skillMd}
     } catch (error) {
       const errMessage = error instanceof Error ? error.message : String(error);
       const aborted = this.isAbortLikeError(error) || sessionController.signal.aborted;
-      this.closePendingToolCalls(
-        sessionId,
-        aborted ? "Interrupted by user." : `Request failed before tool results were recorded: ${errMessage}`
-      );
       this.updateSessionEntry(sessionId, (entry) => ({
         ...entry,
         status: aborted ? "interrupted" : "failed",
@@ -4116,7 +4228,6 @@ ${compactedSummary}`,
       processes: null,
       updateTime: now
     }));
-    this.closePendingToolCalls(sessionId, "Interrupted by user.");
     const contentParts = ["Interrupted."];
     if (killedPids.length > 0) {
       contentParts.push(`Killed processes: ${killedPids.join(", ")}.`);
@@ -4142,10 +4253,10 @@ ${compactedSummary}`,
   }
   listSessionMessages(sessionId) {
     const messagePath = this.getSessionMessagesPath(sessionId);
-    if (!fs7.existsSync(messagePath)) {
+    if (!fs8.existsSync(messagePath)) {
       return [];
     }
-    const raw = fs7.readFileSync(messagePath, "utf8");
+    const raw = fs8.readFileSync(messagePath, "utf8");
     const lines = raw.split(/\r?\n/).filter((line) => line.trim().length > 0);
     const messages = [];
     for (const line of lines) {
@@ -4181,23 +4292,23 @@ ${compactedSummary}`,
   }
   getProjectStorage() {
     const projectCode = this.getProjectCode(this.projectRoot);
-    const projectDir = path6.join(os3.homedir(), ".deepcode", "projects", projectCode);
-    const sessionsIndexPath = path6.join(projectDir, "sessions-index.json");
+    const projectDir = path7.join(os4.homedir(), ".deepcode", "projects", projectCode);
+    const sessionsIndexPath = path7.join(projectDir, "sessions-index.json");
     return { projectCode, projectDir, sessionsIndexPath };
   }
   ensureProjectDir() {
     const { projectDir } = this.getProjectStorage();
-    fs7.mkdirSync(projectDir, { recursive: true });
+    fs8.mkdirSync(projectDir, { recursive: true });
     return projectDir;
   }
   loadSessionsIndex() {
     const { sessionsIndexPath } = this.getProjectStorage();
     this.ensureProjectDir();
-    if (!fs7.existsSync(sessionsIndexPath)) {
+    if (!fs8.existsSync(sessionsIndexPath)) {
       return { version: 1, entries: [], originalPath: this.projectRoot };
     }
     try {
-      const raw = fs7.readFileSync(sessionsIndexPath, "utf8");
+      const raw = fs8.readFileSync(sessionsIndexPath, "utf8");
       const parsed = JSON.parse(raw);
       const entries = Array.isArray(parsed.entries) ? parsed.entries.map((entry) => this.normalizeSessionEntry(entry)) : [];
       return {
@@ -4220,18 +4331,18 @@ ${compactedSummary}`,
       })),
       originalPath: this.projectRoot
     };
-    fs7.writeFileSync(sessionsIndexPath, JSON.stringify(normalized, null, 2), "utf8");
+    fs8.writeFileSync(sessionsIndexPath, JSON.stringify(normalized, null, 2), "utf8");
   }
   getSessionMessagesPath(sessionId) {
     const { projectDir } = this.getProjectStorage();
-    return path6.join(projectDir, `${sessionId}.jsonl`);
+    return path7.join(projectDir, `${sessionId}.jsonl`);
   }
   removeSessionMessages(sessionIds) {
     for (const sessionId of sessionIds) {
       const messagePath = this.getSessionMessagesPath(sessionId);
       try {
-        if (fs7.existsSync(messagePath)) {
-          fs7.unlinkSync(messagePath);
+        if (fs8.existsSync(messagePath)) {
+          fs8.unlinkSync(messagePath);
         }
       } catch {
       }
@@ -4240,14 +4351,14 @@ ${compactedSummary}`,
   appendSessionMessage(sessionId, message) {
     this.ensureProjectDir();
     const messagePath = this.getSessionMessagesPath(sessionId);
-    fs7.appendFileSync(messagePath, `${JSON.stringify(message)}
+    fs8.appendFileSync(messagePath, `${JSON.stringify(message)}
 `, "utf8");
   }
   saveSessionMessages(sessionId, messages) {
     this.ensureProjectDir();
     const messagePath = this.getSessionMessagesPath(sessionId);
     const payload = messages.map((message) => JSON.stringify(message)).join("\n");
-    fs7.writeFileSync(messagePath, payload ? `${payload}
+    fs8.writeFileSync(messagePath, payload ? `${payload}
 ` : "", "utf8");
   }
   updateSessionEntry(sessionId, updater) {
@@ -4283,15 +4394,15 @@ ${compactedSummary}`,
   }
   loadAgentInstructions() {
     const candidatePaths = [
-      path6.join(this.projectRoot, ".deepcode", "AGENTS.md"),
-      path6.join(os3.homedir(), ".deepcode", "AGENTS.md")
+      path7.join(this.projectRoot, "AGENTS.md"),
+      path7.join(os4.homedir(), ".deepcode", "AGENTS.md")
     ];
     for (const candidatePath of candidatePaths) {
       try {
-        if (!fs7.existsSync(candidatePath)) {
+        if (!fs8.existsSync(candidatePath)) {
           continue;
         }
-        const content = fs7.readFileSync(candidatePath, "utf8").trim();
+        const content = fs8.readFileSync(candidatePath, "utf8").trim();
         if (content) {
           return content;
         }
@@ -4422,39 +4533,152 @@ ${compactedSummary}`,
     return { waitingForUser };
   }
   buildOpenAIMessages(messages, thinkingEnabled) {
-    return messages.filter((message) => !message.compacted).map((message) => {
-      const base = {
-        role: message.role,
-        content: message.content ?? ""
-      };
-      const messageParams = message.messageParams;
-      if (messageParams?.tool_calls) {
-        base.tool_calls = messageParams.tool_calls;
+    const activeMessages = messages.filter((message) => !message.compacted);
+    const toolPairings = this.pairToolMessages(activeMessages);
+    const openAIMessages = [];
+    for (let index = 0; index < activeMessages.length; index += 1) {
+      const message = activeMessages[index];
+      if (message.role === "tool") {
+        continue;
       }
-      if (messageParams?.tool_call_id) {
-        base.tool_call_id = messageParams.tool_call_id;
+      openAIMessages.push(this.sessionMessageToOpenAIMessage(message, thinkingEnabled));
+      const toolCalls = this.getAssistantToolCalls(message);
+      if (toolCalls.length === 0) {
+        continue;
       }
-      if (typeof messageParams?.reasoning_content === "string") {
-        base.reasoning_content = messageParams.reasoning_content;
-      } else if (thinkingEnabled && message.role === "assistant") {
-        base.reasoning_content = "";
-      }
-      if ((message.role === "user" || message.role === "system") && message.contentParams) {
-        const contentParts = [];
-        if (message.content) {
-          contentParts.push({ type: "text", text: message.content });
+      for (let toolCallIndex = 0; toolCallIndex < toolCalls.length; toolCallIndex += 1) {
+        const toolCallId = this.getToolCallId(toolCalls[toolCallIndex]);
+        if (!toolCallId) {
+          continue;
         }
-        const params = Array.isArray(message.contentParams) ? message.contentParams : [message.contentParams];
-        for (const param of params) {
-          if (param && typeof param === "object") {
-            contentParts.push(param);
-          }
+        const pairedToolIndex = toolPairings.get(this.buildToolPairingKey(index, toolCallIndex));
+        if (pairedToolIndex != null) {
+          openAIMessages.push(this.sessionMessageToOpenAIMessage(activeMessages[pairedToolIndex], thinkingEnabled));
+          continue;
         }
-        const contentValue = contentParts.length > 0 ? contentParts : message.content ?? "";
-        base.content = contentValue;
+        openAIMessages.push(this.buildInterruptedOpenAIToolMessage(toolCalls, toolCallId));
       }
-      return base;
-    });
+    }
+    return openAIMessages;
+  }
+  sessionMessageToOpenAIMessage(message, thinkingEnabled) {
+    const base = {
+      role: message.role,
+      content: message.content ?? ""
+    };
+    const messageParams = message.messageParams;
+    if (messageParams?.tool_calls) {
+      base.tool_calls = messageParams.tool_calls;
+    }
+    if (messageParams?.tool_call_id) {
+      base.tool_call_id = messageParams.tool_call_id;
+    }
+    if (typeof messageParams?.reasoning_content === "string") {
+      base.reasoning_content = messageParams.reasoning_content;
+    } else if (thinkingEnabled && message.role === "assistant") {
+      base.reasoning_content = "";
+    }
+    if ((message.role === "user" || message.role === "system") && message.contentParams) {
+      const contentParts = [];
+      if (message.content) {
+        contentParts.push({ type: "text", text: message.content });
+      }
+      const params = Array.isArray(message.contentParams) ? message.contentParams : [message.contentParams];
+      for (const param of params) {
+        if (param && typeof param === "object") {
+          contentParts.push(param);
+        }
+      }
+      const contentValue = contentParts.length > 0 ? contentParts : message.content ?? "";
+      base.content = contentValue;
+    }
+    return base;
+  }
+  pairToolMessages(messages) {
+    const pairings = /* @__PURE__ */ new Map();
+    const usedToolMessageIndexes = /* @__PURE__ */ new Set();
+    for (let assistantIndex = 0; assistantIndex < messages.length; assistantIndex += 1) {
+      const toolCalls = this.getAssistantToolCalls(messages[assistantIndex]);
+      for (let toolCallIndex = 0; toolCallIndex < toolCalls.length; toolCallIndex += 1) {
+        const toolCallId = this.getToolCallId(toolCalls[toolCallIndex]);
+        if (!toolCallId) {
+          continue;
+        }
+        const toolIndex = this.findPairableToolMessageIndex(
+          messages,
+          assistantIndex,
+          toolCallId,
+          usedToolMessageIndexes
+        );
+        if (toolIndex == null) {
+          continue;
+        }
+        usedToolMessageIndexes.add(toolIndex);
+        pairings.set(this.buildToolPairingKey(assistantIndex, toolCallIndex), toolIndex);
+      }
+    }
+    return pairings;
+  }
+  findPairableToolMessageIndex(messages, assistantIndex, toolCallId, usedToolMessageIndexes) {
+    let firstMatchingIndex = null;
+    for (let index = assistantIndex + 1; index < messages.length; index += 1) {
+      const message = messages[index];
+      if (message.role !== "tool" || usedToolMessageIndexes.has(index)) {
+        continue;
+      }
+      const candidateToolCallId = this.getToolMessageCallId(message);
+      if (candidateToolCallId !== toolCallId) {
+        continue;
+      }
+      if (firstMatchingIndex == null) {
+        firstMatchingIndex = index;
+      }
+      if (!this.isInterruptedToolMessage(message)) {
+        return index;
+      }
+    }
+    return firstMatchingIndex;
+  }
+  getAssistantToolCalls(message) {
+    if (message.role !== "assistant") {
+      return [];
+    }
+    const messageParams = message.messageParams;
+    return Array.isArray(messageParams?.tool_calls) ? messageParams.tool_calls : [];
+  }
+  getToolCallId(toolCall) {
+    if (!toolCall || typeof toolCall !== "object") {
+      return null;
+    }
+    const id = toolCall.id;
+    return typeof id === "string" && id ? id : null;
+  }
+  getToolMessageCallId(message) {
+    const messageParams = message.messageParams;
+    const toolCallId = messageParams?.tool_call_id;
+    return typeof toolCallId === "string" && toolCallId ? toolCallId : null;
+  }
+  buildToolPairingKey(assistantIndex, toolCallIndex) {
+    return `${assistantIndex}:${toolCallIndex}`;
+  }
+  isInterruptedToolMessage(message) {
+    if (typeof message.content !== "string" || !message.content.trim()) {
+      return false;
+    }
+    try {
+      const parsed = JSON.parse(message.content);
+      return parsed.metadata?.interrupted === true;
+    } catch {
+      return false;
+    }
+  }
+  buildInterruptedOpenAIToolMessage(toolCalls, toolCallId) {
+    const toolFunction = this.findToolFunction(toolCalls, toolCallId);
+    return {
+      role: "tool",
+      content: this.buildInterruptedToolResult(toolFunction, "Previous tool call did not complete."),
+      tool_call_id: toolCallId
+    };
   }
   findToolFunction(toolCalls, toolCallId) {
     for (const toolCall of toolCalls) {
@@ -4600,66 +4824,6 @@ ${compactedSummary}`,
     }
     return ids;
   }
-  closePendingToolCalls(sessionId, reason) {
-    const messages = this.listSessionMessages(sessionId);
-    let changed = false;
-    for (let index = 0; index < messages.length; index += 1) {
-      const message = messages[index];
-      if (message.role !== "assistant") {
-        continue;
-      }
-      const messageParams = message.messageParams;
-      const toolCalls = messageParams?.tool_calls;
-      if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
-        continue;
-      }
-      const expectedToolCallIds = this.getExpectedToolCallIds(toolCalls);
-      if (expectedToolCallIds.length === 0) {
-        continue;
-      }
-      let cursor = index + 1;
-      const respondedToolCallIds = /* @__PURE__ */ new Set();
-      while (cursor < messages.length && messages[cursor].role === "tool") {
-        const toolCallId = messages[cursor].messageParams?.tool_call_id;
-        if (typeof toolCallId === "string" && toolCallId) {
-          respondedToolCallIds.add(toolCallId);
-        }
-        cursor += 1;
-      }
-      const missingToolCallIds = expectedToolCallIds.filter((toolCallId) => !respondedToolCallIds.has(toolCallId));
-      if (missingToolCallIds.length === 0) {
-        continue;
-      }
-      const toolMessages = missingToolCallIds.map((toolCallId) => {
-        const toolFunction = this.findToolFunction(toolCalls, toolCallId);
-        return this.buildToolMessage(
-          sessionId,
-          toolCallId,
-          this.buildInterruptedToolResult(toolFunction, reason),
-          toolFunction
-        );
-      });
-      messages.splice(cursor, 0, ...toolMessages);
-      changed = true;
-      index = cursor + toolMessages.length - 1;
-    }
-    if (changed) {
-      this.saveSessionMessages(sessionId, messages);
-    }
-  }
-  getExpectedToolCallIds(toolCalls) {
-    const ids = [];
-    for (const toolCall of toolCalls) {
-      if (!toolCall || typeof toolCall !== "object") {
-        continue;
-      }
-      const id = toolCall.id;
-      if (typeof id === "string" && id) {
-        ids.push(id);
-      }
-    }
-    return ids;
-  }
   buildInterruptedToolResult(toolFunction, reason) {
     const toolName = toolFunction && typeof toolFunction === "object" && typeof toolFunction.name === "string" ? toolFunction.name : "tool";
     return JSON.stringify(
@@ -4743,9 +4907,9 @@ ${compactedSummary}`,
 };
 
 // src/clientFactory.ts
-var fs8 = __toESM(require("fs"));
-var os4 = __toESM(require("os"));
-var path7 = __toESM(require("path"));
+var fs9 = __toESM(require("fs"));
+var os5 = __toESM(require("os"));
+var path8 = __toESM(require("path"));
 var import_openai = __toESM(require("openai"));
 
 // src/settings.ts
@@ -4783,11 +4947,11 @@ var DEFAULT_MODEL = "deepseek-v4-pro";
 var DEFAULT_BASE_URL = "https://api.deepseek.com";
 function readSettings() {
   try {
-    const settingsPath = path7.join(os4.homedir(), ".deepcode", "settings.json");
-    if (!fs8.existsSync(settingsPath)) {
+    const settingsPath = path8.join(os5.homedir(), ".deepcode", "settings.json");
+    if (!fs9.existsSync(settingsPath)) {
       return null;
     }
-    const raw = fs8.readFileSync(settingsPath, "utf8");
+    const raw = fs9.readFileSync(settingsPath, "utf8");
     return JSON.parse(raw);
   } catch {
     return null;
@@ -4800,19 +4964,19 @@ function resolveCurrentSettings() {
   });
 }
 function writeLastProjectRoot(projectRoot) {
-  const settingsPath = path7.join(os4.homedir(), ".deepcode", "settings.json");
+  const settingsPath = path8.join(os5.homedir(), ".deepcode", "settings.json");
   let settings = {};
   try {
-    if (fs8.existsSync(settingsPath)) {
-      const raw = fs8.readFileSync(settingsPath, "utf8");
+    if (fs9.existsSync(settingsPath)) {
+      const raw = fs9.readFileSync(settingsPath, "utf8");
       settings = JSON.parse(raw);
     }
   } catch {
   }
   settings.lastProjectRoot = projectRoot;
-  const dir = path7.dirname(settingsPath);
-  fs8.mkdirSync(dir, { recursive: true });
-  fs8.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf8");
+  const dir = path8.dirname(settingsPath);
+  fs9.mkdirSync(dir, { recursive: true });
+  fs9.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf8");
 }
 function createOpenAIClient() {
   const settings = resolveCurrentSettings();
@@ -4845,16 +5009,16 @@ function createOpenAIClient() {
 }
 function getMachineId() {
   try {
-    const idPath = path7.join(os4.homedir(), ".deepcode", "machine-id");
-    if (fs8.existsSync(idPath)) {
-      const raw = fs8.readFileSync(idPath, "utf8").trim();
+    const idPath = path8.join(os5.homedir(), ".deepcode", "machine-id");
+    if (fs9.existsSync(idPath)) {
+      const raw = fs9.readFileSync(idPath, "utf8").trim();
       if (raw) {
         return raw;
       }
     }
-    const generated = `${os4.hostname()}-${Math.random().toString(36).slice(2)}-${Date.now()}`;
-    fs8.mkdirSync(path7.dirname(idPath), { recursive: true });
-    fs8.writeFileSync(idPath, generated, "utf8");
+    const generated = `${os5.hostname()}-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+    fs9.mkdirSync(path8.dirname(idPath), { recursive: true });
+    fs9.writeFileSync(idPath, generated, "utf8");
     return generated;
   } catch {
     return void 0;
@@ -5076,9 +5240,9 @@ function formatSlashCommandLabel(item) {
 
 // src/ui/clipboard.ts
 var import_child_process6 = require("child_process");
-var fs9 = __toESM(require("fs"));
-var os5 = __toESM(require("os"));
-var path8 = __toESM(require("path"));
+var fs10 = __toESM(require("fs"));
+var os6 = __toESM(require("os"));
+var path9 = __toESM(require("path"));
 var PNG_MIME = "image/png";
 var IMAGE_MIME_BY_EXT = /* @__PURE__ */ new Map([
   [".png", "image/png"],
@@ -5091,10 +5255,10 @@ function bufferToDataUrl(buffer, mimeType) {
   return `data:${mimeType};base64,${buffer.toString("base64")}`;
 }
 function isImageFilePath(value) {
-  return IMAGE_MIME_BY_EXT.has(path8.extname(value.trim()).toLowerCase());
+  return IMAGE_MIME_BY_EXT.has(path9.extname(value.trim()).toLowerCase());
 }
 function mimeTypeForPath(value) {
-  return IMAGE_MIME_BY_EXT.get(path8.extname(value.trim()).toLowerCase()) ?? PNG_MIME;
+  return IMAGE_MIME_BY_EXT.get(path9.extname(value.trim()).toLowerCase()) ?? PNG_MIME;
 }
 function tryRun(command, args2) {
   try {
@@ -5112,7 +5276,7 @@ function readImageFile(filePath) {
     if (!isImageFilePath(filePath)) {
       return null;
     }
-    const buffer = fs9.readFileSync(filePath);
+    const buffer = fs10.readFileSync(filePath);
     if (buffer.length === 0) {
       return null;
     }
@@ -5170,11 +5334,11 @@ function readMacClipboardImage() {
   return null;
 }
 function convertTiffToPng(tiffBuffer) {
-  const tempDir = fs9.mkdtempSync(path8.join(os5.tmpdir(), "deepcode-tiff-"));
+  const tempDir = fs10.mkdtempSync(path9.join(os6.tmpdir(), "deepcode-tiff-"));
   try {
-    const tiffPath = path8.join(tempDir, "clipboard.tiff");
-    const pngPath = path8.join(tempDir, "clipboard.png");
-    fs9.writeFileSync(tiffPath, tiffBuffer);
+    const tiffPath = path9.join(tempDir, "clipboard.tiff");
+    const pngPath = path9.join(tempDir, "clipboard.png");
+    fs10.writeFileSync(tiffPath, tiffBuffer);
     try {
       (0, import_child_process6.execSync)(`sips -s format png "${tiffPath}" --out "${pngPath}"`, {
         encoding: "buffer",
@@ -5184,16 +5348,16 @@ function convertTiffToPng(tiffBuffer) {
     } catch {
       return null;
     }
-    if (!fs9.existsSync(pngPath)) {
+    if (!fs10.existsSync(pngPath)) {
       return null;
     }
-    const pngBuffer = fs9.readFileSync(pngPath);
+    const pngBuffer = fs10.readFileSync(pngPath);
     return pngBuffer.length > 0 ? pngBuffer : null;
   } catch {
     return null;
   } finally {
     try {
-      fs9.rmSync(tempDir, { recursive: true, force: true });
+      fs10.rmSync(tempDir, { recursive: true, force: true });
     } catch {
     }
   }
@@ -6456,8 +6620,8 @@ function findExpandedThinkingId(messages) {
 // src/ui/WelcomeScreen.tsx
 var import_react3 = require("react");
 var import_ink4 = require("ink");
-var os6 = __toESM(require("os"));
-var path9 = __toESM(require("path"));
+var os7 = __toESM(require("os"));
+var path10 = __toESM(require("path"));
 var import_jsx_runtime4 = require("react/jsx-runtime");
 var TITLE_PANEL_WIDTH = 30;
 var PANEL_CONTENT_HEIGHT = 7;
@@ -6535,15 +6699,15 @@ function SettingRow({ label, value }) {
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ink4.Box, { flexGrow: 1, justifyContent: "flex-end", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ink4.Text, { children: value }) })
   ] });
 }
-function formatHomeRelativePath(value, home = os6.homedir()) {
-  const normalizedValue = path9.resolve(value);
-  const normalizedHome = path9.resolve(home);
-  const relative3 = path9.relative(normalizedHome, normalizedValue);
+function formatHomeRelativePath(value, home = os7.homedir()) {
+  const normalizedValue = path10.resolve(value);
+  const normalizedHome = path10.resolve(home);
+  const relative3 = path10.relative(normalizedHome, normalizedValue);
   if (relative3 === "") {
     return "~";
   }
-  if (!relative3.startsWith("..") && !path9.isAbsolute(relative3)) {
-    return `~${path9.sep}${relative3}`;
+  if (!relative3.startsWith("..") && !path10.isAbsolute(relative3)) {
+    return `~${path10.sep}${relative3}`;
   }
   return normalizedValue;
 }
@@ -6844,7 +7008,7 @@ function escapeAnswerPart(value) {
 
 // src/ui/App.tsx
 var import_jsx_runtime6 = require("react/jsx-runtime");
-function App({ projectRoot, version = "" }) {
+function App({ projectRoot, version = "", onRestart }) {
   const { exit } = (0, import_ink6.useApp)();
   const { stdout, write } = (0, import_ink6.useStdout)();
   const [view, setView] = (0, import_react5.useState)("chat");
@@ -6927,6 +7091,10 @@ function App({ projectRoot, version = "" }) {
         return;
       }
       if (submission.command === "new") {
+        if (onRestart) {
+          onRestart();
+          return;
+        }
         write("\x1B[2J\x1B[3J\x1B[H");
         sessionManager.setActiveSessionId(null);
         setMessages([]);
@@ -7114,9 +7282,9 @@ function buildStatusLine(entry) {
 // src/updateCheck.ts
 var import_child_process7 = require("child_process");
 var import_react7 = __toESM(require("react"));
-var fs10 = __toESM(require("fs"));
-var os7 = __toESM(require("os"));
-var path10 = __toESM(require("path"));
+var fs11 = __toESM(require("fs"));
+var os8 = __toESM(require("os"));
+var path11 = __toESM(require("path"));
 var import_ink8 = require("ink");
 var import_chalk3 = __toESM(require("chalk"));
 
@@ -7279,7 +7447,7 @@ function compareVersions(a, b) {
   return 0;
 }
 function getUpdateStatePath() {
-  return path10.join(os7.homedir(), ".deepcode", UPDATE_STATE_FILE);
+  return path11.join(os8.homedir(), ".deepcode", UPDATE_STATE_FILE);
 }
 async function promptUpdateChoice({
   currentVersion,
@@ -7392,11 +7560,11 @@ function parseNpmViewVersion(output) {
 }
 function readUpdateState() {
   const statePath = getUpdateStatePath();
-  if (!fs10.existsSync(statePath)) {
+  if (!fs11.existsSync(statePath)) {
     return {};
   }
   try {
-    const parsed = JSON.parse(fs10.readFileSync(statePath, "utf8"));
+    const parsed = JSON.parse(fs11.readFileSync(statePath, "utf8"));
     return {
       pending: parsed.pending ?? null,
       ignoredVersions: Array.isArray(parsed.ignoredVersions) ? parsed.ignoredVersions.filter((value) => typeof value === "string" && value.trim().length > 0) : []
@@ -7407,8 +7575,8 @@ function readUpdateState() {
 }
 function writeUpdateState(state) {
   const statePath = getUpdateStatePath();
-  fs10.mkdirSync(path10.dirname(statePath), { recursive: true });
-  fs10.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}
+  fs11.mkdirSync(path11.dirname(statePath), { recursive: true });
+  fs11.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}
 `, "utf8");
 }
 function clearPendingUpdate(state = readUpdateState()) {
@@ -7423,7 +7591,7 @@ function parseVersion(value) {
 
 // src/headless.ts
 var readline = __toESM(require("readline"));
-var fs11 = __toESM(require("fs"));
+var fs12 = __toESM(require("fs"));
 function jsonReplacer(_key, value) {
   if (value instanceof Map) {
     return Object.fromEntries(value);
@@ -7578,7 +7746,7 @@ async function runHeadlessWithOptions(options, packageVersion) {
           return;
         }
         try {
-          const stat = fs11.statSync(newPath);
+          const stat = fs12.statSync(newPath);
           if (!stat.isDirectory()) {
             emit({ type: "error", id: inbound.id, error: `path is not a directory: ${newPath}` });
             return;
@@ -7692,7 +7860,6 @@ if (args[0] === "headless") {
     process.exit(1);
   });
 } else {
-  const projectRoot = process.cwd();
   configureWindowsShell();
   if (!process.stdin.isTTY) {
     process.stderr.write(
@@ -7700,19 +7867,38 @@ if (args[0] === "headless") {
     );
     process.exit(1);
   }
-  void main(projectRoot);
+  void main();
 }
-async function main(projectRoot) {
+async function main() {
   const updatePromptResult = await promptForPendingUpdate(packageInfo);
-  const inkInstance = (0, import_ink9.render)(/* @__PURE__ */ (0, import_jsx_runtime8.jsx)(App, { projectRoot, version: packageInfo.version }), {
-    exitOnCtrlC: false
-  });
+  const restartRef = { current: null };
+  function startApp() {
+    const inkInstance = (0, import_ink9.render)(
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+        App,
+        {
+          projectRoot: process.cwd(),
+          version: packageInfo.version,
+          onRestart: () => restartRef.current?.()
+        }
+      ),
+      { exitOnCtrlC: false }
+    );
+    restartRef.current = () => {
+      process.stdout.write("\x1B[2J\x1B[3J\x1B[H");
+      inkInstance.unmount();
+      startApp();
+    };
+    inkInstance.waitUntilExit().then(() => {
+      if (!restartRef.current) {
+        process.exit(0);
+      }
+    });
+  }
   if (!updatePromptResult.installed) {
     void checkForNpmUpdate(packageInfo);
   }
-  inkInstance.waitUntilExit().then(() => {
-    process.exit(0);
-  });
+  startApp();
 }
 function configureWindowsShell() {
   process.env.NoDefaultCurrentDirectoryInExePath = "1";
