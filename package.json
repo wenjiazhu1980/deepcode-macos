@@ -1,12 +1,29 @@
 {
   "name": "@vegamo/deepcode-cli",
   "version": "0.2.2",
-  "description": "Deep Code CLI - Vibe coding for the deepseek-v4 model in your terminal",
+  "description": "DeepCode CLI - AI coding assistant for DeepSeek in terminal. Web search, bug fixing, agent skills. Open-source alternative to Claude Code.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lessweb/deepcode.git"
+    "url": "https://github.com/lessweb/deepcode-cli.git"
   },
+  "keywords": [
+    "ai",
+    "cli",
+    "coding-assistant",
+    "deepseek",
+    "terminal",
+    "ai-programming",
+    "developer-tools",
+    "code-generation",
+    "vibe-coding",
+    "openai-compatible",
+    "agent-skills",
+    "bug-fixing",
+    "web-search",
+    "typescript",
+    "nodejs"
+  ],
   "bin": {
     "deepcode": "./dist/cli.cjs"
   },

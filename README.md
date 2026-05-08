@@ -1,14 +1,18 @@
-# Deep Code CLI
+# DeepCode CLI - AI Coding Assistant for Terminal
 
 > **DeepSeek API 没有联网功能？复制粘贴烦死了？**
 > DeepCode CLI 让 DeepSeek 在终端里联网搜索、自动修 Bug、自定义脚本省 Token。
-> 开源免费，Claude Code 十分之一的价格。
+> 开源免费，Claude Code 十分之一的价格。Vibe coding 神器，程序员必备 AI 工具。
+
+**English**: [README English](./README_en.md)
 
 [![Demo Video](https://img.shields.io/badge/▶️-Demo-FF6B6B?style=for-the-badge)](https://www.bilibili.com/video/BV11ARqB7Eco)
-[![npm version](https://badge.fury.io/js/@vegamo%2Fdeepcode-cli.svg)](https://www.npmjs.com/package/@vegamo/deepcode-cli)
+[![npm version](https://img.shields.io/npm/v/@vegamo/deepcode-cli.svg)](https://www.npmjs.com/package/@vegamo/deepcode-cli)
+[![npm downloads](https://img.shields.io/npm/dm/@vegamo/deepcode-cli.svg)](https://www.npmjs.com/package/@vegamo/deepcode-cli)
 [![GitHub stars](https://img.shields.io/github/stars/lessweb/deepcode-cli)](https://github.com/lessweb/deepcode-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![DeepSeek V4](https://img.shields.io/badge/DeepSeek-V4-orange)](https://www.deepseek.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 
 ---
 
@@ -21,23 +25,29 @@ DeepSeek V4 很强，但用它编程让人抓狂：
 - ❌ **Token 烧得心疼**，多轮对话没有缓存，上下文重复计费
 - ❌ **Claude Code 太贵**，$20~$200/月，且不开源
 
-DeepCode CLI 是专为 DeepSeek V4 深度优化的**开源终端 AI 编程助手**，一行命令装好，终端里直接用。
+DeepCode CLI 是专为 DeepSeek V4 深度优化的**开源终端 AI 编程助手（Terminal AI Coding Assistant）**，一行命令装好，终端里直接用。支持联网搜索、自动 Bug 修复、Agent Skills 扩展，是 Claude Code 的最佳开源替代方案。
 
 ---
 
-## ✨ 五大核心卖点
+## ✨ 核心特性 | Features
+
+> 🚀 **AI Terminal Coding Assistant** with web search, bug fixing, and extensible agent skills. Perfect for vibe coding with DeepSeek.
 
 ### 🌐 1. 联网搜索 — 补齐 DeepSeek 的最大短板
 
-DeepSeek API 没有联网能力。DeepCode CLI 内置**免费 Web Search 工具**，AI 在终端里直接搜索最新资料，无需复制粘贴。
+DeepSeek API 没有联网能力。DeepCode CLI 内置**免费 Web Search 工具**，AI 在终端里直接搜索最新资料，无需复制粘贴。支持自定义搜索脚本，满足个性化需求。
 
 > 用 `deepcode` 问"最新的 React 19 有哪些特性"，AI 直接联网查，返回答案。
+
+**关键词**: web search, ai search, internet search, real-time information
 
 ---
 
 ### 🐛 2. 自动修 Bug — 终端里的 AI 修理工
 
-粘贴错误日志，AI 自动分析 → 定位根因 → 生成修复代码，你只需要确认执行。
+粘贴错误日志，AI 自动分析 → 定位根因 → 生成修复代码，你只需要确认执行。支持多种编程语言和框架的智能诊断。
+
+**关键词**: bug fix, error handling, code debugging, automated repair
 
 ```bash
 # 终端里直接丢给它错误信息
@@ -53,11 +63,13 @@ deepcode
 
 ### 💰 3. 自定义脚本省 Token — Agent Skills 系统
 
-编写自定义脚本（`~/.agents/skills/`），让 AI 按预设流程执行，**避免重复消耗 Token**。
+编写自定义脚本（`~/.agents/skills/`），让 AI 按预设流程执行，**避免重复消耗 Token**。用户级 + 项目级双级 Skills 系统，灵活扩展。
 
 配合 KV Cache 上下文缓存，多轮对话中缓存命中时 Token 成本降低 **80%+**。
 
-> 比 Claude Code ($200/月) 便宜 90%+，只需 API 成本。
+> 比 Claude Code ($200/月) 便宜 90%+，只需 API 成本。支持 DeepSeek、火山方舟、Ollama 等多种模型。
+
+**关键词**: agent skills, custom scripts, token optimization, kv cache, cost saving
 
 ---
 
@@ -141,16 +153,29 @@ open DeepCode.xcodeproj        # Cmd+R 运行
 
 ---
 
-## 🚀 快速上手
+## 🚀 快速开始 | Quick Start
+
+### 安装 Install
 
 ```bash
-# 1. 安装（需要 Node.js 18+）
+# 全局安装（需要 Node.js 18+）
 npm install -g @vegamo/deepcode-cli
 
-# 2. 配置（创建 ~/.deepcode/settings.json）
-deepcode --setup
+# 或使用 npx（无需安装）
+npx @vegamo/deepcode-cli
+```
 
-# 3. 在项目目录里直接启动
+### 配置 Setup
+
+```bash
+# 创建配置文件 ~/.deepcode/settings.json
+deepcode --setup
+```
+
+### 启动 Use
+
+```bash
+# 在项目目录里直接启动
 cd your-project/
 deepcode
 ```
@@ -220,19 +245,23 @@ deepcode
 
 ---
 
-## 🆚 竞品对比
+## 🆚 竞品对比 | Comparison
 
-| 维度 | DeepCode CLI | Claude Code | Aider |
-|------|:-----------:|:-----------:|:-----:|
-| 开源协议 | ✅ MIT | ❌ 闭源 | ✅ Apache-2.0 |
-| 价格 | **免费**（仅 API 成本）| $20~$200/月 | 免费 |
-| DeepSeek V4 优化 | ✅ 原生 | ❌ | ⚠️ 通用 |
-| KV Cache 成本优化 | ✅ 最高 90% 节省 | ❌ | ⚠️ 部分 |
-| 推理深度控制 | ✅ `reasoningEffort` | N/A | N/A |
-| Agent Skills | ✅ 双级支持 | ⚠️ 有限 | ❌ |
-| 联网搜索内置 | ✅ 免费 | ❌ | ⚠️ 需配置 |
-| VSCode 扩展 | ✅ | ✅ | ❌ |
-| 原生 Mac App | ✅ | ❌ | ❌ |
+DeepCode CLI vs Claude Code vs Aider vs Cursor - 开源 AI 编程助手对比：
+
+| 维度 | DeepCode CLI | Claude Code | Aider | Cursor |
+|------|:-----------:|:-----------:|:-----:|:------:|
+| 开源协议 | ✅ MIT | ❌ 闭源 | ✅ Apache-2.0 | ❌ 闭源 |
+| 价格 | **免费**（仅 API 成本）| $20~$200/月 | 免费 | $20/月起 |
+| DeepSeek V4 优化 | ✅ 原生 | ❌ | ⚠️ 通用 | ❌ |
+| KV Cache 成本优化 | ✅ 最高 90% 节省 | ❌ | ⚠️ 部分 | ❌ |
+| 推理深度控制 | ✅ `reasoningEffort` | N/A | N/A | ⚠️ 有限 |
+| Agent Skills | ✅ 双级支持 | ⚠️ 有限 | ❌ | ⚠️ 有限 |
+| 联网搜索内置 | ✅ 免费 | ❌ | ⚠️ 需配置 | ✅ 付费 |
+| VSCode 扩展 | ✅ | ✅ | ❌ | N/A |
+| 原生 Mac App | ✅ | ❌ | ❌ | ❌ |
+| 终端原生 | ✅ | ✅ | ✅ | ❌ |
+| 自托管支持 | ✅ | ❌ | ✅ | ❌ |
 
 ---
 
@@ -283,13 +312,21 @@ npm link   # 本地测试
 
 ---
 
-## ⭐ 支持我们
+## ⭐ 支持我们 | Support
 
 如果 DeepCode CLI 帮你省了时间、省了钱，请：
 
 - ⭐ **Star** → [github.com/lessweb/deepcode-cli](https://github.com/lessweb/deepcode-cli)
 - 🐛 提 [Issues](https://github.com/lessweb/deepcode-cli/issues)
+- 💬 加入 [Discussions](https://github.com/lessweb/deepcode-cli/discussions) 讨论
 - 📣 分享给同事和朋友！
+- 🐦 关注开发者：[Twitter/X](https://twitter.com/wenjiazhu)
+
+---
+
+## 🏷️ 相关标签 | Related Topics
+
+`ai` `cli` `coding-assistant` `deepseek` `terminal` `developer-tools` `code-generation` `vibe-coding` `openai-compatible` `agent-skills` `typescript` `nodejs` `bug-fixing` `web-search` `macos-app`
 
 ---
 
