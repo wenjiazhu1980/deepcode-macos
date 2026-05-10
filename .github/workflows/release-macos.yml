@@ -3,13 +3,13 @@ name: Release macOS App
 on:
   push:
     tags:
-      - "macos-v*"
+      - "v*"
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Tag to release (e.g. macos-v0.1.0)"
+        description: "Tag to release (e.g. v0.2.3)"
         required: true
-        default: "macos-v0.0.0-dev"
+        default: "v0.0.0-dev"
 
 permissions:
   contents: write
@@ -96,7 +96,7 @@ jobs:
         working-directory: apps/macos-menubar
         run: |
           set -euxo pipefail
-          MARKETING_VERSION="${TAG_NAME#macos-v}"
+          MARKETING_VERSION="${TAG_NAME#v}"
           # Strip any -rcN / -dev suffix for marketing version (Apple is strict)
           MARKETING_VERSION="${MARKETING_VERSION%%-*}"
           if [ -z "$MARKETING_VERSION" ]; then
