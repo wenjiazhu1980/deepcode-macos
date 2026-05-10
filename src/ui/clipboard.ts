@@ -194,13 +194,20 @@ export function readClipboardImage(): ClipboardImage | null {
   return null;
 }
 
+/**
+ * Async wrapper around readClipboardImage.
+ *
+ * NOTE: The underlying clipboard reads use spawnSync (to avoid rearchitecting
+ * the platform-specific fallback chains). setImmediate defers execution to the
+ * next event-loop tick so other pending I/O callbacks can run first. For a CLI
+ * tool that only triggers on explicit Ctrl+V, the brief block (~50-100ms) is
+ * acceptable. A future improvement could convert the spawn calls to execFile.
+ */
 export async function readClipboardImageAsync(): Promise<ClipboardImage | null> {
   return new Promise((resolve, reject) => {
-    // Use setImmediate to avoid blocking the event loop
     setImmediate(() => {
       try {
-        const result = readClipboardImage();
-        resolve(result);
+        resolve(readClipboardImage());
       } catch (error) {
         reject(error);
       }

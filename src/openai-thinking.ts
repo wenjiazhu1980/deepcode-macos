@@ -13,7 +13,6 @@ type ThinkingRequestOptions = {
 
 export function buildThinkingRequestOptions(
   thinkingEnabled: boolean,
-  _baseURL?: string,
   reasoningEffort: ReasoningEffort = "max"
 ): ThinkingRequestOptions {
   const thinking: ThinkingConfig = { type: thinkingEnabled ? "enabled" : "disabled" };

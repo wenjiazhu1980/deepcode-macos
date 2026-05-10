@@ -990,7 +990,7 @@ ${skillMd}
         }
 
         const messages = this.buildOpenAIMessages(this.listSessionMessages(sessionId), thinkingEnabled);
-        const thinkingOptions = buildThinkingRequestOptions(thinkingEnabled, baseURL, reasoningEffort);
+        const thinkingOptions = buildThinkingRequestOptions(thinkingEnabled, reasoningEffort);
         const response = await this.createChatCompletionStream(
           client,
           {
@@ -1133,7 +1133,7 @@ ${skillMd}
     }
 
     const compactPrompt = getCompactPrompt(sessionMessages.slice(startIndex, endIndex));
-    const thinkingOptions = buildThinkingRequestOptions(thinkingEnabled, baseURL, reasoningEffort);
+    const thinkingOptions = buildThinkingRequestOptions(thinkingEnabled, reasoningEffort);
     const response = await this.createChatCompletionStream(client, {
       model,
       messages: [{ role: "user", content: compactPrompt }],

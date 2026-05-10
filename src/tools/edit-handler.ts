@@ -743,7 +743,7 @@ async function correctEscapedStringsWithLLM(
             "</output_format>"
         }
       ],
-      ...buildThinkingRequestOptions(thinkingEnabled, baseURL, reasoningEffort)
+      ...buildThinkingRequestOptions(thinkingEnabled, reasoningEffort)
     });
 
     const content = response.choices?.[0]?.message?.content ?? "";

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { readClipboardImage } from "../ui/clipboard";
 
 const ORIGINAL_PATH = process.env.PATH;
 const ORIGINAL_PLATFORM = process.platform;
@@ -68,9 +69,6 @@ test("readClipboardImage falls back to TIFF and converts via sips when PNG is ab
   // This test verifies that when the clipboard has only TIFF data,
   // the code falls back to reading TIFF hex data and converting with sips.
   // We test the hex parsing and sips conversion logic directly.
-  const modulePath = require.resolve("../ui/clipboard");
-  delete require.cache[modulePath];
-
   // Simulate the TIFF→PNG flow: mock osascript returns TIFF hex,
   // mock sips converts it to PNG.  Both mocks must be on PATH via spawnSync.
   const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "deepcode-clipboard-test-bin-"));
@@ -99,8 +97,6 @@ test("readClipboardImage falls back to TIFF and converts via sips when PNG is ab
       ].join("\n"),
       { mode: 0o755 }
     );
-
-    const { readClipboardImage } = require("../ui/clipboard") as typeof import("../ui/clipboard");
 
     process.env.PATH = binDir;
     // sips is NOT mocked here — if sips conversion is needed (TIFF path),

@@ -3,6 +3,7 @@ import * as os from "os";
 import * as path from "path";
 
 const DEBUG_LOG_FILE = "debug.log";
+const MAX_LOG_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export type OpenAIChatCompletionDebugEntry = {
   timestamp: string;
@@ -27,9 +28,22 @@ export function logOpenAIChatCompletionDebug(entry: OpenAIChatCompletionDebugEnt
   try {
     const logPath = getDebugLogPath();
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    rotateIfNeeded(logPath);
     fs.appendFileSync(logPath, `${JSON.stringify(toSerializable(entry))}\n`, "utf8");
   } catch {
     // Debug logging must never affect CLI behavior.
+  }
+}
+
+function rotateIfNeeded(logPath: string): void {
+  try {
+    const stat = fs.statSync(logPath);
+    if (stat.size >= MAX_LOG_SIZE_BYTES) {
+      const rotatedPath = `${logPath}.1`;
+      fs.renameSync(logPath, rotatedPath);
+    }
+  } catch {
+    // File does not yet or rotation failed — safe to continue.
   }
 }
 

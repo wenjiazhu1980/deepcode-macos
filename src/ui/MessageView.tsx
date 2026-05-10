@@ -1,5 +1,5 @@
 import React from "react";
-import {Box, Newline, Text} from "ink";
+import {Box, Text} from "ink";
 import { renderMarkdown } from "./markdown";
 import type { SessionMessage } from "../session";
 

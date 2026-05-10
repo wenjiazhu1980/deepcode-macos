@@ -64,7 +64,7 @@ export function WelcomeScreen({
 
           <Box
             borderStyle={"round"}
-            borderColor={"#229ac3e6"}
+            borderColor={"#229ac3"}
             flexDirection="column"
             flexGrow={1}
             height={compact ? undefined : PANEL_CONTENT_HEIGHT}
@@ -72,7 +72,7 @@ export function WelcomeScreen({
             paddingX={1}
           >
             <Box flexGrow={1} marginBottom={compact ? 1 : 0}>
-              <Text color={"#229ac3e6"}>{">"}_ Deep Code </Text>
+              <Text color={"#229ac3"}>{">"}_ Deep Code </Text>
               <Text color='gray'> (v{version || "unknown"})</Text>
             </Box>
             {!compact ? <Text> </Text> : null}

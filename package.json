@@ -1,6 +1,6 @@
 {
   "name": "@vegamo/deepcode-cli",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "DeepCode CLI - AI coding assistant for DeepSeek in terminal. Web search, bug fixing, agent skills. Open-source alternative to Claude Code.",
   "license": "MIT",
   "type": "module",
@@ -37,7 +37,7 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=18.17.0"
+    "node": ">=18.20.0"
   },
   "scripts": {
     "typecheck": "tsc -p ./ --noEmit",

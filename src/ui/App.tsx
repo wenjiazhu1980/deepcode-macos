@@ -33,8 +33,6 @@ import {
 } from "./askUserQuestion";
 import { buildExitSummaryText } from "./exitSummary";
 
-export { createOpenAIClient, readSettings, resolveCurrentSettings };
-
 type View = "chat" | "session-list";
 
 type AppProps = {
