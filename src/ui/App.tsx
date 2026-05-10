@@ -1,5 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Static, Text, useApp, useStdout } from "ink";
+import { Box, Static, Text, useApp, useStdout, useWindowSize } from "ink";
+import chalk from "chalk";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import OpenAI from "openai";
 import {
   SessionManager,
   type LlmStreamProgress,
@@ -26,6 +31,7 @@ import {
   formatAskUserQuestionAnswers,
   type AskUserQuestionAnswers
 } from "./askUserQuestion";
+import { buildExitSummaryText } from "./exitSummary";
 
 export { createOpenAIClient, readSettings, resolveCurrentSettings };
 
@@ -40,6 +46,7 @@ type AppProps = {
 export function App({ projectRoot, version = "", onRestart }: AppProps): React.ReactElement {
   const { exit } = useApp();
   const { stdout, write } = useStdout();
+  const { columns } = useWindowSize();
   const [view, setView] = useState<View>("chat");
   const [busy, setBusy] = useState(false);
   const [skills, setSkills] = useState<SkillInfo[]>([]);
@@ -51,7 +58,10 @@ export function App({ projectRoot, version = "", onRestart }: AppProps): React.R
   const [runningProcesses, setRunningProcesses] = useState<SessionEntry["processes"]>(null);
   const [activeStatus, setActiveStatus] = useState<SessionStatus | null>(null);
   const [dismissedQuestionIds, setDismissedQuestionIds] = useState<Set<string>>(() => new Set());
-  const [, setNowTick] = useState(0);
+  const [isExiting, setIsExiting] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [welcomeNonce, setWelcomeNonce] = useState(0);
+  const [nowTick, setNowTick] = useState(0);
 
   const messagesRef = useRef<SessionMessage[]>([]);
   messagesRef.current = messages;
@@ -90,18 +100,7 @@ export function App({ projectRoot, version = "", onRestart }: AppProps): React.R
 
   useEffect(() => {
     refreshSessionsList();
-    const list = sessionManager.listSessions();
-    if (list.length > 0) {
-      const latest = list[0];
-      sessionManager.setActiveSessionId(latest.id);
-      setMessages(loadVisibleMessages(sessionManager, latest.id));
-      setStatusLine(buildStatusLine(latest));
-      setRunningProcesses(latest.processes);
-      setActiveStatus(latest.status);
-      void refreshSkills(latest.id);
-    } else {
-      void refreshSkills();
-    }
+    void refreshSkills();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -122,31 +121,50 @@ export function App({ projectRoot, version = "", onRestart }: AppProps): React.R
     }
   }
 
+  const writeRef = useRef(write);
+  writeRef.current = write;
   const handlePrompt = useCallback(
     async (submission: PromptSubmission) => {
       if (submission.command === "exit") {
-        exit();
-        process.exit(0);
+        setIsExiting(true);
+        setTimeout(() => {
+          const activeSessionId = sessionManager.getActiveSessionId();
+          const session = activeSessionId ? sessionManager.getSession(activeSessionId) : null;
+          const allMessages = activeSessionId
+            ? sessionManager.listSessionMessages(activeSessionId)
+            : messagesRef.current;
+          const resolved = resolveCurrentSettings();
+          const summary = buildExitSummaryText({ session, messages: allMessages, model: resolved.model });
+          process.stdout.write("\n");
+          process.stdout.write(chalk.green("> /exit "));
+          process.stdout.write("\n\n");
+          process.stdout.write(summary);
+          process.stdout.write("\n\n");
+          exit();
+        }, 0);
         return;
       }
       if (submission.command === "new") {
         if (onRestart) {
           onRestart();
-          return;
+        } else {
+          writeRef.current("\u001B[2J\u001B[3J\u001B[H");
+          sessionManager.setActiveSessionId(null);
+          setMessages([]);
+          setStatusLine("");
+          setErrorLine(null);
+          setRunningProcesses(null);
+          setActiveStatus(null);
+          setDismissedQuestionIds(new Set());
+          setShowWelcome(true);
+          setWelcomeNonce((n) => n + 1);
+          await refreshSkills();
+          refreshSessionsList();
         }
-        write("\u001B[2J\u001B[3J\u001B[H");
-        sessionManager.setActiveSessionId(null);
-        setMessages([]);
-        setStatusLine("");
-        setErrorLine(null);
-        setRunningProcesses(null);
-        setActiveStatus(null);
-        setDismissedQuestionIds(new Set());
-        await refreshSkills();
-        refreshSessionsList();
         return;
       }
       if (submission.command === "resume") {
+        setShowWelcome(false);
         refreshSessionsList();
         setView("session-list");
         return;
@@ -189,28 +207,50 @@ export function App({ projectRoot, version = "", onRestart }: AppProps): React.R
         setRunningProcesses(null);
       }
     },
-    [exit, sessionManager, write]
+    [exit, onRestart, sessionManager]
   );
 
   const handleInterrupt = useCallback(() => {
     sessionManager.interruptActiveSession();
   }, [sessionManager]);
 
+  const handleSubmit = useCallback(
+    (submission: PromptSubmission) => { void handlePrompt(submission); },
+    [handlePrompt]
+  );
+
   const handleSelectSession = useCallback(
     async (sessionId: string) => {
+      const currentSessionId = sessionManager.getActiveSessionId();
+      if (currentSessionId !== sessionId) {
+        process.stdout.write("\u001B[2J\u001B[3J\u001B[H");
+      }
       sessionManager.setActiveSessionId(sessionId);
-      setMessages(loadVisibleMessages(sessionManager, sessionId));
+      // 先清空让 <Static> 的 index 重置为 0
+      setMessages([]);
+      setShowWelcome(false);
+      setWelcomeNonce((n) => n + 1);
+      setView("chat");
+      // 再加载新消息，此时 index 已为 0，会渲染全部 items
+      setTimeout(() => {
+        setMessages(loadVisibleMessages(sessionManager, sessionId));
+        setShowWelcome(true);
+      }, 0);
       const session = sessionManager.getSession(sessionId);
       setStatusLine(session ? buildStatusLine(session) : "");
       setRunningProcesses(session?.processes ?? null);
       setActiveStatus(session?.status ?? null);
-      setView("chat");
       await refreshSkills(sessionId);
     },
     [sessionManager]
   );
 
-  const screenWidth = stdout?.columns ?? 80;
+  const [stableColumns, setStableColumns] = useState(columns);
+  useEffect(() => {
+    const timer = setTimeout(() => setStableColumns(columns), 100);
+    return () => clearTimeout(timer);
+  }, [columns]);
+  const screenWidth = useMemo(() => stableColumns ?? stdout?.columns ?? 80, [stableColumns, stdout]);
   const promptHistory = useMemo(() => {
     return messages
       .filter((message) => message.role === "user" && typeof message.content === "string")
@@ -225,10 +265,31 @@ export function App({ projectRoot, version = "", onRestart }: AppProps): React.R
   const shouldShowQuestionPrompt = Boolean(
     pendingQuestion && !dismissedQuestionIds.has(pendingQuestion.messageId)
   );
-  const loadingText = busy
-    ? buildLoadingText({ progress: streamProgress, processes: runningProcesses, now: Date.now() })
-    : null;
+  const loadingText = useMemo(
+    () => busy
+      ? buildLoadingText({ progress: streamProgress, processes: runningProcesses, now: Date.now() })
+      : null,
+    [busy, streamProgress, runningProcesses, nowTick]
+  );
   const welcomeSettings = useMemo(() => resolveCurrentSettings(), []);
+  const welcomeItem: SessionMessage = useMemo(() => ({
+    id: `__welcome__${welcomeNonce}`,
+    sessionId: "",
+    role: "system",
+    content: "",
+    contentParams: null,
+    messageParams: null,
+    compacted: false,
+    visible: true,
+    createTime: "",
+    updateTime: ""
+  }), [welcomeNonce]);
+  const staticItems = useMemo(() => {
+    if (showWelcome && view === "chat") {
+      return [welcomeItem, ...messages];
+    }
+    return messages;
+  }, [showWelcome, view, messages, welcomeItem]);
 
   const handleQuestionAnswers = useCallback(
     (answers: AskUserQuestionAnswers) => {
@@ -248,24 +309,29 @@ export function App({ projectRoot, version = "", onRestart }: AppProps): React.R
   }, [pendingQuestion]);
 
   return (
-    <Box flexDirection="column" width={screenWidth}>
-      {view === "chat" && messages.length === 0 ? (
-        <WelcomeScreen
-          projectRoot={projectRoot}
-          settings={welcomeSettings}
-          skills={skills}
-          version={version}
-          width={screenWidth}
-        />
-      ) : null}
-      <Static items={messages}>
-        {(message) => (
-          <MessageView
-            key={message.id}
-            message={message}
-            collapsed={isCollapsedThinking(message, expandedThinkingId)}
-          />
-        )}
+    <Box flexDirection="column" width={screenWidth} minWidth={80} overflowX={'visible'}>
+      <Static items={staticItems}>
+        {(item) => {
+          if (item.id.startsWith("__welcome__")) {
+            return (
+              <WelcomeScreen
+                key={item.id}
+                projectRoot={projectRoot}
+                settings={welcomeSettings}
+                skills={skills}
+                version={version}
+                width={screenWidth}
+              />
+            );
+          }
+          return (
+            <MessageView
+              key={item.id}
+              message={item}
+              collapsed={isCollapsedThinking(item, expandedThinkingId)}
+            />
+          );
+        }}
       </Static>
       {statusLine ? (
         <Box>
@@ -289,14 +355,16 @@ export function App({ projectRoot, version = "", onRestart }: AppProps): React.R
           onSubmit={handleQuestionAnswers}
           onCancel={handleQuestionCancel}
         />
-      ) : (
+      ) : isExiting ? null : (
         <PromptInput
+          screenWidth={screenWidth}
           skills={skills}
           promptHistory={promptHistory}
           busy={busy}
           loadingText={loadingText}
-          onSubmit={(submission) => void handlePrompt(submission)}
+          onSubmit={handleSubmit}
           onInterrupt={handleInterrupt}
+          placeholder='Type your message...'
         />
       )}
     </Box>
@@ -345,4 +413,85 @@ function buildStatusLine(entry: SessionEntry): string {
     parts.push(`fail: ${entry.failReason}`);
   }
   return parts.join(" · ");
+}
+
+export function readSettings(): DeepcodingSettings | null {
+  try {
+    const settingsPath = path.join(os.homedir(), ".deepcode", "settings.json");
+    if (!fs.existsSync(settingsPath)) {
+      return null;
+    }
+    const raw = fs.readFileSync(settingsPath, "utf8");
+    return JSON.parse(raw) as DeepcodingSettings;
+  } catch {
+    return null;
+  }
+}
+
+export function resolveCurrentSettings(): ReturnType<typeof resolveSettings> {
+  return resolveSettings(readSettings(), {
+    model: DEFAULT_MODEL,
+    baseURL: DEFAULT_BASE_URL
+  });
+}
+
+export function createOpenAIClient(): {
+  client: OpenAI | null;
+  model: string;
+  baseURL: string;
+  thinkingEnabled: boolean;
+  reasoningEffort: "high" | "max";
+  debugLogEnabled: boolean;
+  notify?: string;
+  webSearchTool?: string;
+  machineId?: string;
+} {
+  const settings = resolveCurrentSettings();
+  if (!settings.apiKey) {
+    return {
+      client: null,
+      model: settings.model,
+      baseURL: settings.baseURL,
+      thinkingEnabled: settings.thinkingEnabled,
+      reasoningEffort: settings.reasoningEffort,
+      debugLogEnabled: settings.debugLogEnabled,
+      notify: settings.notify,
+      webSearchTool: settings.webSearchTool,
+      machineId: getMachineId()
+    };
+  }
+
+  const client = new OpenAI({
+    apiKey: settings.apiKey,
+    baseURL: settings.baseURL || undefined
+  });
+  return {
+    client,
+    model: settings.model,
+    baseURL: settings.baseURL,
+    thinkingEnabled: settings.thinkingEnabled,
+    reasoningEffort: settings.reasoningEffort,
+    debugLogEnabled: settings.debugLogEnabled,
+    notify: settings.notify,
+    webSearchTool: settings.webSearchTool,
+    machineId: getMachineId()
+  };
+}
+
+function getMachineId(): string | undefined {
+  try {
+    const idPath = path.join(os.homedir(), ".deepcode", "machine-id");
+    if (fs.existsSync(idPath)) {
+      const raw = fs.readFileSync(idPath, "utf8").trim();
+      if (raw) {
+        return raw;
+      }
+    }
+    const generated = `${os.hostname()}-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+    fs.mkdirSync(path.dirname(idPath), { recursive: true });
+    fs.writeFileSync(idPath, generated, "utf8");
+    return generated;
+  } catch {
+    return undefined;
+  }
 }

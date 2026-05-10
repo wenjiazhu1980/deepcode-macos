@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Text } from "ink";
+import {Box, Newline, Text} from "ink";
 import { renderMarkdown } from "./markdown";
 import type { SessionMessage } from "../session";
 
@@ -8,7 +8,7 @@ type Props = {
   collapsed?: boolean;
 };
 
-export function MessageView({ message }: Props): React.ReactElement | null {
+export function MessageView({ message, collapsed }: Props): React.ReactElement | null {
   if (!message.visible) {
     return null;
   }
@@ -18,25 +18,16 @@ export function MessageView({ message }: Props): React.ReactElement | null {
     const imageParams = Array.isArray(message.contentParams) ? message.contentParams : null;
     const hasImages = imageParams !== null && imageParams.length > 0;
     return (
-      <Box flexDirection="column" marginY={0}>
-        <Text color="green">
-          {text ? `❯ ${text}` : hasImages ? "❯" : "❯ (no content)"}
-        </Text>
-        {hasImages ? (
-          <Box
-            borderStyle="round"
-            borderColor="magenta"
-            paddingX={1}
-            marginLeft={2}
-          >
-            <Text color="magentaBright" bold>
-              🖼  Image Attached
-            </Text>
-            <Text color="magenta">
-              {`${imageParams.length} image${imageParams.length === 1 ? "" : "s"}`}
-            </Text>
+      <Box  marginLeft={1} marginBottom={1} flexDirection="column" marginY={0}>
+        <Box flexGrow={1} gap={1}>
+          <Box><Text color="#229ac3">{`>`}</Text></Box>
+          <Box flexGrow={1}>
+            <Text color="#229ac3">{text}</Text>
+            {Array.isArray(message.contentParams) && message.contentParams.length > 0 ? (
+              <Text color="#229ac3">{`  📎 ${message.contentParams.length} image attachment(s)`}</Text>
+            ) : null}
           </Box>
-        ) : null}
+        </Box>
       </Box>
     );
   }
@@ -47,17 +38,27 @@ export function MessageView({ message }: Props): React.ReactElement | null {
 
     if (isThinking) {
       const summary = buildThinkingSummary(content, message.messageParams);
+      if (collapsed !== false) {
+        return (
+          <Box marginLeft={1} marginY={0}>
+            <StatusLine bulletColor="gray" name="Thinking" params={summary} />
+          </Box>
+        );
+      }
       return (
-        <Box marginY={0}>
+        <Box marginLeft={1} flexDirection="column" marginY={0}>
           <StatusLine bulletColor="gray" name="Thinking" params={summary} />
+          <Box flexDirection="column">
+            {content ? <Text dimColor>{renderMarkdown(content)}</Text> : null}
+          </Box>
         </Box>
       );
     }
 
     return (
-      <Box flexDirection="column" marginY={0}>
-        <Text color="cyan" bold>Assistant</Text>
-        <Box marginLeft={2} flexDirection="column">
+      <Box marginLeft={1} marginBottom={1} flexGrow={1} gap={1} marginY={0}>
+        <Box><Text color="#229ac3">✦</Text></Box>
+        <Box flexDirection="column" flexGrow={1}>
           {content ? <Text>{renderMarkdown(content)}</Text> : null}
         </Box>
       </Box>
@@ -68,7 +69,7 @@ export function MessageView({ message }: Props): React.ReactElement | null {
     const summary = buildToolSummary(message);
     const diffLines = getToolDiffPreviewLines(summary);
     return (
-      <Box flexDirection="column" marginY={0}>
+      <Box flexDirection="column" marginLeft={1} marginBottom={1} marginY={0}>
         <StatusLine
           bulletColor={summary.ok ? "green" : "red"}
           name={formatStatusName(summary.name)}
@@ -82,14 +83,14 @@ export function MessageView({ message }: Props): React.ReactElement | null {
   if (message.role === "system") {
     if (message.meta?.skill) {
       return (
-        <Box marginY={0}>
+        <Box marginY={0} marginLeft={1} marginBottom={1}>
           <Text color="magenta">⚡ Loaded skill: {message.meta.skill.name}</Text>
         </Box>
       );
     }
     if (message.meta?.isSummary) {
       return (
-        <Box marginY={0}>
+        <Box marginY={0} marginLeft={1} marginBottom={1}>
           <Text dimColor italic>(conversation summary inserted)</Text>
         </Box>
       );
@@ -112,7 +113,7 @@ function StatusLine({
   return (
     <Text wrap="truncate-end">
       {[
-        <Text key="bullet" color={bulletColor}>•</Text>,
+        <Text key="bullet" color={bulletColor}>✧</Text>,
         " ",
         <Text key="name" bold>{name}</Text>,
         params ? <Text key="params" color="white">{`  ${params}`}</Text> : null

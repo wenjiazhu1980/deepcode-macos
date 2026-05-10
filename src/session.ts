@@ -10,11 +10,19 @@ import { DEEPSEEK_V4_MODELS } from "./model-capabilities";
 import { getCompactPrompt, getSystemPrompt, getTools, AGENT_DRIFT_GUARD_SKILL } from "./prompt";
 import { ToolExecutor, type CreateOpenAIClient } from "./tools/executor";
 import { logApiError } from "./error-logger";
+import { logOpenAIChatCompletionDebug, normalizeDebugError } from "./debug-logger";
 
 const MAX_SESSION_ENTRIES = 50;
 const DEFAULT_NEW_PROMPT_API_URL = "https://deepcode.vegamo.cn/api/plugin/new";
 const DEFAULT_COMPACT_PROMPT_TOKEN_THRESHOLD = 128 * 1024;
 const DEEPSEEK_V4_COMPACT_PROMPT_TOKEN_THRESHOLD = 512 * 1024;
+
+type ChatCompletionDebugOptions = {
+  enabled?: boolean;
+  location: string;
+  baseURL?: string;
+  params?: Record<string, unknown>;
+};
 
 export function getCompactPromptTokenThreshold(model: string): number {
   return DEEPSEEK_V4_MODELS.has(model)
@@ -24,6 +32,18 @@ export function getCompactPromptTokenThreshold(model: string): number {
 
 function isUsageRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function summarizeCompletionOptions(options?: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (!options) {
+    return undefined;
+  }
+  return {
+    ...options,
+    signal: options.signal instanceof AbortSignal
+      ? { aborted: options.signal.aborted }
+      : options.signal
+  };
 }
 
 function addUsageValue(current: unknown, next: unknown): unknown {
@@ -241,13 +261,15 @@ export class SessionManager {
     client: NonNullable<ReturnType<CreateOpenAIClient>["client"]>,
     request: Record<string, unknown>,
     options?: Record<string, unknown>,
-    sessionId?: string
+    sessionId?: string,
+    debug?: ChatCompletionDebugOptions
   ): Promise<{
     choices?: Array<{ message?: Record<string, unknown> }>;
     usage?: unknown;
   }> {
     const requestId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
+    const startedAtMs = Date.now();
     let estimatedTokens = 0;
     this.emitLlmStreamProgress(requestId, startedAt, estimatedTokens, "start", sessionId);
 
@@ -267,6 +289,18 @@ export class SessionManager {
         options?: Record<string, unknown>
       ) => Promise<unknown>)(streamRequest, options);
     } catch (error) {
+      this.logChatCompletionDebug(debug, {
+        timestamp: new Date().toISOString(),
+        location: debug?.location ?? "SessionManager.createChatCompletionStream:create",
+        requestId,
+        sessionId,
+        model: typeof request.model === "string" ? request.model : undefined,
+        baseURL: debug?.baseURL,
+        durationMs: Date.now() - startedAtMs,
+        params: { ...debug?.params, options: summarizeCompletionOptions(options) },
+        request: streamRequest,
+        error: normalizeDebugError(error)
+      });
       logApiError({
         timestamp: new Date().toISOString(),
         location: "SessionManager.createChatCompletionStream:create",
@@ -286,6 +320,18 @@ export class SessionManager {
 
     if (!response || typeof (response as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] !== "function") {
       this.emitLlmStreamProgress(requestId, startedAt, estimatedTokens, "end", sessionId);
+      this.logChatCompletionDebug(debug, {
+        timestamp: new Date().toISOString(),
+        location: debug?.location ?? "SessionManager.createChatCompletionStream",
+        requestId,
+        sessionId,
+        model: typeof request.model === "string" ? request.model : undefined,
+        baseURL: debug?.baseURL,
+        durationMs: Date.now() - startedAtMs,
+        params: { ...debug?.params, options: summarizeCompletionOptions(options) },
+        request: streamRequest,
+        response
+      });
       return response as { choices?: Array<{ message?: Record<string, unknown> }>; usage?: unknown };
     }
 
@@ -293,6 +339,7 @@ export class SessionManager {
     let reasoningContent = "";
     let refusal: string | null = null;
     let usage: unknown = null;
+    const responseChunks: unknown[] = [];
     const toolCallsByIndex = new Map<number, {
       id?: string;
       type?: string;
@@ -318,6 +365,9 @@ export class SessionManager {
           throw abortError;
         }
 
+        if (debug?.enabled) {
+          responseChunks.push(chunk);
+        }
         if ("usage" in chunk && chunk.usage != null) {
           usage = chunk.usage;
         }
@@ -378,6 +428,19 @@ export class SessionManager {
         }
       }
     } catch (error) {
+      this.logChatCompletionDebug(debug, {
+        timestamp: new Date().toISOString(),
+        location: debug?.location ?? "SessionManager.createChatCompletionStream:stream",
+        requestId,
+        sessionId,
+        model: typeof request.model === "string" ? request.model : undefined,
+        baseURL: debug?.baseURL,
+        durationMs: Date.now() - startedAtMs,
+        params: { ...debug?.params, options: summarizeCompletionOptions(options) },
+        request: streamRequest,
+        responseChunks,
+        error: normalizeDebugError(error)
+      });
       logApiError({
         timestamp: new Date().toISOString(),
         location: "SessionManager.createChatCompletionStream:stream",
@@ -410,10 +473,34 @@ export class SessionManager {
       message.refusal = refusal;
     }
 
-    return {
+    const finalResponse = {
       choices: [{ message }],
       usage
     };
+    this.logChatCompletionDebug(debug, {
+      timestamp: new Date().toISOString(),
+      location: debug?.location ?? "SessionManager.createChatCompletionStream",
+      requestId,
+      sessionId,
+      model: typeof request.model === "string" ? request.model : undefined,
+      baseURL: debug?.baseURL,
+      durationMs: Date.now() - startedAtMs,
+      params: { ...debug?.params, options: summarizeCompletionOptions(options) },
+      request: streamRequest,
+      responseChunks,
+      response: finalResponse
+    });
+    return finalResponse;
+  }
+
+  private logChatCompletionDebug(
+    debug: ChatCompletionDebugOptions | undefined,
+    entry: Parameters<typeof logOpenAIChatCompletionDebug>[0]
+  ): void {
+    if (!debug?.enabled) {
+      return;
+    }
+    logOpenAIChatCompletionDebug(entry);
   }
 
   async identifyMatchingSkillNames(
@@ -439,7 +526,7 @@ The candidate skills are as follows:\n\n`;
     }
     systemPrompt += "```\n" + JSON.stringify(simpleSkills, null, 2) + "\n```";
     
-    const { client, model } = this.createOpenAIClient();
+    const { client, model, baseURL, debugLogEnabled } = this.createOpenAIClient();
     if (!client) {
       return [];
     }
@@ -452,7 +539,12 @@ The candidate skills are as follows:\n\n`;
           { role: "user", content: userPrompt }
         ],
         response_format: { type: "json_object" }
-      }, options?.signal ? { signal: options.signal } : undefined, options?.sessionId);
+      }, options?.signal ? { signal: options.signal } : undefined, options?.sessionId, {
+        enabled: debugLogEnabled,
+        location: "SessionManager.identifyMatchingSkillNames",
+        baseURL,
+        params: { purpose: "skill-matching" }
+      });
       this.throwIfAborted(options?.signal);
       
       const rawContent = response.choices?.[0]?.message?.content;
@@ -478,7 +570,8 @@ The candidate skills are as follows:\n\n`;
   async listSkills(sessionId?: string): Promise<SkillInfo[]> {
     const homeDir = os.homedir();
     const agentsRoot = path.join(homeDir, ".agents", "skills");
-    const projectSkillsRoot = path.join(this.projectRoot, ".deepcode", "skills");
+    const legacyProjectSkillsRoot = path.join(this.projectRoot, ".deepcode", "skills");
+    const projectAgentsSkillsRoot = path.join(this.projectRoot, ".agents", "skills");
     const skillsByName = new Map<string, SkillInfo>();
 
     const collectSkills = (root: string, displayRoot: string): SkillInfo[] => {
@@ -518,7 +611,10 @@ The candidate skills are as follows:\n\n`;
     for (const skill of collectSkills(agentsRoot, "~/.agents/skills")) {
       skillsByName.set(skill.name, skill);
     }
-    for (const skill of collectSkills(projectSkillsRoot, "./.deepcode/skills")) {
+    for (const skill of collectSkills(legacyProjectSkillsRoot, "./.deepcode/skills")) {
+      skillsByName.set(skill.name, skill);
+    }
+    for (const skill of collectSkills(projectAgentsSkillsRoot, "./.agents/skills")) {
       skillsByName.set(skill.name, skill);
     }
 
@@ -833,7 +929,7 @@ ${skillMd}
 
   async activateSession(sessionId: string, controller?: AbortController): Promise<void> {
     const startedAt = Date.now();
-    const { client, model, baseURL, thinkingEnabled, reasoningEffort, notify } = this.createOpenAIClient();
+    const { client, model, baseURL, thinkingEnabled, reasoningEffort, debugLogEnabled, notify } = this.createOpenAIClient();
     const now = new Date().toISOString();
 
     if (!client) {
@@ -904,7 +1000,13 @@ ${skillMd}
             ...thinkingOptions
           },
           { signal: sessionController.signal },
-          sessionId
+          sessionId,
+          {
+            enabled: debugLogEnabled,
+            location: "SessionManager.activateSession",
+            baseURL,
+            params: { iteration, thinkingEnabled, reasoningEffort }
+          }
         );
 
         const message = response.choices?.[0]?.message;
@@ -1002,7 +1104,7 @@ ${skillMd}
 
   async compactSession(sessionId: string, signal?: AbortSignal): Promise<void> {
     this.throwIfAborted(signal);
-    const { client, model, baseURL, thinkingEnabled, reasoningEffort } = this.createOpenAIClient();
+    const { client, model, baseURL, thinkingEnabled, reasoningEffort, debugLogEnabled } = this.createOpenAIClient();
     if (!client) {
       return;
     }
@@ -1036,7 +1138,12 @@ ${skillMd}
       model,
       messages: [{ role: "user", content: compactPrompt }],
       ...thinkingOptions
-    }, signal ? { signal } : undefined, sessionId);
+    }, signal ? { signal } : undefined, sessionId, {
+      enabled: debugLogEnabled,
+      location: "SessionManager.compactSession",
+      baseURL,
+      params: { thinkingEnabled, reasoningEffort }
+    });
     this.throwIfAborted(signal);
     const rawLlmResponse = response.choices?.[0]?.message?.content;
     const llmResponse = typeof rawLlmResponse === "string" ? rawLlmResponse : "";

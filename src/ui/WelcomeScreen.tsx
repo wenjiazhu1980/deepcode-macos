@@ -1,14 +1,11 @@
-import React, { useMemo, useState } from "react";
-import { Box, Text } from "ink";
-import * as os from "os";
-import * as path from "path";
-import type { SkillInfo } from "../session";
-import type { ResolvedDeepcodingSettings } from "../settings";
-import {
-  BUILTIN_SLASH_COMMANDS,
-  buildSlashCommands,
-  formatSlashCommandDescription
-} from "./slashCommands";
+import React, {useMemo, useState} from "react";
+import {Box, Text} from "ink";
+import * as os from "node:os";
+import path from 'node:path';
+import type {SkillInfo} from "../session";
+import type {ResolvedDeepcodingSettings} from "../settings";
+import {buildSlashCommands, BUILTIN_SLASH_COMMANDS, formatSlashCommandDescription} from "./slashCommands";
+import {ThemedGradient} from "./ThemedGradient";
 
 type WelcomeScreenProps = {
   projectRoot: string;
@@ -18,8 +15,8 @@ type WelcomeScreenProps = {
   width: number;
 };
 
-const TITLE_PANEL_WIDTH = 30;
-const PANEL_CONTENT_HEIGHT = 7;
+const TITLE_PANEL_WIDTH = 70;
+const PANEL_CONTENT_HEIGHT = 8;
 
 const SHORTCUT_TIPS = [
   { label: "Enter", description: "Send the prompt" },
@@ -35,67 +32,67 @@ export function WelcomeScreen({
   settings,
   skills,
   version,
-  width
+  width,
 }: WelcomeScreenProps): React.ReactElement {
   const tips = useMemo(() => buildWelcomeTips(skills), [skills]);
   const [tipIndex] = useState(() => randomTipIndex(tips.length));
   const compact = width < TITLE_PANEL_WIDTH + 42;
   const cwd = formatHomeRelativePath(projectRoot);
   const tip = tips[Math.min(tipIndex, Math.max(0, tips.length - 1))] ?? tips[0];
-  const panelWidth = compact ? undefined : Math.min(width, 92);
+  const panelWidth = compact ? undefined : Math.min(width, 72);
 
   return (
-    <Box flexDirection="column" marginBottom={1}>
-      <Box borderStyle="round" borderColor="cyan" flexDirection="column" width={panelWidth}>
-        <Box flexDirection={compact ? "column" : "row"} paddingX={1}>
+    <Box flexDirection="column" marginY={1}>
+      <Box flexDirection="column" width={panelWidth}>
+        <Box flexDirection='column' paddingX={1}>
           <Box
             flexDirection="column"
-            height={PANEL_CONTENT_HEIGHT}
             justifyContent="center"
-            width={compact ? undefined : TITLE_PANEL_WIDTH}
+            paddingX={1}
           >
             <Box justifyContent="center" width={compact ? undefined : TITLE_PANEL_WIDTH}>
-              <Text bold color="cyanBright">
-                Deep Code
-              </Text>
-              <Text> (v{version || "unknown"})</Text>
+              <ThemedGradient>
+                ██████╗ ███████╗███████╗██████╗      ██████╗ ██████╗ ██████╗ ███████╗
+                ██╔══██╗██╔════╝██╔════╝██╔══██╗    ██╔════╝██╔═══██╗██╔══██╗██╔════╝
+                ██║  ██║█████╗  █████╗  ██████╔╝    ██║     ██║   ██║██║  ██║█████╗
+                ██║  ██║██╔══╝  ██╔══╝  ██╔═══╝     ██║     ██║   ██║██║  ██║██╔══╝
+                ██████╔╝███████╗███████╗██║         ╚██████╗╚██████╔╝██████╔╝███████╗
+                ╚═════╝ ╚══════╝╚══════╝╚═╝          ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝
+              </ThemedGradient>
             </Box>
           </Box>
 
-          {!compact ? (
-            <Box flexDirection="column" marginX={1}>
-              {Array.from({ length: PANEL_CONTENT_HEIGHT }, (_, index) => (
-                <Text key={index} color="cyan">
-                  │
-                </Text>
-              ))}
-            </Box>
-        ) : null}
-
           <Box
+            borderStyle={"round"}
+            borderColor={"#229ac3e6"}
             flexDirection="column"
             flexGrow={1}
             height={compact ? undefined : PANEL_CONTENT_HEIGHT}
             marginTop={compact ? 1 : 0}
+            paddingX={1}
           >
+            <Box flexGrow={1} marginBottom={compact ? 1 : 0}>
+              <Text color={"#229ac3e6"}>{">"}_ Deep Code </Text>
+              <Text color='gray'> (v{version || "unknown"})</Text>
+            </Box>
             {!compact ? <Text> </Text> : null}
-            <SettingRow label="model" value={settings.model} />
-            <SettingRow label="thinking enabled" value={String(settings.thinkingEnabled)} />
-            <SettingRow label="reasoning effort" value={settings.reasoningEffort} />
-            <SettingRow label="cwd" value={cwd} />
-            {!compact ? <Text> </Text> : null}
-            {!compact ? <Text> </Text> : null}
+            <SettingRow label="Model" value={settings.model} />
+            <SettingRow label="Thinking Enabled" value={String(settings.thinkingEnabled)} />
+            <SettingRow label="Reasoning Effort" value={settings.reasoningEffort} />
+            <SettingRow label="CWD" value={cwd} />
           </Box>
         </Box>
       </Box>
 
-      {tip ? (
-        <Box marginTop={1}>
-          <Text dimColor>
-            Tips: {tip.label} - {tip.description}
-          </Text>
-        </Box>
-      ) : null}
+      <Box flexDirection='column' width={panelWidth} paddingX={1}>
+        {tip ? (
+          <Box marginTop={1}>
+            <Text dimColor>
+              Tips: {tip.label} - {tip.description}
+            </Text>
+          </Box>
+        ) : null}
+      </Box>
     </Box>
   );
 }

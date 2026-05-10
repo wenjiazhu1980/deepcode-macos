@@ -1,6 +1,6 @@
 import React from "react";
 import { render } from "ink";
-import { App } from "./ui/App";
+import { App } from "./ui";
 import { setShellIfWindows } from "./tools/shell-utils";
 import { checkForNpmUpdate, promptForPendingUpdate, type PackageInfo } from "./updateCheck";
 import { runHeadless } from "./headless";
@@ -30,7 +30,8 @@ if (args.includes("--help") || args.includes("-h")) {
       "Configuration:",
       "  ~/.deepcode/settings.json   API key, model, base URL",
       "  ~/.agents/skills/*/SKILL.md  User-level skills",
-      "  ./.deepcode/skills/*/SKILL.md Project-level skills",
+      "  ./.agents/skills/*/SKILL.md  Project-level skills",
+      "  ./.deepcode/skills/*/SKILL.md Legacy project-level skills",
       "",
       "Inside the TUI:",
       "  enter            Send the prompt",

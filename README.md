@@ -93,7 +93,7 @@ deepcode
 
 无需切换窗口，VSCode 写代码，终端里和 AI 对话。
 
----
+![intro2](resources/intro2.png)
 
 ## 🖥️ DeepCode 原生 Mac App — 菜单栏里的 AI 编程助手
 

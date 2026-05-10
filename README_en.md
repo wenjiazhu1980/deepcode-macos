@@ -75,7 +75,7 @@ deepcode
 
 No window switching — code in VSCode, chat with AI in terminal.
 
----
+![intro2](resources/intro2.png)
 
 ## 🖥️ Native Mac App — AI Assistant in Your Menu Bar
 

@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import chalk from "chalk";
+
+const ANSI_RE = /\u001b\[[0-9;]*m/g;
+function stripAnsi(text: string): string {
+  return text.replace(ANSI_RE, "");
+}
+
 import {
   IMAGE_ATTACHMENT_CLEAR_HINT,
   addUniqueSkill,
@@ -12,7 +17,7 @@ import {
   removeCurrentSlashToken,
   toggleSkillSelection,
   renderBufferWithCursor
-} from "../ui/PromptInput";
+} from "../ui";
 import type { SkillInfo } from "../session";
 
 test("parseTerminalInput treats DEL bytes as backspace", () => {
@@ -105,34 +110,39 @@ test("renderBufferWithCursor hides the simulated cursor when unfocused", () => {
 });
 
 test("renderBufferWithCursor draws the simulated cursor when focused", () => {
-  // Use chalk.inverse directly so the test matches the implementation
-  // regardless of whether chalk detects a TTY (CI) or not.
-  const inv = (c: string) => chalk.inverse(c);
-  assert.equal(renderBufferWithCursor({ text: "", cursor: 0 }, true), inv(" "));
-  assert.equal(renderBufferWithCursor({ text: "hello", cursor: 5 }, true), "hello" + inv(" "));
-  assert.equal(renderBufferWithCursor({ text: "hello", cursor: 1 }, true), "h" + inv("e") + "llo");
-  assert.equal(renderBufferWithCursor({ text: "hello\n", cursor: 6 }, true), "hello\n" + inv(" "));
-  assert.equal(renderBufferWithCursor({ text: "\n", cursor: 1 }, true), "\n" + inv(" "));
+  assert.equal(stripAnsi(renderBufferWithCursor({ text: "", cursor: 0 }, true)), " ");
+  assert.equal(stripAnsi(renderBufferWithCursor({ text: "", cursor: 0 }, true, "Ask anything")), "  Ask anything");
+  assert.equal(stripAnsi(renderBufferWithCursor({ text: "hello", cursor: 5 }, true)), "hello ");
+  assert.equal(stripAnsi(renderBufferWithCursor({ text: "hello", cursor: 1 }, true)), "hello");
+  assert.equal(stripAnsi(renderBufferWithCursor({ text: "hello\n", cursor: 6 }, true)), "hello\n ");
+  assert.equal(stripAnsi(renderBufferWithCursor({ text: "\n", cursor: 1 }, true)), "\n ");
+});
+
+test("renderBufferWithCursor styles exactly one simulated cursor", () => {
+  assert.equal((renderBufferWithCursor({ text: "", cursor: 0 }, true).match(ANSI_RE) ?? []).length, 2);
+  assert.ok(renderBufferWithCursor({ text: "", cursor: 0 }, true, "Ask anything").includes("\u001B[7m \u001B[27m"));
+  assert.equal((renderBufferWithCursor({ text: "hello", cursor: 1 }, true).match(ANSI_RE) ?? []).length, 2);
+  assert.equal((renderBufferWithCursor({ text: "hello\nworld", cursor: 6 }, true).match(ANSI_RE) ?? []).length, 2);
 });
 
 test("getPromptCursorPlacement targets the prompt row above divider and footer", () => {
-  const placement = getPromptCursorPlacement({ text: "hello", cursor: 5 }, 80, "❯ ", "Enter send");
+  const placement = getPromptCursorPlacement({ text: "hello", cursor: 5 }, 80, 2, "Enter send");
   assert.deepEqual(placement, { rowsUp: 3, column: 7 });
 });
 
 test("getPromptCursorPlacement targets the reserved row after a trailing newline", () => {
-  const placement = getPromptCursorPlacement({ text: "hello\n", cursor: 6 }, 80, "❯ ", "Enter send");
+  const placement = getPromptCursorPlacement({ text: "hello\n", cursor: 6 }, 80, 2, "Enter send");
   assert.deepEqual(placement, { rowsUp: 3, column: 2 });
 });
 
 test("getPromptCursorPlacement accounts for CJK character width", () => {
-  const placement = getPromptCursorPlacement({ text: "你好", cursor: 2 }, 80, "❯ ", "Enter send");
+  const placement = getPromptCursorPlacement({ text: "你好", cursor: 2 }, 80, 2, "Enter send");
   assert.equal(placement.column, 6);
 });
 
 test("getPromptCursorPlacement accounts for multiline buffer rows", () => {
-  const placement = getPromptCursorPlacement({ text: "hello\nworld", cursor: 11 }, 80, "❯ ", "Enter send");
+  const placement = getPromptCursorPlacement({ text: "hello\nworld", cursor: 11 }, 80, 2, "Enter send");
   assert.deepEqual(placement, { rowsUp: 3, column: 7 });
-  const middle = getPromptCursorPlacement({ text: "hello\nworld", cursor: 2 }, 80, "❯ ", "Enter send");
+  const middle = getPromptCursorPlacement({ text: "hello\nworld", cursor: 2 }, 80, 2, "Enter send");
   assert.deepEqual(middle, { rowsUp: 4, column: 4 });
 });
