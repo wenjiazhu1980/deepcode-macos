@@ -100,6 +100,20 @@ final class ChatViewModel: ObservableObject {
 
     // MARK: - User actions
 
+    func dismissError() {
+        startupError = nil
+    }
+
+    func dismissSettingsHint() {
+        settingsHint = nil
+    }
+
+    func retryStart() async {
+        startupError = nil
+        didStart = false
+        await start()
+    }
+
     func submit() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (!text.isEmpty || !attachedImages.isEmpty), settingsHint == nil, sidecar.isRunning else { return }
@@ -135,6 +149,9 @@ final class ChatViewModel: ObservableObject {
             return
         }
 
+        // For MenuBarExtra apps, we need to activate the app and use async panel
+        NSApp.activate(ignoringOtherApps: true)
+
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -142,10 +159,15 @@ final class ChatViewModel: ObservableObject {
         panel.prompt = "选择项目目录"
         panel.message = "选择要切换的项目根目录"
 
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        let path = url.path
-        let id = UUID().uuidString
-        sidecar.send(.changeProjectRoot(id: id, path: path))
+        // Use begin with completion handler for MenuBarExtra compatibility
+        panel.begin { [weak self] response in
+            guard let self = self, response == .OK, let url = panel.url else { return }
+            let path = url.path
+            Task { @MainActor in
+                let id = UUID().uuidString
+                self.sidecar.send(.changeProjectRoot(id: id, path: path))
+            }
+        }
     }
 
     // MARK: - Slash commands
@@ -192,6 +214,10 @@ final class ChatViewModel: ObservableObject {
     }
 
     func loadSession(_ sessionId: String) {
+        guard sidecar.isRunning else {
+            appendSystem("Sidecar 进程未运行，无法加载会话")
+            return
+        }
         let id = UUID().uuidString
         sidecar.send(.loadSession(id: id, sessionId: sessionId))
     }
@@ -277,8 +303,10 @@ final class ChatViewModel: ObservableObject {
         case let .sessionsList(_, sessions):
             sessionList = sessions
         case let .sessionLoaded(_, _, messages):
-            // Restore message history
-            self.messages = messages.compactMap { serverMsg in
+            // Restore message history - clear first to avoid UI glitches during rapid switching
+            self.messages = []
+            isStreaming = false
+            let loadedMessages = messages.compactMap { serverMsg -> DisplayMessage? in
                 guard serverMsg.visible ?? true else { return nil }
                 let rawContent = serverMsg.content ?? ""
                 let reasoning = serverMsg.messageParams?.reasoningContent ?? ""
@@ -299,6 +327,7 @@ final class ChatViewModel: ObservableObject {
                     isTool: false, toolName: nil, toolParams: nil, toolResult: nil
                 )
             }
+            self.messages = loadedMessages
         case let .error(_, message):
             appendSystem("Error: \(message)")
         case let .done(_, status):

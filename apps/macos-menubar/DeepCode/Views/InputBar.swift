@@ -1,8 +1,13 @@
 import SwiftUI
+import AppKit
 
 struct InputBar: View {
     @ObservedObject var viewModel: ChatViewModel
     @FocusState private var focused: Bool
+
+    private var isSidecarReady: Bool {
+        viewModel.statusText.hasPrefix("ready")
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -82,6 +87,54 @@ struct InputBar: View {
                 }
             }
 
+            // Error banner with dismiss/retry
+            if let error = viewModel.startupError {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.yellow)
+                    Text(error)
+                        .font(.caption)
+                        .lineLimit(2)
+                    Spacer()
+                    Button("重试") {
+                        Task { await viewModel.retryStart() }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    Button {
+                        viewModel.dismissError()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.red.opacity(0.1))
+            }
+
+            if let hint = viewModel.settingsHint {
+                HStack {
+                    Image(systemName: "gear")
+                        .foregroundStyle(.blue)
+                    Text(hint)
+                        .font(.caption)
+                        .lineLimit(2)
+                    Spacer()
+                    Button {
+                        viewModel.dismissSettingsHint()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.blue.opacity(0.1))
+            }
+
             // Input row
             HStack(alignment: .bottom, spacing: 8) {
                 // Paste image button
@@ -99,7 +152,7 @@ struct InputBar: View {
                     .lineLimit(1...6)
                     .focused($focused)
                     .onSubmit { viewModel.submit() }
-                    .disabled(viewModel.settingsHint != nil || viewModel.startupError != nil)
+                    .disabled(!isSidecarReady)
                     .onChange(of: viewModel.inputText) { newValue in
                         if newValue.hasPrefix("/") {
                             if viewModel.slashCommands.isEmpty {
@@ -122,7 +175,7 @@ struct InputBar: View {
                     }
                     .buttonStyle(.borderless)
                     .keyboardShortcut(.return, modifiers: .command)
-                    .disabled(viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && viewModel.attachedImages.isEmpty)
+                    .disabled(viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && viewModel.attachedImages.isEmpty || !isSidecarReady)
                 }
             }
             .padding(8)
