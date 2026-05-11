@@ -21,6 +21,7 @@ final class SidecarProcess {
     private var stderrBuffer: String = ""
 
     var onStderrLine: ((String) -> Void)?
+    var onProcessTerminated: ((Int32) -> Void)?
 
     init() {
         self.bridge = JSONRPCBridge(inputPipe: inputPipe, outputPipe: outputPipe)
@@ -71,12 +72,26 @@ final class SidecarProcess {
             }
         }
 
+        process.terminationHandler = { [weak self] process in
+            let status = process.terminationStatus
+            DispatchQueue.main.async {
+                self?.onProcessTerminated?(status)
+            }
+        }
         try process.run()
         self.process = process
     }
 
     func send(_ command: ClientCommand) {
         bridge.send(command)
+    }
+
+    var isRunning: Bool {
+        process?.isRunning ?? false
+    }
+
+    deinit {
+        errorPipe.fileHandleForReading.readabilityHandler = nil
     }
 
     func terminate() {

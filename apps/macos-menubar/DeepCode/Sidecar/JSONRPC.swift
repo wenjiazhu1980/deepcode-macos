@@ -22,6 +22,11 @@ final class JSONRPCBridge {
         installReader()
     }
 
+    deinit {
+        outputPipe.fileHandleForReading.readabilityHandler = nil
+        eventsContinuation.finish()
+    }
+
     private func installReader() {
         outputPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             guard let self = self else { return }

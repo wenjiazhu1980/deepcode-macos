@@ -40,6 +40,7 @@ final class ChatViewModel: ObservableObject {
     private var pendingSubmitId: String?
     private var pumpTask: Task<Void, Never>?
     private var didStart = false
+    private var isUserTerminated = false
 
     // MARK: - Lifecycle
 
@@ -71,10 +72,28 @@ final class ChatViewModel: ObservableObject {
             }
         }
 
+        sidecar.onProcessTerminated = { [weak self] status in
+            Task { @MainActor in
+                guard let self = self else { return }
+                if !self.isUserTerminated {
+                    self.startupError = "Sidecar 进程异常退出 (status: \(status))"
+                }
+                self.statusText = "terminated"
+                self.isStreaming = false
+            }
+        }
+
         pumpTask = Task { [weak self] in
             guard let self = self else { return }
             for await event in self.sidecar.bridge.events {
                 await self.handle(event)
+            }
+            // Stream finished (sidecar closed stdout or terminated)
+            await MainActor.run {
+                if self.isStreaming {
+                    self.isStreaming = false
+                    self.statusText = "sidecar disconnected"
+                }
             }
         }
     }
@@ -83,7 +102,7 @@ final class ChatViewModel: ObservableObject {
 
     func submit() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard (!text.isEmpty || !attachedImages.isEmpty), settingsHint == nil else { return }
+        guard (!text.isEmpty || !attachedImages.isEmpty), settingsHint == nil, sidecar.isRunning else { return }
         let id = UUID().uuidString
         pendingSubmitId = id
 
@@ -104,12 +123,18 @@ final class ChatViewModel: ObservableObject {
     }
 
     func interrupt() {
+        guard sidecar.isRunning else { return }
         sidecar.send(.interrupt(id: UUID().uuidString))
     }
 
     // MARK: - PWD management
 
     func selectProjectRoot() {
+        guard sidecar.isRunning else {
+            appendSystem("Sidecar 进程未运行，无法切换项目")
+            return
+        }
+
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -134,6 +159,10 @@ final class ChatViewModel: ObservableObject {
         showCommandPanel = false
         switch command.kind {
         case "new":
+            guard sidecar.isRunning else {
+                appendSystem("Sidecar 进程未运行，无法创建新会话")
+                return
+            }
             let id = UUID().uuidString
             sidecar.send(.newSession(id: id))
             messages = []
@@ -342,6 +371,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     deinit {
+        isUserTerminated = true
         pumpTask?.cancel()
         sidecar.terminate()
     }
