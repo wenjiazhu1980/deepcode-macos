@@ -36,7 +36,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
 
       - name: Install JS deps
@@ -54,7 +54,8 @@ jobs:
           SIDECAR_DIR=apps/macos-menubar/DeepCode/Resources/sidecar
           rm -rf "$SIDECAR_DIR"
           mkdir -p "$SIDECAR_DIR"
-          cp dist/cli.cjs "$SIDECAR_DIR/"
+          cp dist/cli.mjs "$SIDECAR_DIR/"
+          cp package.json "$SIDECAR_DIR/"
           # Stage prod-only node_modules for the sidecar.
           mkdir -p /tmp/sidecar-prod
           cp package.json package-lock.json /tmp/sidecar-prod/
