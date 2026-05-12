@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Static, Text, useApp, useStdout, useWindowSize } from "ink";
+import { Box, Static, Text, useApp, useStdout } from "ink";
 import chalk from "chalk";
 import * as fs from "fs";
 import * as os from "os";
@@ -26,6 +26,7 @@ import { buildLoadingText } from "./loadingText";
 import { findExpandedThinkingId } from "./thinkingState";
 import { WelcomeScreen } from "./WelcomeScreen";
 import { AskUserQuestionPrompt } from "./AskUserQuestionPrompt";
+import { useTerminalSize } from "./useTerminalSize";
 import {
   findPendingAskUserQuestion,
   formatAskUserQuestionAnswers,
@@ -44,7 +45,7 @@ type AppProps = {
 export function App({ projectRoot, version = "", onRestart }: AppProps): React.ReactElement {
   const { exit } = useApp();
   const { stdout, write } = useStdout();
-  const { columns } = useWindowSize();
+  const { columns } = useTerminalSize();
   const [view, setView] = useState<View>("chat");
   const [busy, setBusy] = useState(false);
   const [skills, setSkills] = useState<SkillInfo[]>([]);

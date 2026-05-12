@@ -1,4 +1,7 @@
 import React from "react";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { render } from "ink";
 import { App } from "./ui";
 import { setShellIfWindows } from "./tools/shell-utils";
@@ -121,8 +124,26 @@ function configureWindowsShell(): void {
 
 function readPackageInfo(): PackageInfo {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const pkg = require("../package.json") as { name?: unknown; version?: unknown };
+    const bundleDir = dirname(fileURLToPath(import.meta.url));
+    const packageJsonCandidates = [
+      resolve(bundleDir, "../package.json"),
+      resolve(bundleDir, "package.json")
+    ];
+    const packageJson = packageJsonCandidates
+      .map((candidate) => {
+        try {
+          return readFileSync(candidate, "utf8");
+        } catch {
+          return "";
+        }
+      })
+      .find((content) => content.length > 0);
+
+    if (!packageJson) {
+      return { name: "@vegamo/deepcode-cli", version: "" };
+    }
+
+    const pkg = JSON.parse(packageJson) as { name?: unknown; version?: unknown };
     return {
       name: typeof pkg.name === "string" ? pkg.name : "@vegamo/deepcode-cli",
       version: typeof pkg.version === "string" ? pkg.version : ""

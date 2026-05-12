@@ -4,7 +4,8 @@
 #
 # Output:
 #   apps/macos-menubar/DeepCode/Resources/sidecar/
-#     ├── cli.cjs
+#     ├── cli.mjs
+#     ├── package.json
 #     ├── node_modules/   (prod-only)
 #     ├── docs/tools/
 #     └── node            (uses local `which node`; CI uses universal binary)
@@ -27,7 +28,8 @@ fi
 mkdir -p "$SIDECAR"
 touch "$SIDECAR/.gitkeep"
 
-cp "$ROOT/dist/cli.cjs" "$SIDECAR/cli.cjs"
+cp "$ROOT/dist/cli.mjs" "$SIDECAR/cli.mjs"
+cp "$ROOT/package.json" "$SIDECAR/package.json"
 
 echo "[stage-sidecar] Installing prod-only node_modules…"
 WORK="$(mktemp -d)"

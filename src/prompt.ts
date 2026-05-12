@@ -397,14 +397,23 @@ function getUnameInfo(): string {
 }
 
 function getExtensionRoot(): string {
-  // Prefer `__dirname` which is always available in the CJS bundle output.
-  // Fall back to `import.meta.url` for ESM test environments (tsx --test).
+  const candidates: string[] = [];
+
   if (typeof __dirname !== "undefined") {
-    return path.resolve(__dirname, "..");
+    candidates.push(path.resolve(__dirname, ".."), __dirname);
   }
 
   const currentFilePath = fileURLToPath(import.meta.url);
-  return path.resolve(path.dirname(currentFilePath), "..");
+  const currentDir = path.dirname(currentFilePath);
+  candidates.push(path.resolve(currentDir, ".."), currentDir);
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, "docs", "tools"))) {
+      return candidate;
+    }
+  }
+
+  return candidates[0] ?? process.cwd();
 }
 
 export type ToolDefinition = {

@@ -7,7 +7,7 @@ enum SidecarError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingNodeBinary: return "Bundled Node binary not found in app Resources/sidecar/."
-        case .missingCliBundle: return "Bundled cli.cjs not found in app Resources/sidecar/."
+        case .missingCliBundle: return "Bundled cli.mjs not found in app Resources/sidecar/."
         }
     }
 }
@@ -28,14 +28,14 @@ final class SidecarProcess {
     }
 
     /// Launch the bundled Node sidecar.
-    /// Throws if the bundled `node` or `cli.cjs` is missing.
+    /// Throws if the bundled `node` or `cli.mjs` is missing.
     func launch(projectRoot: String? = nil) throws {
         guard let bundleResources = Bundle.main.resourceURL else {
             throw SidecarError.missingCliBundle
         }
         let sidecarDir = bundleResources.appendingPathComponent("sidecar", isDirectory: true)
         let nodeURL = sidecarDir.appendingPathComponent("node")
-        let cliURL = sidecarDir.appendingPathComponent("cli.cjs")
+        let cliURL = sidecarDir.appendingPathComponent("cli.mjs")
 
         guard FileManager.default.isExecutableFile(atPath: nodeURL.path) else {
             throw SidecarError.missingNodeBinary

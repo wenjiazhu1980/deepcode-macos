@@ -1,6 +1,8 @@
 import React, {useState, useMemo} from "react";
-import {Box, Text, useInput, useWindowSize} from "ink";
+import {Box, Text} from "ink";
 import type {SessionEntry} from "../session";
+import {useTerminalInput} from "./prompt";
+import {useTerminalSize} from "./useTerminalSize";
 
 type Props = {
   sessions: SessionEntry[];
@@ -10,7 +12,7 @@ type Props = {
 
 export function SessionList({sessions, onSelect, onCancel}: Props): React.ReactElement {
   const [index, setIndex] = useState(0);
-  const {columns, rows} = useWindowSize();
+  const {columns, rows} = useTerminalSize();
 
   // Dynamically calculate the number of visible sessions based on terminal height
   const maxVisibleSessions = useMemo(() => {
@@ -39,7 +41,7 @@ export function SessionList({sessions, onSelect, onCancel}: Props): React.ReactE
     return sessions.slice(scrollOffset, scrollOffset + maxVisibleSessions);
   }, [sessions, scrollOffset, maxVisibleSessions]);
 
-  useInput((input, key) => {
+  useTerminalInput((input, key) => {
     if (key.escape || (key.ctrl && (input === "c" || input === "C"))) {
       onCancel();
       return;

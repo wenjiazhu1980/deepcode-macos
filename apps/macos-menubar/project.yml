@@ -36,7 +36,7 @@ targets:
         PRODUCT_NAME: DeepCode
     postBuildScripts:
       - name: Copy sidecar bundle
-        # Embeds the staged sidecar directory (cli.cjs, node binary, node_modules,
+        # Embeds the staged sidecar directory (cli.mjs, node binary, node_modules,
         # docs/tools) into the app bundle. We avoid the standard "Copy Bundle
         # Resources" phase because folder references lose the executable bit on
         # the universal `node` binary; rsync + explicit chmod preserves it.

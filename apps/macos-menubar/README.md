@@ -18,7 +18,7 @@ You need Xcode 15+ and Node 18.17+.
 ```bash
 brew install xcodegen          # one-time
 cd apps/macos-menubar
-bash scripts/stage-sidecar.sh  # builds dist/cli.cjs and copies it into Resources/sidecar
+bash scripts/stage-sidecar.sh  # builds dist/cli.mjs and copies it into Resources/sidecar
 xcodegen generate              # regenerates DeepCode.xcodeproj from project.yml
 open DeepCode.xcodeproj
 ```
@@ -29,7 +29,7 @@ Then `Cmd+R` in Xcode. The menu bar gets a sparkles icon; click → quick chat.
 
 Push a `macos-v*` tag (e.g. `macos-v0.1.0`) to trigger `.github/workflows/release-macos.yml`. CI:
 
-1. builds `dist/cli.cjs` (Node 18.17)
+1. builds `dist/cli.mjs` (Node 18.17)
 2. stages prod-only `node_modules` and a universal Node binary (arm64+x64) into `Resources/sidecar/`
 3. `xcodegen generate` + `xcodebuild archive` (unsigned for MVP)
 4. produces a DMG and uploads it to a GitHub Release

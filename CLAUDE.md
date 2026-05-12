@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-`@vegamo/deepcode-cli` (`deepcode`) — an interactive terminal coding assistant tuned for DeepSeek V4 and other OpenAI-compatible models. Rendered as a TUI with Ink (React 17). Source is TypeScript; ships as a single bundled CommonJS executable.
+`@vegamo/deepcode-cli` (`deepcode`) — an interactive terminal coding assistant tuned for DeepSeek V4 and other OpenAI-compatible models. Rendered as a TUI with Ink (React 18). Source is TypeScript; ships as a single bundled ESM executable.
 
 ## Common Commands
 
 ```bash
 npm run typecheck            # tsc -p ./ --noEmit (no .d.ts emitted; type-check only)
-npm run bundle               # esbuild ./src/cli.tsx → dist/cli.cjs (CJS, packages external)
+npm run bundle               # esbuild ./src/cli.tsx → dist/cli.mjs (ESM, packages external)
 npm run build                # typecheck + bundle + chmod +x  (also runs on prepack)
 
 npm test                     # tsx --test src/tests/*.test.ts   (Node native test runner)
@@ -18,7 +18,7 @@ npm run test:single -- src/tests/session.test.ts   # run a single file
                                                    # filter inside a file with --test-name-pattern
 
 npm link && deepcode         # install local build globally for end-to-end testing
-node dist/cli.cjs --version  # smoke-test the bundled binary directly
+node dist/cli.mjs --version  # smoke-test the bundled binary directly
 ```
 
 Requirements: Node ≥ 18.17. The CLI refuses to start without a TTY (`process.stdin.isTTY`).
@@ -31,7 +31,7 @@ Releases are versioned `v{major}.{minor}.{patch}`. Never skip steps or combine v
 ```bash
 npm test                    # must pass 100%
 npm run typecheck           # zero errors
-npm run build               # produces dist/cli.cjs
+npm run build               # produces dist/cli.mjs
 ```
 
 ### 2. Bump version & build
@@ -93,7 +93,7 @@ The data flow is: **`cli.tsx` → Ink `<App />` → `SessionManager` → OpenAI 
 - **Telemetry**: `reportNewPrompt` POSTs an empty body to `https://deepcode.vegamo.cn/api/plugin/new` using the resolved `machineId` as a `Token` header. Failures are warn-logged only.
 
 ### Prompt + tool schema (`src/prompt.ts`)
-- `getSystemPrompt(projectRoot, options)` concatenates `SYSTEM_PROMPT_BASE` + bundled tool docs (read at runtime from `docs/tools/*.md` relative to `__dirname/..`) + `getRuntimeContext`. The runtime context block embeds `pwd`, `homedir`, `uname -a`, shell path, Python/Node versions, and presence of `ast-grep` / `ripgrep` / `jq`.
+- `getSystemPrompt(projectRoot, options)` concatenates `SYSTEM_PROMPT_BASE` + bundled tool docs (read at runtime from the first nearby `docs/tools/*.md` directory, supporting both npm `dist/` and macOS `Resources/sidecar/` layouts) + `getRuntimeContext`. The runtime context block embeds `pwd`, `homedir`, `uname -a`, shell path, Python/Node versions, and presence of `ast-grep` / `ripgrep` / `jq`.
 - `getTools(options)` returns the OpenAI function-call schema. **Tool descriptions in this file are deliberately short** — the long-form usage rules live in `docs/tools/*.md` and are injected only into the system prompt. Keep the two in sync when changing a tool's contract.
 - The `docs/tools/**` directory ships with the npm package (see `package.json` `files`); do not delete it during refactors.
 
@@ -118,9 +118,9 @@ Each `SKILL.md` is parsed with `gray-matter`; the `name` and `description` front
 
 ## Conventions and Gotchas
 
-- **JSX runtime**: `tsconfig.json` uses `"jsx": "react-jsx"` and esbuild uses `--jsx=automatic --jsx-import-source=react`. React 17 is pinned — do not rely on React 18 features (no `useTransition`, no `<Suspense>` for data, no concurrent features).
-- **Bundle externals**: esbuild uses `--packages=external`. The published artifact is `dist/cli.cjs` and depends on `node_modules/` shipped via `npm install -g`. Anything you add to `dependencies` is fine; if you switch to a bundled dependency, add it manually because there's no automatic externals list.
-- **No top-level await** in code that ends up in `cli.tsx` — the bundle target is CJS and `node18` strict mode.
+- **JSX runtime**: `tsconfig.json` uses `"jsx": "react-jsx"` and esbuild uses `--jsx=automatic --jsx-import-source=react`. React 18 is pinned for Ink 5 compatibility; avoid React 19-only APIs unless the Node/runtime floor is deliberately raised.
+- **Bundle externals**: esbuild uses `--packages=external`. The published artifact is `dist/cli.mjs` and depends on `node_modules/` shipped via `npm install -g` or staged into the macOS sidecar. ESM-only dependencies require this artifact to stay ESM.
+- **Node target**: the bundle target is `node18`; keep top-level code compatible with Node 18.17+.
 - **Tests use Node's native runner**, not Jest/Vitest. Imports look like `import { test } from "node:test"; import assert from "node:assert/strict";`. Tests run through `tsx`, so they can import `.ts`/`.tsx` directly. Keep tests free of test-runner-specific globals.
 - **Session JSONL is append-only except via `saveSessionMessages`**, which rewrites the whole file. Use `appendSessionMessage` for incremental writes; only call `saveSessionMessages` when you must rewrite (e.g. compaction, `closePendingToolCalls`).
 - **Tool result envelope is contract-stable**: the model has been prompted to expect `{ok, name, output, error, metadata}`. Don't add new top-level fields without also updating the system prompt.
