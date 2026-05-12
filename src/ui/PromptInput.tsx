@@ -35,7 +35,7 @@ export type { InputKey } from "./prompt";
 
 import { useTerminalInput, parseTerminalInput } from "./prompt";
 import type { InputKey } from "./prompt";
-import { useHiddenTerminalCursor, useTerminalFocusReporting } from "./prompt";
+import { useTerminalCursor, getPromptCursorPlacement } from "./prompt";
 import SlashCommandMenu from "./SlashCommandMenu";
 
 export type PromptSubmission = {
@@ -58,6 +58,8 @@ type Props = {
 };
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+// Width of the prompt prefix: "> " (idle) or "⠋ " (busy) — always 2 terminal columns.
+const PROMPT_PREFIX_WIDTH = 2;
 
 const PromptPrefixLine = React.memo(function PromptPrefixLine({ busy }: { busy: boolean }): React.ReactElement {
   const [spinnerIndex, setSpinnerIndex] = useState(0);
@@ -100,7 +102,6 @@ export const PromptInput = React.memo(function PromptInput({
   const [skillsDropdownIndex, setSkillsDropdownIndex] = useState(0);
   const [historyCursor, setHistoryCursor] = useState(-1);
   const [draftBeforeHistory, setDraftBeforeHistory] = useState<string | null>(null);
-  const [hasTerminalFocus, setHasTerminalFocus] = useState(true);
   const lastCtrlDAt = React.useRef<number>(0);
 
   const slashItems = React.useMemo(() => buildSlashCommands(skills), [skills]);
@@ -115,8 +116,16 @@ export const PromptInput = React.memo(function PromptInput({
         ? loadingText
         : "esc to interrupt · ctrl+c to cancel input"
       : "enter send · shift+enter newline · ctrl+v image · / commands · ctrl+d exit";
-  useTerminalFocusReporting(stdout, !disabled);
-  useHiddenTerminalCursor(stdout, !disabled);
+  
+  // Use unified terminal cursor management
+  const cursorPlacement = React.useMemo(() => {
+    if (!showMenu && !showSkillsDropdown) {
+      return getPromptCursorPlacement(buffer, screenWidth, PROMPT_PREFIX_WIDTH, footerText);
+    }
+    return null;
+  }, [buffer, screenWidth, footerText, showMenu, showSkillsDropdown]);
+  
+  const { hasFocus, handleFocusEvent } = useTerminalCursor(stdout, !disabled, cursorPlacement);
 
   useEffect(() => {
     if (!showMenu) {
@@ -148,12 +157,13 @@ export const PromptInput = React.memo(function PromptInput({
   }, [promptHistoryKey]);
 
   useTerminalInput((input, key) => {
+    // Handle focus events
     if (key.focusIn) {
-      setHasTerminalFocus(true);
+      handleFocusEvent(true);
       return;
     }
     if (key.focusOut) {
-      setHasTerminalFocus(false);
+      handleFocusEvent(false);
       return;
     }
 
@@ -566,7 +576,7 @@ export const PromptInput = React.memo(function PromptInput({
            borderRight={false}
            borderDimColor>
         <PromptPrefixLine busy={busy} />
-        <Text>{renderBufferWithCursor(buffer, !disabled && hasTerminalFocus, placeholder)}</Text>
+        <Text>{renderBufferWithCursor(buffer, !disabled && hasFocus, placeholder)}</Text>
       </Box>
       {showSkillsDropdown ? (
         <Box flexDirection="column" marginBottom={1}>
