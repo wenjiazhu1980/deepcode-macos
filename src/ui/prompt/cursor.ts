@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useEffect, useRef, useState, useCallback } from "react";
 import type { PromptBufferState } from "../promptBuffer";
 
 type CursorPlacement = {
@@ -124,16 +124,109 @@ function characterWidth(char: string): number {
   return 1;
 }
 
-export function usePromptTerminalCursor(
+export function useHiddenTerminalCursor(stdout: NodeJS.WriteStream | undefined, isActive: boolean): void {
+  useLayoutEffect(() => {
+    if (!isActive || !stdout?.isTTY) {
+      return;
+    }
+
+    stdout.write(hideCursor());
+    return () => {
+      stdout.write(showCursor());
+    };
+  }, [isActive, stdout]);
+}
+
+export function useTerminalFocusReporting(
   stdout: NodeJS.WriteStream | undefined,
-  placement: CursorPlacement,
   isActive: boolean
 ): void {
+  useLayoutEffect(() => {
+    if (!isActive || !stdout?.isTTY) {
+      return;
+    }
+
+    stdout.write(enableTerminalFocusReporting());
+    
+    return () => {
+      stdout.write(disableTerminalFocusReporting());
+    };
+  }, [isActive, stdout]);
+}
+
+/**
+ * Hook to manage focus state with timeout handling.
+ * Returns focus state and a handler function to be called by useTerminalInput.
+ */
+export function useFocusState(): { 
+  hasFocus: boolean; 
+  handleFocusEvent: (focused: boolean) => void;
+  resetFocus: () => void;
+} {
+  const [hasFocus, setHasFocus] = useState(true);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleFocusEvent = useCallback((focused: boolean) => {
+    setHasFocus(focused);
+    
+    // Reset timeout when focus changes
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    
+    // If we received a focusOut event, set a timeout to auto-reset focus
+    // This handles cases where focusIn event might be missed
+    if (!focused) {
+      timeoutRef.current = setTimeout(() => {
+        // Auto-reset focus after timeout to prevent permanent focus loss
+        setHasFocus(true);
+        timeoutRef.current = null;
+      }, 2000);
+    }
+  }, []);
+
+  const resetFocus = useCallback(() => {
+    setHasFocus(true);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, []);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  return { hasFocus, handleFocusEvent, resetFocus };
+}
+
+/**
+ * Unified terminal cursor management hook that combines focus reporting,
+ * cursor visibility, and cursor positioning to prevent race conditions.
+ */
+export function useTerminalCursor(
+  stdout: NodeJS.WriteStream | undefined,
+  isActive: boolean,
+  placement?: CursorPlacement | null
+): { hasFocus: boolean; handleFocusEvent: (focused: boolean) => void; resetFocus: () => void } {
+  // Enable terminal focus reporting
+  useTerminalFocusReporting(stdout, isActive);
+  
+  // Manage focus state
+  const { hasFocus, handleFocusEvent, resetFocus } = useFocusState();
+  
   const directWriteRef = useRef<((data: string) => void) | null>(null);
   const activePlacementRef = useRef<CursorPlacement | null>(null);
   const lastPlacementRef = useRef<CursorPlacement | null>(null);
   const unmountingRef = useRef(false);
 
+  // Setup direct write function and patch stdout.write
   useLayoutEffect(() => {
     if (!stdout?.isTTY) {
       return;
@@ -144,6 +237,7 @@ export function usePromptTerminalCursor(
     const directWrite = (data: string) => {
       originalWrite.call(stdout, data);
     };
+    
     const restorePromptCursor = () => {
       if (unmountingRef.current) {
         return;
@@ -168,6 +262,7 @@ export function usePromptTerminalCursor(
         }
       });
     };
+    
     const patchedWrite: WriteFn = (...args) => {
       restorePromptCursor();
       return originalWrite.apply(stdout, args);
@@ -183,6 +278,7 @@ export function usePromptTerminalCursor(
     };
   }, [stdout]);
 
+  // Manage cursor visibility and positioning
   useLayoutEffect(() => {
     if (!isActive || !stdout?.isTTY) {
       return;
@@ -194,9 +290,16 @@ export function usePromptTerminalCursor(
       return;
     }
 
-    directWrite(showCursor() + cursorUp(placement.rowsUp) + "\r" + cursorForward(placement.column));
-    activePlacementRef.current = placement;
-    lastPlacementRef.current = placement;
+    if (placement) {
+      // Show cursor at specific position
+      directWrite(showCursor() + cursorUp(placement.rowsUp) + "\r" + cursorForward(placement.column));
+      activePlacementRef.current = placement;
+      lastPlacementRef.current = placement;
+    } else {
+      // Hide cursor when no placement provided
+      directWrite(hideCursor());
+      activePlacementRef.current = null;
+    }
 
     return () => {
       unmountingRef.current = true;
@@ -208,31 +311,7 @@ export function usePromptTerminalCursor(
       directWrite("\r" + cursorDown(activePlacement.rowsUp) + hideCursor());
       activePlacementRef.current = null;
     };
-  }, [isActive, placement.column, placement.rowsUp, stdout]);
-}
+  }, [isActive, placement?.column, placement?.rowsUp, stdout]);
 
-export function useHiddenTerminalCursor(stdout: NodeJS.WriteStream | undefined, isActive: boolean): void {
-  useLayoutEffect(() => {
-    if (!isActive || !stdout?.isTTY) {
-      return;
-    }
-
-    stdout.write(hideCursor());
-    return () => {
-      stdout.write(showCursor());
-    };
-  }, [isActive, stdout]);
-}
-
-export function useTerminalFocusReporting(stdout: NodeJS.WriteStream | undefined, isActive: boolean): void {
-  useLayoutEffect(() => {
-    if (!isActive || !stdout?.isTTY) {
-      return;
-    }
-
-    stdout.write(enableTerminalFocusReporting());
-    return () => {
-      stdout.write(disableTerminalFocusReporting());
-    };
-  }, [isActive, stdout]);
+  return { hasFocus, handleFocusEvent, resetFocus };
 }
