@@ -5,6 +5,9 @@ import * as os from "os";
 import * as path from "path";
 import { readClipboardImage } from "../ui/clipboard";
 
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+type ClipboardModule = typeof import("../ui/clipboard");
+
 const ORIGINAL_PATH = process.env.PATH;
 const ORIGINAL_PLATFORM = process.platform;
 
@@ -29,7 +32,7 @@ function withPlatform<T>(platform: NodeJS.Platform, fn: () => T): T {
 test("readClipboardImage returns null when no clipboard helpers are installed", async () => {
   // Reload module so it picks up the patched PATH at spawn time.
   const moduleUrl = new URL(`../ui/clipboard.ts?t=${Date.now()}`, import.meta.url).href;
-  const { readClipboardImage } = await import(moduleUrl) as typeof import("../ui/clipboard");
+  const { readClipboardImage } = (await import(moduleUrl)) as ClipboardModule;
   const result = withCleanPath(() => readClipboardImage());
   assert.equal(result, null);
 });
@@ -38,21 +41,15 @@ test("readClipboardImage uses osascript PNGf fallback on macOS when pngpaste is 
   const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "deepcode-clipboard-test-bin-"));
   try {
     // pngpaste fails
-    fs.writeFileSync(
-      path.join(binDir, "pngpaste"),
-      "#!/bin/sh\nexit 1\n",
-      { mode: 0o755 }
-    );
+    fs.writeFileSync(path.join(binDir, "pngpaste"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
     // osascript outputs hex-encoded PNG data
     const fakePngHex = Buffer.from("fakepng").toString("hex").toUpperCase();
-    fs.writeFileSync(
-      path.join(binDir, "osascript"),
-      `#!/bin/sh\nprintf '\u00ABdata PNGf${fakePngHex}\u00BB'\n`,
-      { mode: 0o755 }
-    );
+    fs.writeFileSync(path.join(binDir, "osascript"), `#!/bin/sh\nprintf '\u00ABdata PNGf${fakePngHex}\u00BB'\n`, {
+      mode: 0o755,
+    });
 
     const moduleUrl = new URL(`../ui/clipboard.ts?t=${Date.now()}`, import.meta.url).href;
-    const { readClipboardImage } = await import(moduleUrl) as typeof import("../ui/clipboard");
+    const { readClipboardImage } = (await import(moduleUrl)) as ClipboardModule;
 
     process.env.PATH = binDir;
     const result = withPlatform("darwin", () => readClipboardImage());
@@ -93,7 +90,7 @@ test("readClipboardImage falls back to TIFF and converts via sips when PNG is ab
         "  printf '\u00ABdata PNGf${fakePngHex}\u00BB'",
         "fi",
         "exit 0",
-        ""
+        "",
       ].join("\n"),
       { mode: 0o755 }
     );

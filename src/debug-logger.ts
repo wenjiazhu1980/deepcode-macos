@@ -56,12 +56,12 @@ export function normalizeDebugError(error: unknown): { name: string; message: st
     return {
       name: error.name,
       message: error.message,
-      stack: error.stack
+      stack: error.stack,
     };
   }
   return {
     name: "UnknownError",
-    message: String(error)
+    message: String(error),
   };
 }
 

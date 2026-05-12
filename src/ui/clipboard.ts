@@ -14,7 +14,7 @@ const IMAGE_MIME_BY_EXT = new Map([
   [".jpg", "image/jpeg"],
   [".jpeg", "image/jpeg"],
   [".gif", "image/gif"],
-  [".webp", "image/webp"]
+  [".webp", "image/webp"],
 ]);
 
 function bufferToDataUrl(buffer: Buffer, mimeType: string): string {
@@ -138,7 +138,7 @@ function convertTiffToPng(tiffBuffer: Buffer): Buffer | null {
       execSync(`sips -s format png "${tiffPath}" --out "${pngPath}"`, {
         encoding: "buffer",
         stdio: "pipe",
-        timeout: 10000
+        timeout: 10000,
       });
     } catch {
       return null;

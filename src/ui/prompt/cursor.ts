@@ -50,16 +50,19 @@ export function getPromptCursorPlacement(
   const cursor = Math.max(0, Math.min(state.cursor, state.text.length));
   const beforeCursor = state.text.slice(0, cursor);
   const at = state.text[cursor];
-  const displayText = beforeCursor + (typeof at === "undefined" || at === "\n" ? " " : at) +
-    (at === "\n" ? "\n" : "") + (typeof at === "undefined" ? "" : state.text.slice(cursor + 1));
+  const displayText =
+    beforeCursor +
+    (typeof at === "undefined" || at === "\n" ? " " : at) +
+    (at === "\n" ? "\n" : "") +
+    (typeof at === "undefined" ? "" : state.text.slice(cursor + 1));
 
   const cursorPosition = measureTextPosition(beforeCursor, width, prefixWidth);
   const promptRows = measureTextRows(displayText, width, prefixWidth);
   const footerRows = 1 + measureTextRows(footerText, width, 0);
 
   return {
-    rowsUp: (promptRows - 1 - cursorPosition.row) + footerRows + 1,
-    column: cursorPosition.column
+    rowsUp: promptRows - 1 - cursorPosition.row + footerRows + 1,
+    column: cursorPosition.column,
   };
 }
 
@@ -137,17 +140,14 @@ export function useHiddenTerminalCursor(stdout: NodeJS.WriteStream | undefined, 
   }, [isActive, stdout]);
 }
 
-export function useTerminalFocusReporting(
-  stdout: NodeJS.WriteStream | undefined,
-  isActive: boolean
-): void {
+export function useTerminalFocusReporting(stdout: NodeJS.WriteStream | undefined, isActive: boolean): void {
   useLayoutEffect(() => {
     if (!isActive || !stdout?.isTTY) {
       return;
     }
 
     stdout.write(enableTerminalFocusReporting());
-    
+
     return () => {
       stdout.write(disableTerminalFocusReporting());
     };
@@ -160,9 +160,7 @@ export function useTerminalFocusReporting(
  * re-requests focus reporting from the terminal instead of blindly
  * assuming focus was regained.
  */
-export function useFocusState(
-  stdout: NodeJS.WriteStream | undefined
-): {
+export function useFocusState(stdout: NodeJS.WriteStream | undefined): {
   hasFocus: boolean;
   handleFocusEvent: (focused: boolean) => void;
   resetFocus: () => void;
@@ -228,10 +226,10 @@ export function useTerminalCursor(
 ): { hasFocus: boolean; handleFocusEvent: (focused: boolean) => void; resetFocus: () => void } {
   // Enable terminal focus reporting
   useTerminalFocusReporting(stdout, isActive);
-  
+
   // Manage focus state
   const { hasFocus, handleFocusEvent, resetFocus } = useFocusState(stdout);
-  
+
   const directWriteRef = useRef<((data: string) => void) | null>(null);
   const activePlacementRef = useRef<CursorPlacement | null>(null);
   const lastPlacementRef = useRef<CursorPlacement | null>(null);
@@ -248,7 +246,7 @@ export function useTerminalCursor(
     const directWrite = (data: string) => {
       originalWrite.call(stdout, data);
     };
-    
+
     const restorePromptCursor = () => {
       if (unmountingRef.current) {
         return;
@@ -273,7 +271,7 @@ export function useTerminalCursor(
         }
       });
     };
-    
+
     const patchedWrite: WriteFn = (...args) => {
       restorePromptCursor();
       return originalWrite.apply(stdout, args);

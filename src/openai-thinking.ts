@@ -19,6 +19,6 @@ export function buildThinkingRequestOptions(
 
   return {
     thinking,
-    ...(thinkingEnabled ? { extra_body: { reasoning_effort: reasoningEffort } } : {})
+    ...(thinkingEnabled ? { extra_body: { reasoning_effort: reasoningEffort } } : {}),
   };
 }

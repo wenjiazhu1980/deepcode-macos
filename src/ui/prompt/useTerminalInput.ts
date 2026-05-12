@@ -76,7 +76,7 @@ export function parseTerminalInput(data: Buffer | string): { input: string; key:
     delete: FORWARD_DELETE_SEQUENCES.has(raw),
     meta: META_LEFT_SEQUENCES.has(raw) || META_RIGHT_SEQUENCES.has(raw) || META_RETURN_SEQUENCES.has(raw),
     focusIn: raw === TERMINAL_FOCUS_IN,
-    focusOut: raw === TERMINAL_FOCUS_OUT
+    focusOut: raw === TERMINAL_FOCUS_OUT,
   };
 
   if (input <= "\u001A" && !key.return) {

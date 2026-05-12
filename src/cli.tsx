@@ -47,9 +47,10 @@ if (args.includes("--help") || args.includes("-h")) {
       "  esc              Interrupt the current model turn",
       "  /                Open the skills/commands menu",
       "  /new             Start a fresh conversation",
+      "  /init            Initialize an AGENTS.md file with instructions for LLM",
       "  /resume          Pick a previous conversation to continue",
       "  /exit            Quit",
-      "  ctrl+d twice     Quit"
+      "  ctrl+d twice     Quit",
     ].join("\n") + "\n"
   );
   process.exit(0);
@@ -83,11 +84,7 @@ async function main(): Promise<void> {
 
   function startApp(): void {
     const inkInstance = render(
-      <App
-        projectRoot={process.cwd()}
-        version={packageInfo.version}
-        onRestart={() => restartRef.current?.()}
-      />,
+      <App projectRoot={process.cwd()} version={packageInfo.version} onRestart={() => restartRef.current?.()} />,
       { exitOnCtrlC: false }
     );
 
@@ -125,10 +122,7 @@ function configureWindowsShell(): void {
 function readPackageInfo(): PackageInfo {
   try {
     const bundleDir = dirname(fileURLToPath(import.meta.url));
-    const packageJsonCandidates = [
-      resolve(bundleDir, "../package.json"),
-      resolve(bundleDir, "package.json")
-    ];
+    const packageJsonCandidates = [resolve(bundleDir, "../package.json"), resolve(bundleDir, "package.json")];
     const packageJson = packageJsonCandidates
       .map((candidate) => {
         try {
@@ -146,7 +140,7 @@ function readPackageInfo(): PackageInfo {
     const pkg = JSON.parse(packageJson) as { name?: unknown; version?: unknown };
     return {
       name: typeof pkg.name === "string" ? pkg.name : "@vegamo/deepcode-cli",
-      version: typeof pkg.version === "string" ? pkg.version : ""
+      version: typeof pkg.version === "string" ? pkg.version : "",
     };
   } catch {
     return { name: "@vegamo/deepcode-cli", version: "" };
