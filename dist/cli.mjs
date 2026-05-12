@@ -1,122 +1,31 @@
 #!/usr/bin/env node
-"use strict";
-var __create = Object.create;
-var __defProp = Object.defineProperty;
-var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-var __getOwnPropNames = Object.getOwnPropertyNames;
-var __getProtoOf = Object.getPrototypeOf;
-var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __commonJS = (cb, mod) => function __require() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-};
-var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
-    for (let key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-  }
-  return to;
-};
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-  // If the importer is in node compatibility mode or this is not an ESM
-  // file that has been converted to a CommonJS file using a Babel-
-  // compatible transform (i.e. "__esModule" has not been set), then set
-  // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
-  mod
-));
-
-// package.json
-var require_package = __commonJS({
-  "package.json"(exports2, module2) {
-    module2.exports = {
-      name: "@vegamo/deepcode-cli",
-      version: "0.2.3",
-      description: "DeepCode CLI - AI coding assistant for DeepSeek in terminal. Web search, bug fixing, agent skills. Open-source alternative to Claude Code.",
-      license: "MIT",
-      type: "module",
-      repository: {
-        type: "git",
-        url: "https://github.com/lessweb/deepcode-cli.git"
-      },
-      keywords: [
-        "ai",
-        "cli",
-        "coding-assistant",
-        "deepseek",
-        "terminal",
-        "ai-programming",
-        "developer-tools",
-        "code-generation",
-        "vibe-coding",
-        "openai-compatible",
-        "agent-skills",
-        "bug-fixing",
-        "web-search",
-        "typescript",
-        "nodejs"
-      ],
-      homepage: "https://deepcode.vegamo.cn",
-      bin: {
-        deepcode: "./dist/cli.cjs"
-      },
-      main: "./dist/cli.cjs",
-      files: [
-        "dist/cli.cjs",
-        "docs/tools/**",
-        "README.md",
-        "LICENSE"
-      ],
-      engines: {
-        node: ">=18.20.0"
-      },
-      scripts: {
-        typecheck: "tsc -p ./ --noEmit",
-        bundle: "esbuild ./src/cli.tsx --bundle --platform=node --format=cjs --target=node18 --outfile=dist/cli.cjs --banner:js='#!/usr/bin/env node' --jsx=automatic --jsx-import-source=react --packages=external --log-override:empty-import-meta=silent",
-        build: "npm run typecheck && npm run bundle && chmod +x dist/cli.cjs",
-        test: "tsx --test src/tests/*.test.ts",
-        "test:single": "tsx --test",
-        prepack: "npm run build"
-      },
-      dependencies: {
-        chalk: "^5.6.2",
-        "gradient-string": "^3.0.0",
-        "gray-matter": "^4.0.3",
-        ignore: "^7.0.5",
-        ink: "^7.0.1",
-        "ink-gradient": "^4.0.0",
-        openai: "^6.35.0",
-        react: "^19.2.5",
-        zod: "^4.4.3"
-      },
-      devDependencies: {
-        "@types/node": "^25.6.0",
-        "@types/react": "^19.2.14",
-        esbuild: "^0.28.0",
-        tsx: "^4.21.0",
-        typescript: "^6.0.3"
-      }
-    };
-  }
-});
 
 // src/cli.tsx
-var import_ink12 = require("ink");
+import { readFileSync as readFileSync10 } from "node:fs";
+import { dirname as dirname9, resolve as resolve5 } from "node:path";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
+import { render as render2 } from "ink";
 
 // src/ui/App.tsx
-var import_react8 = require("react");
-var import_ink9 = require("ink");
-var import_chalk4 = __toESM(require("chalk"), 1);
+import { useCallback as useCallback2, useEffect as useEffect6, useMemo as useMemo4, useRef as useRef3, useState as useState7 } from "react";
+import { Box as Box7, Static, Text as Text8, useApp as useApp2, useStdout as useStdout3 } from "ink";
+import chalk4 from "chalk";
+import * as fs12 from "fs";
+import * as os9 from "os";
+import * as path12 from "path";
+import OpenAI2 from "openai";
 
 // src/session.ts
-var fs9 = __toESM(require("fs"), 1);
-var path8 = __toESM(require("path"), 1);
-var os5 = __toESM(require("os"), 1);
-var crypto = __toESM(require("crypto"), 1);
-var import_gray_matter = __toESM(require("gray-matter"), 1);
+import * as fs9 from "fs";
+import * as path8 from "path";
+import * as os5 from "os";
+import * as crypto from "crypto";
+import { fileURLToPath as fileURLToPath2 } from "url";
+import matter from "gray-matter";
+import ejs from "ejs";
 
 // src/notify.ts
-var import_child_process = require("child_process");
+import { spawn } from "child_process";
 function formatDurationSeconds(durationMs) {
   const safeMs = Number.isFinite(durationMs) ? Math.max(0, durationMs) : 0;
   return String(Math.floor(safeMs / 1e3));
@@ -127,7 +36,7 @@ function buildNotifyEnv(durationMs, baseEnv = process.env) {
     DURATION: formatDurationSeconds(durationMs)
   };
 }
-function launchNotifyScript(notifyPath, durationMs, workingDirectory, spawnProcess = import_child_process.spawn) {
+function launchNotifyScript(notifyPath, durationMs, workingDirectory, spawnProcess = spawn) {
   const commandPath = notifyPath?.trim();
   if (!commandPath) {
     return;
@@ -175,22 +84,19 @@ function defaultsToThinkingMode(model) {
 }
 
 // src/prompt.ts
-var import_child_process3 = require("child_process");
-var fs2 = __toESM(require("fs"), 1);
-var os2 = __toESM(require("os"), 1);
-var path2 = __toESM(require("path"), 1);
-var import_url = require("url");
+import { execFileSync as execFileSync2, execSync } from "child_process";
+import * as fs2 from "fs";
+import * as os2 from "os";
+import * as path2 from "path";
+import { fileURLToPath } from "url";
 
 // src/tools/shell-utils.ts
-var import_child_process2 = require("child_process");
-var fs = __toESM(require("fs"), 1);
-var os = __toESM(require("os"), 1);
-var path = __toESM(require("path"), 1);
-var pathWin32 = __toESM(require("path/win32"), 1);
-var WINDOWS_GIT_LOCATIONS = [
-  "C:\\Program Files\\Git\\cmd\\git.exe",
-  "C:\\Program Files (x86)\\Git\\cmd\\git.exe"
-];
+import { execFileSync } from "child_process";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import * as pathWin32 from "path/win32";
+var WINDOWS_GIT_LOCATIONS = ["C:\\Program Files\\Git\\cmd\\git.exe", "C:\\Program Files (x86)\\Git\\cmd\\git.exe"];
 var NUL_REDIRECT_REGEX = /(\d?&?>+\s*)[Nn][Uu][Ll](?=\s|$|[|&;)\n])/g;
 var cachedGitBashPath = null;
 function setShellIfWindows() {
@@ -211,7 +117,7 @@ function findGitBashPath() {
     }
   }
   throw new Error(
-    "Deep Code on Windows requires Git Bash. Install Git for Windows and ensure git.exe is available in PATH."
+    "Deep Code on Windows requires Git Bash. Install Git Bash for Windows and ensure bash.exe is available in PATH."
   );
 }
 function resolveShellPath() {
@@ -237,15 +143,9 @@ function getShellKind(shellPath) {
 function buildShellInitCommand(shellPath) {
   switch (getShellKind(shellPath)) {
     case "zsh":
-      return [
-        'ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"',
-        'if [ -f "$ZSHRC" ]; then . "$ZSHRC"; fi'
-      ].join("; ");
+      return ['ZSHRC="${ZDOTDIR:-$HOME}/.zshrc"', 'if [ -f "$ZSHRC" ]; then . "$ZSHRC"; fi'].join("; ");
     case "bash":
-      return [
-        'BASHRC="${BASH_ENV:-$HOME/.bashrc}"',
-        'if [ -f "$BASHRC" ]; then . "$BASHRC"; fi'
-      ].join("; ");
+      return ['BASHRC="${BASH_ENV:-$HOME/.bashrc}"', 'if [ -f "$BASHRC" ]; then . "$BASHRC"; fi'].join("; ");
     default:
       return null;
   }
@@ -314,7 +214,7 @@ function buildShellEnv(shellPath) {
 function findAllWindowsExecutableCandidates(executable) {
   const extraCandidates = executable === "git" ? WINDOWS_GIT_LOCATIONS : [];
   try {
-    const output = (0, import_child_process2.execFileSync)("where.exe", [executable], {
+    const output = execFileSync("where.exe", [executable], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
       windowsHide: true
@@ -346,7 +246,6 @@ function filterWindowsExecutableCandidates(candidates) {
 }
 
 // src/prompt.ts
-var import_meta = {};
 var AGENT_DRIFT_GUARD_SKILL = `
 ---
 name: agent-drift-guard
@@ -585,7 +484,7 @@ Here's an example of how your output should be structured:
 var SYSTEM_PROMPT_BASE = `You are an interactive CLI tool that helps users with software engineering tasks. Use the instructions below and the tools available to you to assist the user.
 
 IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.`;
-function readToolDocs(extensionRoot, options = {}) {
+function readToolDocs(extensionRoot, _options = {}) {
   const toolsDir = path2.join(extensionRoot, "docs", "tools");
   if (!fs2.existsSync(toolsDir)) {
     return "";
@@ -646,8 +545,8 @@ function getRuntimeContext(projectRoot) {
     ...runtimeVersions,
     "command installed": {
       "ast-grep": checkToolInstalled("ast-grep"),
-      "ripgrep": checkToolInstalled("rg"),
-      "jq": checkToolInstalled("jq")
+      ripgrep: checkToolInstalled("rg"),
+      jq: checkToolInstalled("jq")
     }
   };
   return `# Local Workspace Environment
@@ -660,14 +559,14 @@ function checkToolInstalled(tool) {
   try {
     if (process.platform === "win32") {
       const bashPath = findGitBashPath();
-      (0, import_child_process3.execFileSync)(bashPath, ["-lc", `command -v ${shellSingleQuote(tool)}`], {
+      execFileSync2(bashPath, ["-lc", `command -v ${shellSingleQuote(tool)}`], {
         encoding: "utf8",
         stdio: "ignore",
         windowsHide: true
       });
       return true;
     }
-    (0, import_child_process3.execSync)(`command -v ${tool}`, { encoding: "utf8", stdio: "ignore" });
+    execSync(`command -v ${tool}`, { encoding: "utf8", stdio: "ignore" });
     return true;
   } catch {
     return false;
@@ -699,12 +598,12 @@ function getCommandVersion(command, args2) {
   try {
     const commandText = [command, ...args2].map(shellSingleQuote).join(" ");
     if (process.platform === "win32") {
-      return (0, import_child_process3.execFileSync)(findGitBashPath(), ["-lc", `${commandText} 2>&1`], {
+      return execFileSync2(findGitBashPath(), ["-lc", `${commandText} 2>&1`], {
         encoding: "utf8",
         windowsHide: true
       }).trim();
     }
-    return (0, import_child_process3.execSync)(`${commandText} 2>&1`, { encoding: "utf8" }).trim();
+    return execSync(`${commandText} 2>&1`, { encoding: "utf8" }).trim();
   } catch {
     return null;
   }
@@ -712,24 +611,32 @@ function getCommandVersion(command, args2) {
 function getUnameInfo() {
   try {
     if (process.platform === "win32") {
-      return (0, import_child_process3.execFileSync)(findGitBashPath(), ["-lc", "uname -a"], {
+      return execFileSync2(findGitBashPath(), ["-lc", "uname -a"], {
         encoding: "utf8",
         windowsHide: true
       }).trim();
     }
-    return (0, import_child_process3.execSync)("uname -a", { encoding: "utf8" }).trim();
+    return execSync("uname -a", { encoding: "utf8" }).trim();
   } catch {
     return `${os2.type()} ${os2.release()} ${os2.arch()}`;
   }
 }
 function getExtensionRoot() {
+  const candidates = [];
   if (typeof __dirname !== "undefined") {
-    return path2.resolve(__dirname, "..");
+    candidates.push(path2.resolve(__dirname, ".."), __dirname);
   }
-  const currentFilePath = (0, import_url.fileURLToPath)(import_meta.url);
-  return path2.resolve(path2.dirname(currentFilePath), "..");
+  const currentFilePath = fileURLToPath(import.meta.url);
+  const currentDir = path2.dirname(currentFilePath);
+  candidates.push(path2.resolve(currentDir, ".."), currentDir);
+  for (const candidate of candidates) {
+    if (fs2.existsSync(path2.join(candidate, "docs", "tools"))) {
+      return candidate;
+    }
+  }
+  return candidates[0] ?? process.cwd();
 }
-function getTools(options = {}) {
+function getTools(_options = {}) {
   const tools = [
     {
       type: "function",
@@ -1020,7 +927,7 @@ function buildQuestionSummary(questions) {
 }
 
 // src/tools/bash-handler.ts
-var import_child_process4 = require("child_process");
+import { spawn as spawn2 } from "child_process";
 var MAX_OUTPUT_CHARS = 3e4;
 var MAX_CAPTURE_CHARS = 10 * 1024 * 1024;
 var sessionWorkingDirs = /* @__PURE__ */ new Map();
@@ -1048,11 +955,7 @@ async function handleBashTool(args2, context) {
   updateSessionCwd(context.sessionId, startCwd, result.cwd);
   if (execution.error || result.exitCode !== 0 || result.signal !== null) {
     const errorMessage = buildErrorMessage(result.exitCode, result.signal, execution.error);
-    return formatResult(
-      { ...result, ok: false },
-      "bash",
-      errorMessage
-    );
+    return formatResult({ ...result, ok: false }, "bash", errorMessage);
   }
   return formatResult(result, "bash");
 }
@@ -1086,9 +989,9 @@ function buildShellCommand(command) {
   return { shellPath, shellArgs: ["-c", wrappedCommand], marker };
 }
 async function executeShellCommand(shellPath, shellArgs, cwd, command, context) {
-  return new Promise((resolve4) => {
+  return new Promise((resolve6) => {
     const detached = process.platform !== "win32";
-    const child = (0, import_child_process4.spawn)(shellPath, shellArgs, {
+    const child = spawn2(shellPath, shellArgs, {
       cwd,
       env: buildShellEnv(shellPath),
       detached,
@@ -1115,7 +1018,7 @@ async function executeShellCommand(shellPath, shellArgs, cwd, command, context) 
       if (typeof pid === "number") {
         context.onProcessExit?.(pid);
       }
-      resolve4({
+      resolve6({
         stdout,
         stderr,
         exitCode: typeof code === "number" ? code : null,
@@ -1220,12 +1123,12 @@ function formatResult(result, name, errorMessage) {
 }
 
 // src/tools/edit-handler.ts
-var fs4 = __toESM(require("fs"), 1);
-var import_zod2 = require("zod");
+import * as fs4 from "fs";
+import { z as z2 } from "zod";
 
 // src/tools/file-utils.ts
-var fs3 = __toESM(require("fs"), 1);
-var path3 = __toESM(require("path"), 1);
+import * as fs3 from "fs";
+import * as path3 from "path";
 function normalizeContent(value) {
   return value.replace(/\r\n/g, "\n");
 }
@@ -1322,20 +1225,17 @@ function toDiffLines(content) {
 }
 
 // src/tools/runtime.ts
-var import_zod = require("zod");
+import { z } from "zod";
 function semanticBoolean(defaultValue = false) {
-  return import_zod.z.preprocess(
-    (value) => {
-      if (value === "true") {
-        return true;
-      }
-      if (value === "false") {
-        return false;
-      }
-      return value;
-    },
-    import_zod.z.boolean().default(defaultValue)
-  );
+  return z.preprocess((value) => {
+    if (value === "true") {
+      return true;
+    }
+    if (value === "false") {
+      return false;
+    }
+    return value;
+  }, z.boolean().default(defaultValue));
 }
 async function executeValidatedTool(name, schema, rawArgs, context, handler, options = {}) {
   const preprocessed = options.preprocess ? options.preprocess(rawArgs) : { ok: true, input: rawArgs };
@@ -1361,12 +1261,12 @@ function formatZodError(error) {
   if (!issue) {
     return "Invalid tool input.";
   }
-  const path13 = issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
-  return `${path13}${issue.message}`;
+  const path14 = issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
+  return `${path14}${issue.message}`;
 }
 
 // src/tools/state.ts
-var path4 = __toESM(require("path"), 1);
+import * as path4 from "path";
 var fileStatesBySession = /* @__PURE__ */ new Map();
 var snippetsBySession = /* @__PURE__ */ new Map();
 var snippetCountersBySession = /* @__PURE__ */ new Map();
@@ -1468,13 +1368,13 @@ var MAX_CANDIDATE_COUNT = 5;
 var REPLACE_ALL_MATCH_THRESHOLD = 5;
 var SHORT_REPLACE_ALL_LENGTH = 40;
 var MIN_FUZZY_SCORE = 0.45;
-var editSchema = import_zod2.z.strictObject({
-  file_path: import_zod2.z.string().optional(),
-  snippet_id: import_zod2.z.string().optional(),
-  old_string: import_zod2.z.string(),
-  new_string: import_zod2.z.string(),
+var editSchema = z2.strictObject({
+  file_path: z2.string().optional(),
+  snippet_id: z2.string().optional(),
+  old_string: z2.string(),
+  new_string: z2.string(),
   replace_all: semanticBoolean(false).optional(),
-  expected_occurrences: import_zod2.z.preprocess((value) => {
+  expected_occurrences: z2.preprocess((value) => {
     if (value === void 0 || value === null || value === "") {
       return void 0;
     }
@@ -1482,7 +1382,7 @@ var editSchema = import_zod2.z.strictObject({
       return Number(value);
     }
     return value;
-  }, import_zod2.z.number().int().min(1, "expected_occurrences must be >= 1.").optional())
+  }, z2.number().int().min(1, "expected_occurrences must be >= 1.").optional())
 });
 async function handleEditTool(args2, context) {
   return executeValidatedTool(
@@ -1632,11 +1532,7 @@ async function handleEditTool(args2, context) {
             error: "old_string not found in file.",
             metadata: closestMatch ? {
               scope: formatScopeMetadata(scope),
-              closest_match: buildClosestMatchMetadata(
-                context.sessionId,
-                filePath,
-                closestMatch
-              )
+              closest_match: buildClosestMatchMetadata(context.sessionId, filePath, closestMatch)
             } : {
               scope: formatScopeMetadata(scope)
             }
@@ -1673,13 +1569,7 @@ async function handleEditTool(args2, context) {
             }
           };
         }
-        const updated = applyReplacement(
-          raw,
-          replacementOldString,
-          replacementNewString,
-          matches,
-          replaceAll
-        );
+        const updated = applyReplacement(raw, replacementOldString, replacementNewString, matches, replaceAll);
         const diffPreview = buildDiffPreview(filePath, raw, updated);
         writeTextFile(filePath, updated, metadata.encoding, metadata.lineEndings);
         const freshMetadata = readTextFileWithMetadata(filePath);
@@ -1882,17 +1772,8 @@ function buildCandidateMetadata(sessionId, filePath, raw, matches) {
   });
 }
 function buildClosestMatchMetadata(sessionId, filePath, closestMatch) {
-  const preview = formatWithLineNumbers(
-    closestMatch.text.split(/\r?\n/),
-    closestMatch.startLine
-  );
-  const snippet = createSnippet(
-    sessionId,
-    filePath,
-    closestMatch.startLine,
-    closestMatch.endLine,
-    preview
-  );
+  const preview = formatWithLineNumbers(closestMatch.text.split(/\r?\n/), closestMatch.startLine);
+  const snippet = createSnippet(sessionId, filePath, closestMatch.startLine, closestMatch.endLine, preview);
   return {
     snippet_id: snippet?.id ?? null,
     start_line: closestMatch.startLine,
@@ -2122,9 +2003,9 @@ function sliceLines(raw, lineIndex, startLine, endLine) {
 }
 
 // src/tools/read-handler.ts
-var fs5 = __toESM(require("fs"), 1);
-var path5 = __toESM(require("path"), 1);
-var import_ignore = __toESM(require("ignore"), 1);
+import * as fs5 from "fs";
+import * as path5 from "path";
+import ignore from "ignore";
 var DEFAULT_LINE_LIMIT = 2e3;
 var MAX_LINE_LENGTH = 2e3;
 var PDF_LARGE_PAGE_THRESHOLD = 10;
@@ -2302,9 +2183,7 @@ ${matches.slice(0, 3).join("\n")}` + (matches.length > 3 ? `
           mime,
           bytes: buffer.length
         },
-        followUpMessages: [
-          buildImageFollowUpMessage(filePath, mime, buffer)
-        ]
+        followUpMessages: [buildImageFollowUpMessage(filePath, mime, buffer)]
       };
     }
     const offset = parseLineNumber(args2.offset, "offset");
@@ -2400,7 +2279,7 @@ function findSuffixMatches(root, suffix, isIgnored) {
 function loadGitignoreMatcher(projectRoot) {
   const gitignorePath = path5.join(projectRoot, ".gitignore");
   if (!fs5.existsSync(gitignorePath)) {
-    const ig2 = (0, import_ignore.default)();
+    const ig2 = ignore();
     ig2.add(DEFAULT_GITIGNORE);
     return (relPath, isDir) => {
       if (!relPath) {
@@ -2414,7 +2293,7 @@ function loadGitignoreMatcher(projectRoot) {
   try {
     content = fs5.readFileSync(gitignorePath, "utf8");
   } catch {
-    const ig2 = (0, import_ignore.default)();
+    const ig2 = ignore();
     ig2.add(DEFAULT_GITIGNORE);
     return (relPath, isDir) => {
       if (!relPath) {
@@ -2424,7 +2303,7 @@ function loadGitignoreMatcher(projectRoot) {
       return ig2.ignores(candidate);
     };
   }
-  const ig = (0, import_ignore.default)();
+  const ig = ignore();
   ig.add(DEFAULT_GITIGNORE);
   ig.add(content);
   return (relPath, isDir) => {
@@ -2519,19 +2398,7 @@ function formatWithLineNumbers2(lines, startLineNumber) {
   }).join("\n");
 }
 function isImageExtension(ext) {
-  return [
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".webp",
-    ".bmp",
-    ".tif",
-    ".tiff",
-    ".svg",
-    ".ico",
-    ".avif"
-  ].includes(ext);
+  return [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".svg", ".ico", ".avif"].includes(ext);
 }
 function getImageMimeType(ext) {
   switch (ext) {
@@ -2689,8 +2556,8 @@ function formatNotebookOutput(output) {
 }
 
 // src/tools/web-search-handler.ts
-var import_crypto = require("crypto");
-var import_child_process5 = require("child_process");
+import { randomUUID } from "crypto";
+import { spawn as spawn3 } from "child_process";
 var MAX_OUTPUT_CHARS2 = 3e4;
 var MAX_CAPTURE_CHARS2 = 10 * 1024 * 1024;
 var WEB_SEARCH_TOOL_ACTIVITY_PREFIX = "WebSearch:";
@@ -2768,11 +2635,7 @@ async function executeConfiguredWebSearch(query, scriptPath, context) {
 async function executeDefaultWebSearch(query, llmContext, context) {
   try {
     const prepared = await prepareSearchQuery(query, llmContext);
-    const output = await runDefaultWebSearchRequest(
-      prepared.resolvedQuery,
-      llmContext.machineId,
-      context
-    );
+    const output = await runDefaultWebSearchRequest(prepared.resolvedQuery, llmContext.machineId, context);
     return {
       ok: true,
       name: "WebSearch",
@@ -2795,8 +2658,8 @@ async function executeDefaultWebSearch(query, llmContext, context) {
   }
 }
 async function runWebSearchScript(scriptPath, query, context) {
-  return new Promise((resolve4) => {
-    const child = (0, import_child_process5.spawn)(scriptPath, [query], {
+  return new Promise((resolve6) => {
+    const child = spawn3(scriptPath, [query], {
       cwd: context.projectRoot,
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"]
@@ -2821,7 +2684,7 @@ async function runWebSearchScript(scriptPath, query, context) {
       if (typeof pid === "number") {
         context.onProcessExit?.(pid);
       }
-      resolve4({
+      resolve6({
         stdout,
         stderr,
         exitCode: typeof code === "number" ? code : null,
@@ -2933,7 +2796,7 @@ async function runDefaultWebSearchRequest(query, machineId, context) {
   if (!machineId) {
     throw new Error("Missing vscode.env.machineId for the default WebSearch request.");
   }
-  const activityId = `web-search-${(0, import_crypto.randomUUID)()}`;
+  const activityId = `web-search-${randomUUID()}`;
   context.onProcessStart?.(activityId, formatWebSearchActivityLabel(query));
   try {
     const response = await fetch(DEFAULT_WEB_SEARCH_API_URL, {
@@ -2946,9 +2809,7 @@ async function runDefaultWebSearchRequest(query, machineId, context) {
     });
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      throw new Error(
-        `WebSearch API request failed with status ${response.status}${body ? `: ${body}` : ""}`
-      );
+      throw new Error(`WebSearch API request failed with status ${response.status}${body ? `: ${body}` : ""}`);
     }
     const payload = await response.json();
     if (typeof payload.result === "string" && payload.result.trim()) {
@@ -2984,11 +2845,11 @@ function buildCommandError(exitCode, signal) {
 }
 
 // src/tools/write-handler.ts
-var fs6 = __toESM(require("fs"), 1);
-var import_zod3 = require("zod");
-var writeSchema = import_zod3.z.strictObject({
-  file_path: import_zod3.z.string().min(1, "file_path is required."),
-  content: import_zod3.z.string({
+import * as fs6 from "fs";
+import { z as z3 } from "zod";
+var writeSchema = z3.strictObject({
+  file_path: z3.string().min(1, "file_path is required."),
+  content: z3.string({
     error: "content must be a string. If you are writing JSON, serialize the full document to text before calling write."
   })
 });
@@ -3052,11 +2913,7 @@ async function handleWriteTool(args2, context) {
         const existingMetadata = existingFile ? readTextFileWithMetadata(filePath) : null;
         const encoding = existingMetadata?.encoding ?? "utf8";
         const lineEndings = existingMetadata?.lineEndings ?? (input.content.includes("\r\n") ? "CRLF" : "LF");
-        const diffPreview = buildDiffPreview(
-          filePath,
-          existingMetadata?.content ?? null,
-          normalizedContent
-        );
+        const diffPreview = buildDiffPreview(filePath, existingMetadata?.content ?? null, normalizedContent);
         const bytes = writeTextFile(filePath, normalizedContent, encoding, lineEndings);
         const freshMetadata = readTextFileWithMetadata(filePath);
         recordFileState(context.sessionId, {
@@ -3123,9 +2980,9 @@ var ToolExecutor = class {
   projectRoot;
   createOpenAIClient;
   toolHandlers = /* @__PURE__ */ new Map();
-  constructor(projectRoot, createOpenAIClient2) {
+  constructor(projectRoot, createOpenAIClient3) {
     this.projectRoot = projectRoot;
-    this.createOpenAIClient = createOpenAIClient2;
+    this.createOpenAIClient = createOpenAIClient3;
     this.registerToolHandlers();
   }
   setProjectRoot(projectRoot) {
@@ -3259,9 +3116,9 @@ var ToolExecutor = class {
 };
 
 // src/error-logger.ts
-var fs7 = __toESM(require("fs"), 1);
-var path6 = __toESM(require("path"), 1);
-var os3 = __toESM(require("os"), 1);
+import * as fs7 from "fs";
+import * as path6 from "path";
+import * as os3 from "os";
 var LOG_DIR = path6.join(os3.homedir(), ".deepcode", "logs");
 var ERROR_LOG_PATH = path6.join(LOG_DIR, "error.log");
 function ensureLogDir() {
@@ -3270,13 +3127,7 @@ function ensureLogDir() {
   }
 }
 function maskSensitive(text) {
-  return text.replace(
-    /(Authorization:\s*Bearer\s+)[^\s\r\n]+/gi,
-    "$1***MASKED***"
-  ).replace(
-    /((?:api[Kk]ey|api_key|secret)\s*[:=]\s*"?)[^",}\s]+/gi,
-    "$1***MASKED***"
-  );
+  return text.replace(/(Authorization:\s*Bearer\s+)[^\s\r\n]+/gi, "$1***MASKED***").replace(/((?:api[Kk]ey|api_key|secret)\s*[:=]\s*"?)[^",}\s]+/gi, "$1***MASKED***");
 }
 var CONTENT_TRUNCATE_PREVIEW = 100;
 function truncateContent(value) {
@@ -3332,20 +3183,16 @@ function logApiError(entry) {
     const raw = fs7.readFileSync(ERROR_LOG_PATH, "utf8");
     const lines = raw.split("\n").filter((line) => line.trim().length > 0);
     if (lines.length > MAX_ENTRIES) {
-      fs7.writeFileSync(
-        ERROR_LOG_PATH,
-        lines.slice(-MAX_ENTRIES).join("\n") + "\n",
-        "utf8"
-      );
+      fs7.writeFileSync(ERROR_LOG_PATH, lines.slice(-MAX_ENTRIES).join("\n") + "\n", "utf8");
     }
   } catch {
   }
 }
 
 // src/debug-logger.ts
-var fs8 = __toESM(require("fs"), 1);
-var os4 = __toESM(require("os"), 1);
-var path7 = __toESM(require("path"), 1);
+import * as fs8 from "fs";
+import * as os4 from "os";
+import * as path7 from "path";
 var DEBUG_LOG_FILE = "debug.log";
 var MAX_LOG_SIZE_BYTES = 10 * 1024 * 1024;
 function logOpenAIChatCompletionDebug(entry) {
@@ -3451,6 +3298,13 @@ function accumulateUsage(current, next) {
     return current ?? null;
   }
   return addUsageValue(current, next);
+}
+function getExtensionRoot2() {
+  if (typeof __dirname !== "undefined") {
+    return path8.resolve(__dirname, "..");
+  }
+  const currentFilePath = fileURLToPath2(import.meta.url);
+  return path8.resolve(path8.dirname(currentFilePath), "..");
 }
 function getTotalTokens(usage) {
   if (!isUsageRecord(usage)) {
@@ -3765,19 +3619,25 @@ The candidate skills are as follows:
       return [];
     }
     try {
-      const response = await this.createChatCompletionStream(client, {
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        response_format: { type: "json_object" }
-      }, options?.signal ? { signal: options.signal } : void 0, options?.sessionId, {
-        enabled: debugLogEnabled,
-        location: "SessionManager.identifyMatchingSkillNames",
-        baseURL,
-        params: { purpose: "skill-matching" }
-      });
+      const response = await this.createChatCompletionStream(
+        client,
+        {
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          response_format: { type: "json_object" }
+        },
+        options?.signal ? { signal: options.signal } : void 0,
+        options?.sessionId,
+        {
+          enabled: debugLogEnabled,
+          location: "SessionManager.identifyMatchingSkillNames",
+          baseURL,
+          params: { purpose: "skill-matching" }
+        }
+      );
       this.throwIfAborted(options?.signal);
       const rawContent = response.choices?.[0]?.message?.content;
       const content = typeof rawContent === "string" ? rawContent : "";
@@ -3879,7 +3739,7 @@ The candidate skills are as follows:
     };
     try {
       const skillMd = fs9.readFileSync(skillPath, "utf8");
-      const parsed = (0, import_gray_matter.default)(skillMd);
+      const parsed = matter(skillMd);
       return {
         name: typeof parsed.data.name === "string" && parsed.data.name.trim() ? parsed.data.name.trim() : fallbackSkill.name,
         path: displayPath,
@@ -3979,6 +3839,7 @@ The candidate skills are as follows:
     this.reportNewPrompt();
     const signal = controller?.signal;
     this.throwIfAborted(signal);
+    this.applyInitCommandPrompt(userPrompt);
     if (userPrompt.text) {
       const skills = await this.listSkills();
       const skillNames = await this.identifyMatchingSkillNames(skills, userPrompt.text, { signal });
@@ -4063,6 +3924,7 @@ ${skillMd}
   async replySession(sessionId, userPrompt, controller) {
     const signal = controller?.signal;
     this.throwIfAborted(signal);
+    this.applyInitCommandPrompt(userPrompt);
     const now = (/* @__PURE__ */ new Date()).toISOString();
     const updated = this.updateSessionEntry(sessionId, (entry) => ({
       ...entry,
@@ -4122,7 +3984,11 @@ ${skillMd}
         updateTime: now
       }));
       this.onAssistantMessage(
-        this.buildAssistantMessage(sessionId, "OpenAI API key not found. Please configure ~/.deepcode/settings.json.", null),
+        this.buildAssistantMessage(
+          sessionId,
+          "OpenAI API key not found. Please configure ~/.deepcode/settings.json.",
+          null
+        ),
         false
       );
       this.maybeNotifyTaskCompletion(sessionId, notify, startedAt);
@@ -4158,7 +4024,11 @@ ${skillMd}
         }
         const compactPromptTokenThreshold = getCompactPromptTokenThreshold(model);
         if (session.activeTokens > compactPromptTokenThreshold) {
-          const message2 = this.buildAssistantMessage(sessionId, "The conversation is getting long, compacting...", null);
+          const message2 = this.buildAssistantMessage(
+            sessionId,
+            "The conversation is getting long, compacting...",
+            null
+          );
           message2.meta = { asThinking: true };
           this.onAssistantMessage(message2, false);
           await this.compactSession(sessionId, sessionController.signal);
@@ -4233,7 +4103,11 @@ ${skillMd}
         updateTime: (/* @__PURE__ */ new Date()).toISOString()
       }));
       this.onAssistantMessage(
-        this.buildAssistantMessage(sessionId, "The AI agent has taken several steps but hasn't reached a conclusion yet. Do you want to continue?", null),
+        this.buildAssistantMessage(
+          sessionId,
+          "The AI agent has taken several steps but hasn't reached a conclusion yet. Do you want to continue?",
+          null
+        ),
         false
       );
     } catch (error) {
@@ -4246,10 +4120,7 @@ ${skillMd}
         updateTime: (/* @__PURE__ */ new Date()).toISOString()
       }));
       if (!aborted) {
-        this.onAssistantMessage(
-          this.buildAssistantMessage(sessionId, `Request failed: ${errMessage}`, null),
-          false
-        );
+        this.onAssistantMessage(this.buildAssistantMessage(sessionId, `Request failed: ${errMessage}`, null), false);
       }
     } finally {
       if (this.sessionControllers.get(sessionId) === sessionController) {
@@ -4268,9 +4139,7 @@ ${skillMd}
     if (sessionMessages.length === 0) {
       return;
     }
-    const startIndex = sessionMessages.findIndex(
-      (message) => message.role !== "system"
-    );
+    const startIndex = sessionMessages.findIndex((message) => message.role !== "system");
     if (startIndex === -1) {
       return;
     }
@@ -4287,16 +4156,22 @@ ${skillMd}
     }
     const compactPrompt = getCompactPrompt(sessionMessages.slice(startIndex, endIndex));
     const thinkingOptions = buildThinkingRequestOptions(thinkingEnabled, reasoningEffort);
-    const response = await this.createChatCompletionStream(client, {
-      model,
-      messages: [{ role: "user", content: compactPrompt }],
-      ...thinkingOptions
-    }, signal ? { signal } : void 0, sessionId, {
-      enabled: debugLogEnabled,
-      location: "SessionManager.compactSession",
-      baseURL,
-      params: { thinkingEnabled, reasoningEffort }
-    });
+    const response = await this.createChatCompletionStream(
+      client,
+      {
+        model,
+        messages: [{ role: "user", content: compactPrompt }],
+        ...thinkingOptions
+      },
+      signal ? { signal } : void 0,
+      sessionId,
+      {
+        enabled: debugLogEnabled,
+        location: "SessionManager.compactSession",
+        baseURL,
+        params: { thinkingEnabled, reasoningEffort }
+      }
+    );
     this.throwIfAborted(signal);
     const rawLlmResponse = response.choices?.[0]?.message?.content;
     const llmResponse = typeof rawLlmResponse === "string" ? rawLlmResponse : "";
@@ -4354,9 +4229,7 @@ ${compactedSummary}`,
         return;
       }
       const body = await response.text().catch(() => "");
-      throw new Error(
-        `New prompt API request failed with status ${response.status}${body ? `: ${body}` : ""}`
-      );
+      throw new Error(`New prompt API request failed with status ${response.status}${body ? `: ${body}` : ""}`);
     }).catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`Failed to report new prompt: ${message}`);
@@ -4410,10 +4283,7 @@ ${compactedSummary}`,
     if (failedPids.length > 0) {
       contentParts.push(`Failed to kill processes: ${failedPids.join(", ")}.`);
     }
-    this.onAssistantMessage(
-      this.buildUserMessage(sessionId, { text: contentParts.join(" ") }),
-      false
-    );
+    this.onAssistantMessage(this.buildUserMessage(sessionId, { text: contentParts.join(" ") }), false);
   }
   isInterrupted(sessionId) {
     return !this.sessionControllers.has(sessionId);
@@ -4567,25 +4437,61 @@ ${compactedSummary}`,
       updateTime: now
     };
   }
-  loadAgentInstructions() {
+  applyInitCommandPrompt(userPrompt) {
+    if (userPrompt.text !== "/init") {
+      return;
+    }
+    userPrompt.text = this.renderInitCommandPrompt();
+  }
+  renderInitCommandPrompt() {
+    const templatePath = path8.join(getExtensionRoot2(), "docs", "prompts", "init_command.md.ejs");
+    const template = fs9.readFileSync(templatePath, "utf8");
+    return ejs.render(template, {
+      agentsMdFile: this.getEffectiveProjectAgentsMdFile()
+    });
+  }
+  getEffectiveProjectAgentsMdFile() {
+    return this.loadProjectAgentInstructions()?.displayPath ?? null;
+  }
+  loadProjectAgentInstructions() {
     const candidatePaths = [
-      path8.join(this.projectRoot, "AGENTS.md"),
-      path8.join(os5.homedir(), ".deepcode", "AGENTS.md")
+      {
+        absolutePath: path8.join(this.projectRoot, ".deepcode", "AGENTS.md"),
+        displayPath: "./.deepcode/AGENTS.md"
+      },
+      {
+        absolutePath: path8.join(this.projectRoot, "AGENTS.md"),
+        displayPath: "./AGENTS.md"
+      }
     ];
     for (const candidatePath of candidatePaths) {
-      try {
-        if (!fs9.existsSync(candidatePath)) {
-          continue;
-        }
-        const content = fs9.readFileSync(candidatePath, "utf8").trim();
-        if (content) {
-          return content;
-        }
-      } catch {
-        continue;
+      const content = this.readNonEmptyFile(candidatePath.absolutePath);
+      if (content) {
+        return {
+          content,
+          displayPath: candidatePath.displayPath
+        };
       }
     }
     return null;
+  }
+  readNonEmptyFile(filePath) {
+    try {
+      if (!fs9.existsSync(filePath)) {
+        return null;
+      }
+      const content = fs9.readFileSync(filePath, "utf8").trim();
+      return content || null;
+    } catch {
+      return null;
+    }
+  }
+  loadAgentInstructions() {
+    const projectInstructions = this.loadProjectAgentInstructions();
+    if (projectInstructions) {
+      return projectInstructions.content;
+    }
+    return this.readNonEmptyFile(path8.join(os5.homedir(), ".deepcode", "AGENTS.md"));
   }
   buildSystemMessage(sessionId, content, contentParams = null) {
     const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -4681,12 +4587,7 @@ ${compactedSummary}`,
         waitingForUser = true;
       }
       const toolFunction = this.findToolFunction(toolCalls, execution.toolCallId);
-      const toolMessage = this.buildToolMessage(
-        sessionId,
-        execution.toolCallId,
-        execution.content,
-        toolFunction
-      );
+      const toolMessage = this.buildToolMessage(sessionId, execution.toolCallId, execution.content, toolFunction);
       this.appendSessionMessage(sessionId, toolMessage);
       this.onAssistantMessage(toolMessage, true);
       for (const followUpMessage of execution.result.followUpMessages ?? []) {
@@ -4694,11 +4595,7 @@ ${compactedSummary}`,
           continue;
         }
         followUpMessages.push(
-          this.buildSystemMessage(
-            sessionId,
-            followUpMessage.content,
-            followUpMessage.contentParams ?? null
-          )
+          this.buildSystemMessage(sessionId, followUpMessage.content, followUpMessage.contentParams ?? null)
         );
       }
     }
@@ -5082,10 +4979,10 @@ ${compactedSummary}`,
 };
 
 // src/clientFactory.ts
-var fs10 = __toESM(require("fs"), 1);
-var os6 = __toESM(require("os"), 1);
-var path9 = __toESM(require("path"), 1);
-var import_openai = __toESM(require("openai"), 1);
+import * as fs10 from "fs";
+import * as os6 from "os";
+import * as path9 from "path";
+import OpenAI from "openai";
 
 // src/settings.ts
 function resolveReasoningEffort(value) {
@@ -5103,7 +5000,8 @@ function resolveThinkingEnabled(settings, model) {
 }
 function resolveSettings(settings, defaults) {
   const env = settings?.env ?? {};
-  const model = env.MODEL?.trim() || defaults.model;
+  const topLevelModel = typeof settings?.model === "string" ? settings.model.trim() : "";
+  const model = topLevelModel || env.MODEL?.trim() || defaults.model;
   const notify = typeof settings?.notify === "string" ? settings.notify.trim() : "";
   const webSearchTool = typeof settings?.webSearchTool === "string" ? settings.webSearchTool.trim() : "";
   return {
@@ -5116,6 +5014,26 @@ function resolveSettings(settings, defaults) {
     notify: notify || void 0,
     webSearchTool: webSearchTool || void 0
   };
+}
+function modelConfigKey(config) {
+  return config.thinkingEnabled ? `thinking:${config.reasoningEffort}` : "thinking:none";
+}
+function applyModelConfigSelection(settings, current, selected) {
+  const changed = selected.model !== current.model || modelConfigKey(selected) !== modelConfigKey(current);
+  const next = { ...settings ?? {} };
+  if (!changed) {
+    return { settings: next, changed: false };
+  }
+  if (selected.model !== current.model || Object.prototype.hasOwnProperty.call(next, "model")) {
+    next.model = selected.model;
+  } else {
+    delete next.model;
+  }
+  next.thinkingEnabled = selected.thinkingEnabled;
+  if (selected.thinkingEnabled) {
+    next.reasoningEffort = selected.reasoningEffort;
+  }
+  return { settings: next, changed: true };
 }
 
 // src/clientFactory.ts
@@ -5168,7 +5086,7 @@ function createOpenAIClient() {
       machineId: getMachineId()
     };
   }
-  const client = new import_openai.default({
+  const client = new OpenAI({
     apiKey: settings.apiKey,
     baseURL: settings.baseURL || void 0
   });
@@ -5202,9 +5120,9 @@ function getMachineId() {
 }
 
 // src/ui/PromptInput.tsx
-var import_react4 = __toESM(require("react"), 1);
-var import_ink3 = require("ink");
-var import_chalk = __toESM(require("chalk"), 1);
+import React2, { useEffect as useEffect3, useState as useState2 } from "react";
+import { Box as Box2, Text as Text2, useApp, useStdout } from "ink";
+import chalk from "chalk";
 
 // src/ui/promptBuffer.ts
 var EMPTY_BUFFER = { text: "", cursor: 0 };
@@ -5317,6 +5235,23 @@ function deleteWordBefore(state) {
     cursor: start
   };
 }
+function deleteWordAfter(state) {
+  const start = state.cursor;
+  let end = start;
+  while (end < state.text.length && /\s/.test(state.text[end] ?? "")) {
+    end++;
+  }
+  while (end < state.text.length && !/\s/.test(state.text[end] ?? "")) {
+    end++;
+  }
+  if (start === end) {
+    return state;
+  }
+  return {
+    text: state.text.slice(0, start) + state.text.slice(end),
+    cursor: start
+  };
+}
 function isEmpty(state) {
   return state.text.length === 0;
 }
@@ -5361,10 +5296,22 @@ var BUILTIN_SLASH_COMMANDS = [
     description: "List available skills"
   },
   {
+    kind: "model",
+    name: "model",
+    label: "/model",
+    description: "Select model, thinking mode and thinking effort"
+  },
+  {
     kind: "new",
     name: "new",
     label: "/new",
     description: "Start a fresh conversation"
+  },
+  {
+    kind: "init",
+    name: "init",
+    label: "/init",
+    description: "Initialize an AGENTS.md file with instructions for LLM"
   },
   {
     kind: "resume",
@@ -5415,10 +5362,10 @@ function formatSlashCommandLabel(item) {
 }
 
 // src/ui/clipboard.ts
-var import_child_process6 = require("child_process");
-var fs11 = __toESM(require("fs"), 1);
-var os7 = __toESM(require("os"), 1);
-var path10 = __toESM(require("path"), 1);
+import { spawnSync, execSync as execSync2 } from "child_process";
+import * as fs11 from "fs";
+import * as os7 from "os";
+import * as path10 from "path";
 var PNG_MIME = "image/png";
 var IMAGE_MIME_BY_EXT = /* @__PURE__ */ new Map([
   [".png", "image/png"],
@@ -5438,7 +5385,7 @@ function mimeTypeForPath(value) {
 }
 function tryRun(command, args2) {
   try {
-    const result = (0, import_child_process6.spawnSync)(command, args2, { encoding: "buffer", maxBuffer: 32 * 1024 * 1024 });
+    const result = spawnSync(command, args2, { encoding: "buffer", maxBuffer: 32 * 1024 * 1024 });
     if (result.status !== 0 || !result.stdout || result.stdout.length === 0) {
       return null;
     }
@@ -5516,7 +5463,7 @@ function convertTiffToPng(tiffBuffer) {
     const pngPath = path10.join(tempDir, "clipboard.png");
     fs11.writeFileSync(tiffPath, tiffBuffer);
     try {
-      (0, import_child_process6.execSync)(`sips -s format png "${tiffPath}" --out "${pngPath}"`, {
+      execSync2(`sips -s format png "${tiffPath}" --out "${pngPath}"`, {
         encoding: "buffer",
         stdio: "pipe",
         timeout: 1e4
@@ -5564,10 +5511,10 @@ function readClipboardImage() {
   return null;
 }
 async function readClipboardImageAsync() {
-  return new Promise((resolve4, reject) => {
+  return new Promise((resolve6, reject) => {
     setImmediate(() => {
       try {
-        resolve4(readClipboardImage());
+        resolve6(readClipboardImage());
       } catch (error) {
         reject(error);
       }
@@ -5576,8 +5523,21 @@ async function readClipboardImageAsync() {
 }
 
 // src/ui/prompt/useTerminalInput.ts
-var import_react = require("react");
-var import_ink = require("ink");
+import { useEffect, useRef } from "react";
+import { useStdin } from "ink";
+var rawModeSetters = /* @__PURE__ */ new Set();
+function acquireRawMode(setRawMode) {
+  if (rawModeSetters.size === 0) {
+    setRawMode(true);
+  }
+  rawModeSetters.add(setRawMode);
+}
+function releaseRawMode(setRawMode) {
+  rawModeSetters.delete(setRawMode);
+  if (rawModeSetters.size === 0) {
+    setRawMode(false);
+  }
+}
 var BACKSPACE_BYTES = /* @__PURE__ */ new Set(["\x7F", "\b"]);
 var FORWARD_DELETE_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[3~", "\x1B[P"]);
 var HOME_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[H", "\x1B[1~", "\x1B[7~", "\x1BOH"]);
@@ -5636,20 +5596,20 @@ function parseTerminalInput(data) {
   return { input, key };
 }
 function useTerminalInput(inputHandler, options = {}) {
-  const { stdin, setRawMode } = (0, import_ink.useStdin)();
+  const { stdin, setRawMode } = useStdin();
   const isActive = options.isActive ?? true;
-  const handlerRef = (0, import_react.useRef)(inputHandler);
+  const handlerRef = useRef(inputHandler);
   handlerRef.current = inputHandler;
-  (0, import_react.useEffect)(() => {
+  useEffect(() => {
     if (!isActive) {
       return;
     }
-    setRawMode(true);
+    acquireRawMode(setRawMode);
     return () => {
-      setRawMode(false);
+      releaseRawMode(setRawMode);
     };
   }, [isActive, setRawMode]);
-  (0, import_react.useEffect)(() => {
+  useEffect(() => {
     if (!isActive) {
       return;
     }
@@ -5665,7 +5625,16 @@ function useTerminalInput(inputHandler, options = {}) {
 }
 
 // src/ui/prompt/cursor.ts
-var import_react2 = require("react");
+import { useLayoutEffect, useEffect as useEffect2, useRef as useRef2, useState, useCallback } from "react";
+function cursorUp(rows) {
+  return rows > 0 ? `\x1B[${rows}A` : "";
+}
+function cursorDown(rows) {
+  return rows > 0 ? `\x1B[${rows}B` : "";
+}
+function cursorForward(columns) {
+  return columns > 0 ? `\x1B[${columns}C` : "";
+}
 function showCursor() {
   return "\x1B[?25h";
 }
@@ -5678,19 +5647,67 @@ function enableTerminalFocusReporting() {
 function disableTerminalFocusReporting() {
   return "\x1B[?1004l";
 }
-function useHiddenTerminalCursor(stdout, isActive) {
-  (0, import_react2.useLayoutEffect)(() => {
-    if (!isActive || !stdout?.isTTY) {
-      return;
+function getPromptCursorPlacement(state, screenWidth, prefixWidth, footerText) {
+  const width = Math.max(1, screenWidth);
+  const cursor = Math.max(0, Math.min(state.cursor, state.text.length));
+  const beforeCursor = state.text.slice(0, cursor);
+  const at = state.text[cursor];
+  const displayText = beforeCursor + (typeof at === "undefined" || at === "\n" ? " " : at) + (at === "\n" ? "\n" : "") + (typeof at === "undefined" ? "" : state.text.slice(cursor + 1));
+  const cursorPosition = measureTextPosition(beforeCursor, width, prefixWidth);
+  const promptRows = measureTextRows(displayText, width, prefixWidth);
+  const footerRows = 1 + measureTextRows(footerText, width, 0);
+  return {
+    rowsUp: promptRows - 1 - cursorPosition.row + footerRows + 1,
+    column: cursorPosition.column
+  };
+}
+function measureTextRows(text, width, initialColumn) {
+  return measureTextPosition(text, width, initialColumn).row + 1;
+}
+function measureTextPosition(text, width, initialColumn) {
+  let row = 0;
+  let column = Math.min(initialColumn, width - 1);
+  for (const char of Array.from(text)) {
+    if (char === "\n") {
+      row++;
+      column = Math.min(initialColumn, width - 1);
+      continue;
     }
-    stdout.write(hideCursor());
-    return () => {
-      stdout.write(showCursor());
-    };
-  }, [isActive, stdout]);
+    const charColumns = textWidth(char);
+    if (column + charColumns > width) {
+      row++;
+      column = Math.min(initialColumn, width - 1);
+    }
+    column += charColumns;
+    if (column >= width) {
+      row++;
+      column = Math.min(initialColumn, width - 1);
+    }
+  }
+  return { row, column };
+}
+function textWidth(value) {
+  let width = 0;
+  for (const char of Array.from(value.normalize())) {
+    width += characterWidth(char);
+  }
+  return width;
+}
+function characterWidth(char) {
+  const codePoint = char.codePointAt(0) ?? 0;
+  if (codePoint === 0 || codePoint < 32 || codePoint >= 127 && codePoint < 160) {
+    return 0;
+  }
+  if (codePoint >= 768 && codePoint <= 879) {
+    return 0;
+  }
+  if (codePoint >= 4352 && codePoint <= 4447 || codePoint >= 11904 && codePoint <= 42191 || codePoint >= 44032 && codePoint <= 55203 || codePoint >= 63744 && codePoint <= 64255 || codePoint >= 65040 && codePoint <= 65049 || codePoint >= 65072 && codePoint <= 65135 || codePoint >= 65280 && codePoint <= 65376 || codePoint >= 65504 && codePoint <= 65510) {
+    return 2;
+  }
+  return 1;
 }
 function useTerminalFocusReporting(stdout, isActive) {
-  (0, import_react2.useLayoutEffect)(() => {
+  useLayoutEffect(() => {
     if (!isActive || !stdout?.isTTY) {
       return;
     }
@@ -5700,17 +5717,145 @@ function useTerminalFocusReporting(stdout, isActive) {
     };
   }, [isActive, stdout]);
 }
+function useFocusState(stdout) {
+  const [hasFocus, setHasFocus] = useState(true);
+  const timeoutRef = useRef2(null);
+  const stdoutRef = useRef2(stdout);
+  stdoutRef.current = stdout;
+  const handleFocusEvent = useCallback((focused) => {
+    setHasFocus(focused);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    if (!focused) {
+      timeoutRef.current = setTimeout(() => {
+        timeoutRef.current = null;
+        const s = stdoutRef.current;
+        if (s?.isTTY) {
+          s.write(disableTerminalFocusReporting());
+          s.write(enableTerminalFocusReporting());
+        }
+      }, 5e3);
+    }
+  }, []);
+  const resetFocus = useCallback(() => {
+    setHasFocus(true);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, []);
+  useEffect2(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+  return { hasFocus, handleFocusEvent, resetFocus };
+}
+function useTerminalCursor(stdout, isActive, placement) {
+  useTerminalFocusReporting(stdout, isActive);
+  const { hasFocus, handleFocusEvent, resetFocus } = useFocusState(stdout);
+  const directWriteRef = useRef2(null);
+  const activePlacementRef = useRef2(null);
+  const lastPlacementRef = useRef2(null);
+  const unmountingRef = useRef2(false);
+  useLayoutEffect(() => {
+    if (!stdout?.isTTY) {
+      return;
+    }
+    const stream = stdout;
+    const originalWrite = stream.write;
+    const directWrite = (data) => {
+      originalWrite.call(stdout, data);
+    };
+    const restorePromptCursor = () => {
+      if (unmountingRef.current) {
+        return;
+      }
+      const activePlacement = activePlacementRef.current;
+      if (!activePlacement) {
+        return;
+      }
+      directWrite("\r" + cursorDown(activePlacement.rowsUp) + hideCursor());
+      activePlacementRef.current = null;
+      Promise.resolve().then(() => {
+        if (unmountingRef.current || activePlacementRef.current) {
+          return;
+        }
+        const latest = directWriteRef.current;
+        const p = lastPlacementRef.current;
+        if (latest && p) {
+          latest(showCursor() + cursorUp(p.rowsUp) + "\r" + cursorForward(p.column));
+          activePlacementRef.current = p;
+        }
+      });
+    };
+    const patchedWrite = (...args2) => {
+      restorePromptCursor();
+      return originalWrite.apply(stdout, args2);
+    };
+    directWriteRef.current = directWrite;
+    stream.write = patchedWrite;
+    return () => {
+      restorePromptCursor();
+      stream.write = originalWrite;
+      directWriteRef.current = null;
+    };
+  }, [stdout]);
+  useLayoutEffect(() => {
+    if (!isActive || !stdout?.isTTY) {
+      return;
+    }
+    unmountingRef.current = false;
+    const directWrite = directWriteRef.current;
+    if (!directWrite) {
+      return;
+    }
+    if (placement) {
+      directWrite(showCursor() + cursorUp(placement.rowsUp) + "\r" + cursorForward(placement.column));
+      activePlacementRef.current = placement;
+      lastPlacementRef.current = placement;
+    } else {
+      directWrite(hideCursor());
+      activePlacementRef.current = null;
+      lastPlacementRef.current = null;
+    }
+    return () => {
+      unmountingRef.current = true;
+      lastPlacementRef.current = null;
+      const activePlacement = activePlacementRef.current;
+      if (!activePlacement) {
+        return;
+      }
+      directWrite("\r" + cursorDown(activePlacement.rowsUp) + hideCursor());
+      activePlacementRef.current = null;
+    };
+  }, [isActive, placement?.column, placement?.rowsUp, stdout]);
+  return { hasFocus, handleFocusEvent, resetFocus };
+}
 
 // src/ui/SlashCommandMenu.tsx
-var import_react3 = __toESM(require("react"), 1);
-var import_ink2 = require("ink");
-var import_jsx_runtime = require("react/jsx-runtime");
-var SlashCommandMenu = import_react3.default.memo(function SlashCommandMenu2({
+import React from "react";
+import { Box, Text } from "ink";
+import { jsx, jsxs } from "react/jsx-runtime";
+var SlashCommandMenu = React.memo(function SlashCommandMenu2({
   items,
   activeIndex,
   maxVisible = 6,
   width
 }) {
+  const labelColumnWidth = React.useMemo(() => {
+    if (items.length === 0) {
+      return 0;
+    }
+    const longestLabel = Math.max(...items.map((s) => s.label.length));
+    const contentWidth = longestLabel + 2;
+    const maxAllowed = Math.max(10, width - 2 >> 1);
+    return Math.min(contentWidth, maxAllowed);
+  }, [items, width]);
   if (items.length === 0) {
     return null;
   }
@@ -5719,32 +5864,26 @@ var SlashCommandMenu = import_react3.default.memo(function SlashCommandMenu2({
     Math.max(0, items.length - maxVisible)
   );
   const visibleItems = items.slice(visibleStart, visibleStart + maxVisible);
-  const labelColumnWidth = import_react3.default.useMemo(() => {
-    const longestLabel = Math.max(...items.map((s) => s.label.length));
-    const contentWidth = longestLabel + 2;
-    const maxAllowed = Math.max(10, width - 2 >> 1);
-    return Math.min(contentWidth, maxAllowed);
-  }, [items, width]);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_ink2.Box, { flexDirection: "column", marginBottom: 1, width, children: [
-    visibleStart > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_ink2.Box, { marginLeft: 2, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_ink2.Text, { dimColor: true, children: "\u25B2" }) }) : null,
+  return /* @__PURE__ */ jsxs(Box, { flexDirection: "column", marginBottom: 1, width, children: [
+    visibleStart > 0 ? /* @__PURE__ */ jsx(Box, { marginLeft: 2, children: /* @__PURE__ */ jsx(Text, { dimColor: true, children: "\u25B2" }) }) : null,
     visibleItems.map((item, idx) => {
       const actualIndex = visibleStart + idx;
-      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_ink2.Box, { gap: 2, flexDirection: "row", flexGrow: 1, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_ink2.Box, { width: labelColumnWidth, flexShrink: 0, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_ink2.Text, { color: actualIndex === activeIndex ? "#229ac3" : void 0, wrap: "truncate-end", children: [
+      return /* @__PURE__ */ jsxs(Box, { gap: 2, flexDirection: "row", flexGrow: 1, children: [
+        /* @__PURE__ */ jsx(Box, { width: labelColumnWidth, flexShrink: 0, children: /* @__PURE__ */ jsxs(Text, { color: actualIndex === activeIndex ? "#229ac3" : void 0, wrap: "truncate-end", children: [
           actualIndex === activeIndex ? "\u203A " : "  ",
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_ink2.Text, { bold: true, children: formatSlashCommandLabel(item) })
+          /* @__PURE__ */ jsx(Text, { bold: true, children: formatSlashCommandLabel(item) })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_ink2.Box, { flexGrow: 1, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_ink2.Text, { color: actualIndex === activeIndex ? "#229ac3" : void 0, wrap: "truncate-end", dimColor: true, children: formatSlashCommandDescription(item.description) }) })
+        /* @__PURE__ */ jsx(Box, { flexGrow: 1, children: /* @__PURE__ */ jsx(Text, { color: actualIndex === activeIndex ? "#229ac3" : void 0, wrap: "truncate-end", dimColor: true, children: formatSlashCommandDescription(item.description) }) })
       ] }, item.label);
     }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_ink2.Box, { marginLeft: 2, flexDirection: "column", children: [
-      visibleStart + visibleItems.length < items.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_ink2.Text, { dimColor: true, children: "\u25BC" }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_ink2.Text, { dimColor: true, children: [
+    /* @__PURE__ */ jsxs(Box, { marginLeft: 2, flexDirection: "column", children: [
+      visibleStart + visibleItems.length < items.length ? /* @__PURE__ */ jsx(Text, { dimColor: true, children: "\u25BC" }) : null,
+      /* @__PURE__ */ jsxs(Text, { dimColor: true, children: [
         "(",
         activeIndex + 1,
         "/",
         items.length,
-        ")  \u2191\u2193 to navigate \xB7 Enter to select"
+        ") \u2191\u2193 to navigate \xB7 Enter to select"
       ] })
     ] })
   ] });
@@ -5752,11 +5891,18 @@ var SlashCommandMenu = import_react3.default.memo(function SlashCommandMenu2({
 var SlashCommandMenu_default = SlashCommandMenu;
 
 // src/ui/PromptInput.tsx
-var import_jsx_runtime2 = require("react/jsx-runtime");
+import { jsx as jsx2, jsxs as jsxs2 } from "react/jsx-runtime";
 var SPINNER_FRAMES = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
-var PromptPrefixLine = import_react4.default.memo(function PromptPrefixLine2({ busy }) {
-  const [spinnerIndex, setSpinnerIndex] = (0, import_react4.useState)(0);
-  (0, import_react4.useEffect)(() => {
+var PROMPT_PREFIX_WIDTH = 2;
+var MODEL_COMMAND_MODELS = ["deepseek-v4-pro", "deepseek-v4-flash"];
+var MODEL_COMMAND_THINKING_OPTIONS = [
+  { label: "Thinking mode [max]", thinkingEnabled: true, reasoningEffort: "max" },
+  { label: "Thinking mode [high]", thinkingEnabled: true, reasoningEffort: "high" },
+  { label: "No thinking", thinkingEnabled: false }
+];
+var PromptPrefixLine = React2.memo(function PromptPrefixLine2({ busy }) {
+  const [spinnerIndex, setSpinnerIndex] = useState2(0);
+  useEffect3(() => {
     if (!busy) {
       setSpinnerIndex(0);
       return;
@@ -5767,10 +5913,11 @@ var PromptPrefixLine = import_react4.default.memo(function PromptPrefixLine2({ b
     return () => clearInterval(timer);
   }, [busy]);
   const prefix = busy ? `${SPINNER_FRAMES[spinnerIndex]} ` : "> ";
-  return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ink3.Text, { color: busy ? "yellow" : "green", children: prefix });
+  return /* @__PURE__ */ jsx2(Text2, { color: busy ? "yellow" : "green", children: prefix });
 });
-var PromptInput = import_react4.default.memo(function PromptInput2({
+var PromptInput = React2.memo(function PromptInput2({
   skills,
+  modelConfig,
   screenWidth,
   promptHistory,
   busy,
@@ -5778,31 +5925,47 @@ var PromptInput = import_react4.default.memo(function PromptInput2({
   disabled,
   placeholder,
   onSubmit,
+  onModelConfigChange,
   onInterrupt
 }) {
-  const { exit } = (0, import_ink3.useApp)();
-  const { stdout } = (0, import_ink3.useStdout)();
-  const [buffer, setBuffer] = (0, import_react4.useState)(EMPTY_BUFFER);
-  const [imageUrls, setImageUrls] = (0, import_react4.useState)([]);
-  const [selectedSkills, setSelectedSkills] = (0, import_react4.useState)([]);
-  const [statusMessage, setStatusMessage] = (0, import_react4.useState)(null);
-  const [pendingExit, setPendingExit] = (0, import_react4.useState)(false);
-  const [menuIndex, setMenuIndex] = (0, import_react4.useState)(0);
-  const [showSkillsDropdown, setShowSkillsDropdown] = (0, import_react4.useState)(false);
-  const [skillsDropdownIndex, setSkillsDropdownIndex] = (0, import_react4.useState)(0);
-  const [historyCursor, setHistoryCursor] = (0, import_react4.useState)(-1);
-  const [draftBeforeHistory, setDraftBeforeHistory] = (0, import_react4.useState)(null);
-  const [hasTerminalFocus, setHasTerminalFocus] = (0, import_react4.useState)(true);
-  const lastCtrlDAt = import_react4.default.useRef(0);
-  const slashItems = import_react4.default.useMemo(() => buildSlashCommands(skills), [skills]);
+  const { exit } = useApp();
+  const { stdout } = useStdout();
+  const [buffer, setBuffer] = useState2(EMPTY_BUFFER);
+  const [imageUrls, setImageUrls] = useState2([]);
+  const [selectedSkills, setSelectedSkills] = useState2([]);
+  const [statusMessage, setStatusMessage] = useState2(null);
+  const [pendingExit, setPendingExit] = useState2(false);
+  const [menuIndex, setMenuIndex] = useState2(0);
+  const [showSkillsDropdown, setShowSkillsDropdown] = useState2(false);
+  const [skillsDropdownIndex, setSkillsDropdownIndex] = useState2(0);
+  const [modelDropdownStep, setModelDropdownStep] = useState2(null);
+  const [modelDropdownIndex, setModelDropdownIndex] = useState2(0);
+  const [pendingModel, setPendingModel] = useState2(null);
+  const [historyCursor, setHistoryCursor] = useState2(-1);
+  const [draftBeforeHistory, setDraftBeforeHistory] = useState2(null);
+  const lastCtrlDAt = React2.useRef(0);
+  const slashItems = React2.useMemo(() => buildSlashCommands(skills), [skills]);
   const slashToken = getCurrentSlashToken(buffer);
-  const slashMenu = showSkillsDropdown ? [] : slashToken ? filterSlashCommands(slashItems, slashToken) : [];
+  const slashMenu = React2.useMemo(
+    () => showSkillsDropdown || modelDropdownStep ? [] : slashToken ? filterSlashCommands(slashItems, slashToken) : [],
+    [showSkillsDropdown, modelDropdownStep, slashToken, slashItems]
+  );
   const showMenu = slashMenu.length > 0;
-  const promptHistoryKey = import_react4.default.useMemo(() => promptHistory.join("\0"), [promptHistory]);
+  const promptHistoryKey = React2.useMemo(() => promptHistory.join("\0"), [promptHistory]);
   const footerText = statusMessage ? statusMessage : busy ? loadingText && loadingText.trim() ? loadingText : "esc to interrupt \xB7 ctrl+c to cancel input" : "enter send \xB7 shift+enter newline \xB7 ctrl+v image \xB7 / commands \xB7 ctrl+d exit";
-  useTerminalFocusReporting(stdout, !disabled);
-  useHiddenTerminalCursor(stdout, !disabled);
-  (0, import_react4.useEffect)(() => {
+  const cursorPlacement = React2.useMemo(() => {
+    if (!showMenu && !showSkillsDropdown) {
+      return getPromptCursorPlacement(buffer, screenWidth, PROMPT_PREFIX_WIDTH, footerText);
+    }
+    return null;
+  }, [buffer, screenWidth, footerText, showMenu, showSkillsDropdown]);
+  const { hasFocus, handleFocusEvent, resetFocus } = useTerminalCursor(stdout, !disabled, cursorPlacement);
+  useEffect3(() => {
+    if (!busy) {
+      resetFocus();
+    }
+  }, [busy, resetFocus]);
+  useEffect3(() => {
     if (!showMenu) {
       setMenuIndex(0);
       return;
@@ -5811,261 +5974,304 @@ var PromptInput = import_react4.default.memo(function PromptInput2({
       setMenuIndex(slashMenu.length - 1);
     }
   }, [slashMenu, showMenu, menuIndex]);
-  (0, import_react4.useEffect)(() => {
+  useEffect3(() => {
     if (skillsDropdownIndex >= skills.length) {
       setSkillsDropdownIndex(Math.max(0, skills.length - 1));
     }
   }, [skills.length, skillsDropdownIndex]);
-  (0, import_react4.useEffect)(() => {
+  useEffect3(() => {
+    if (!modelDropdownStep) {
+      return;
+    }
+    const optionCount = modelDropdownStep === "model" ? MODEL_COMMAND_MODELS.length : MODEL_COMMAND_THINKING_OPTIONS.length;
+    if (modelDropdownIndex >= optionCount) {
+      setModelDropdownIndex(Math.max(0, optionCount - 1));
+    }
+  }, [modelDropdownIndex, modelDropdownStep]);
+  useEffect3(() => {
     if (!statusMessage) {
       return;
     }
     const timer = setTimeout(() => setStatusMessage(null), 2500);
     return () => clearTimeout(timer);
   }, [statusMessage]);
-  (0, import_react4.useEffect)(() => {
+  useEffect3(() => {
     setHistoryCursor(-1);
     setDraftBeforeHistory(null);
   }, [promptHistoryKey]);
-  useTerminalInput((input, key) => {
-    if (key.focusIn) {
-      setHasTerminalFocus(true);
-      return;
-    }
-    if (key.focusOut) {
-      setHasTerminalFocus(false);
-      return;
-    }
-    if (disabled) {
-      return;
-    }
-    if (key.escape) {
-      if (showSkillsDropdown) {
-        setShowSkillsDropdown(false);
+  useTerminalInput(
+    (input, key) => {
+      if (key.focusIn) {
+        handleFocusEvent(true);
         return;
       }
-      if (busy) {
-        onInterrupt();
-        setStatusMessage("Interrupting\u2026");
-      }
-      return;
-    }
-    if (key.ctrl && (input === "d" || input === "D")) {
-      if (!isEmpty(buffer)) {
-        updateBuffer((s) => deleteForward(s));
+      if (key.focusOut) {
+        handleFocusEvent(false);
         return;
       }
-      const now = Date.now();
-      if (pendingExit && now - lastCtrlDAt.current < 2e3) {
-        exit();
+      if (disabled) {
         return;
       }
-      lastCtrlDAt.current = now;
-      setPendingExit(true);
-      setStatusMessage("press ctrl+d again to exit");
-      return;
-    }
-    if (key.ctrl && (input === "c" || input === "C")) {
-      if (busy) {
-        onInterrupt();
-        setStatusMessage("Interrupting\u2026");
-      } else if (!isEmpty(buffer)) {
-        setBuffer(EMPTY_BUFFER);
-      } else {
-        setStatusMessage("press ctrl+d to exit");
-      }
-      return;
-    }
-    if (pendingExit && (!key.ctrl || input !== "d" && input !== "D")) {
-      setPendingExit(false);
-    }
-    if (historyCursor !== -1 && !key.upArrow && !key.downArrow) {
-      exitHistoryBrowsing();
-    }
-    if (showSkillsDropdown) {
-      if (skills.length === 0) {
-        setShowSkillsDropdown(false);
-      } else {
-        if (key.upArrow) {
-          setSkillsDropdownIndex((idx) => (idx - 1 + skills.length) % skills.length);
+      if (key.escape) {
+        if (modelDropdownStep) {
+          closeModelDropdown();
           return;
         }
-        if (key.downArrow) {
-          setSkillsDropdownIndex((idx) => (idx + 1) % skills.length);
-          return;
-        }
-        if (input === " " && !key.ctrl && !key.meta || key.return && !key.shift && !key.meta) {
-          const skill = skills[skillsDropdownIndex];
-          if (skill) {
-            toggleSelectedSkill(skill);
-          }
-          return;
-        }
-        if (key.tab) {
+        if (showSkillsDropdown) {
           setShowSkillsDropdown(false);
           return;
         }
-      }
-    }
-    if (key.ctrl && (input === "v" || input === "V")) {
-      setStatusMessage("Reading clipboard...");
-      readClipboardImageAsync().then((image) => {
-        if (image) {
-          setImageUrls((prev) => [...prev, image.dataUrl]);
-          setStatusMessage("Attached image from clipboard");
-        } else {
-          setStatusMessage("No image found in clipboard");
+        if (busy) {
+          onInterrupt();
+          setStatusMessage("Interrupting\u2026");
         }
-      }).catch(() => {
-        setStatusMessage("Failed to read clipboard");
-      });
-      return;
-    }
-    if (isClearImageAttachmentsShortcut(input, key)) {
-      if (imageUrls.length > 0) {
-        setImageUrls([]);
-        setStatusMessage("Cleared attached images");
-      } else {
-        setStatusMessage("No attached images to clear");
-      }
-      return;
-    }
-    const noModifier = !key.shift && !key.ctrl && !key.meta;
-    const isPlainReturn = key.return && !key.shift && !key.meta;
-    if (showMenu) {
-      if (key.upArrow) {
-        setMenuIndex((idx) => (idx - 1 + slashMenu.length) % slashMenu.length);
         return;
       }
-      if (key.downArrow) {
-        setMenuIndex((idx) => (idx + 1) % slashMenu.length);
+      if (key.ctrl && (input === "d" || input === "D")) {
+        if (!isEmpty(buffer)) {
+          updateBuffer((s) => deleteForward(s));
+          return;
+        }
+        const now = Date.now();
+        if (pendingExit && now - lastCtrlDAt.current < 2e3) {
+          exit();
+          return;
+        }
+        lastCtrlDAt.current = now;
+        setPendingExit(true);
+        setStatusMessage("press ctrl+d again to exit");
         return;
       }
-      if (key.tab || key.return && !key.shift && !key.meta) {
-        const selected = slashMenu[menuIndex];
-        if (selected) {
-          handleSlashSelection(selected);
+      if (key.ctrl && (input === "c" || input === "C")) {
+        if (busy) {
+          onInterrupt();
+          setStatusMessage("Interrupting\u2026");
+        } else if (!isEmpty(buffer)) {
+          setBuffer(EMPTY_BUFFER);
+        } else {
+          setStatusMessage("press ctrl+d to exit");
+        }
+        return;
+      }
+      if (pendingExit && (!key.ctrl || input !== "d" && input !== "D")) {
+        setPendingExit(false);
+      }
+      if (historyCursor !== -1 && !key.upArrow && !key.downArrow) {
+        exitHistoryBrowsing();
+      }
+      if (showSkillsDropdown) {
+        if (skills.length === 0) {
+          setShowSkillsDropdown(false);
+        } else {
+          if (key.upArrow) {
+            setSkillsDropdownIndex((idx) => (idx - 1 + skills.length) % skills.length);
+            return;
+          }
+          if (key.downArrow) {
+            setSkillsDropdownIndex((idx) => (idx + 1) % skills.length);
+            return;
+          }
+          if (input === " " && !key.ctrl && !key.meta || key.return && !key.shift && !key.meta) {
+            const skill = skills[skillsDropdownIndex];
+            if (skill) {
+              toggleSelectedSkill(skill);
+            }
+            return;
+          }
+          if (key.tab) {
+            setShowSkillsDropdown(false);
+            return;
+          }
+        }
+      }
+      if (modelDropdownStep) {
+        const optionCount = modelDropdownStep === "model" ? MODEL_COMMAND_MODELS.length : MODEL_COMMAND_THINKING_OPTIONS.length;
+        if (key.upArrow) {
+          setModelDropdownIndex((idx) => (idx - 1 + optionCount) % optionCount);
+          return;
+        }
+        if (key.downArrow) {
+          setModelDropdownIndex((idx) => (idx + 1) % optionCount);
+          return;
+        }
+        if (input === " " && !key.ctrl && !key.meta || key.return && !key.shift && !key.meta) {
+          selectModelDropdownItem();
+          return;
+        }
+        if (key.tab) {
+          closeModelDropdown();
           return;
         }
       }
-    }
-    if (busy && isPlainReturn) {
-      setStatusMessage("wait for the current response or press esc to interrupt");
-      return;
-    }
-    if (key.return) {
-      const isShiftEnter = key.shift || key.meta;
-      if (isShiftEnter) {
-        updateBuffer((s) => insertText(s, "\n"));
+      if (key.ctrl && (input === "v" || input === "V")) {
+        setStatusMessage("Reading clipboard...");
+        readClipboardImageAsync().then((image) => {
+          if (image) {
+            setImageUrls((prev) => [...prev, image.dataUrl]);
+            setStatusMessage("Attached image from clipboard");
+          } else {
+            setStatusMessage("No image found in clipboard");
+          }
+        }).catch(() => {
+          setStatusMessage("Failed to read clipboard");
+        });
         return;
       }
-      submitCurrentBuffer();
-      return;
-    }
-    if (key.delete) {
-      updateBuffer((s) => deleteForward(s));
-      return;
-    }
-    if (key.backspace) {
-      updateBuffer((s) => backspace(s));
-      return;
-    }
-    if ((key.ctrl || key.meta) && key.leftArrow) {
-      updateBuffer((s) => moveWordLeft(s));
-      return;
-    }
-    if ((key.ctrl || key.meta) && key.rightArrow) {
-      updateBuffer((s) => moveWordRight(s));
-      return;
-    }
-    if (key.leftArrow) {
-      updateBuffer((s) => moveLeft(s));
-      return;
-    }
-    if (key.rightArrow) {
-      updateBuffer((s) => moveRight(s));
-      return;
-    }
-    if (key.home) {
-      updateBuffer((s) => moveLineStart(s));
-      return;
-    }
-    if (key.end) {
-      updateBuffer((s) => moveLineEnd(s));
-      return;
-    }
-    if (key.upArrow) {
-      if (noModifier && (historyCursor !== -1 || buffer.cursor === 0) && promptHistory.length > 0) {
+      if (isClearImageAttachmentsShortcut(input, key)) {
+        if (imageUrls.length > 0) {
+          setImageUrls([]);
+          setStatusMessage("Cleared attached images");
+        } else {
+          setStatusMessage("No attached images to clear");
+        }
+        return;
+      }
+      const noModifier = !key.shift && !key.ctrl && !key.meta;
+      const isPlainReturn = key.return && !key.shift && !key.meta;
+      if (showMenu) {
+        if (key.upArrow) {
+          setMenuIndex((idx) => (idx - 1 + slashMenu.length) % slashMenu.length);
+          return;
+        }
+        if (key.downArrow) {
+          setMenuIndex((idx) => (idx + 1) % slashMenu.length);
+          return;
+        }
+        if (key.tab || key.return && !key.shift && !key.meta) {
+          const selected = slashMenu[menuIndex];
+          if (selected) {
+            handleSlashSelection(selected);
+            return;
+          }
+        }
+      }
+      if (busy && isPlainReturn) {
+        setStatusMessage("wait for the current response or press esc to interrupt");
+        return;
+      }
+      if (key.return) {
+        const isShiftEnter = key.shift || key.meta;
+        if (isShiftEnter) {
+          updateBuffer((s) => insertText(s, "\n"));
+          return;
+        }
+        submitCurrentBuffer();
+        return;
+      }
+      if (key.delete) {
+        updateBuffer((s) => deleteForward(s));
+        return;
+      }
+      if (key.backspace) {
+        updateBuffer((s) => backspace(s));
+        return;
+      }
+      if ((key.ctrl || key.meta) && key.leftArrow) {
+        updateBuffer((s) => moveWordLeft(s));
+        return;
+      }
+      if ((key.ctrl || key.meta) && key.rightArrow) {
+        updateBuffer((s) => moveWordRight(s));
+        return;
+      }
+      if (key.leftArrow) {
+        updateBuffer((s) => moveLeft(s));
+        return;
+      }
+      if (key.rightArrow) {
+        updateBuffer((s) => moveRight(s));
+        return;
+      }
+      if (key.home) {
+        updateBuffer((s) => moveLineStart(s));
+        return;
+      }
+      if (key.end) {
+        updateBuffer((s) => moveLineEnd(s));
+        return;
+      }
+      if (key.upArrow) {
+        if (noModifier && (historyCursor !== -1 || buffer.cursor === 0) && promptHistory.length > 0) {
+          navigateHistory(-1);
+          return;
+        }
+        updateBuffer((s) => moveUp(s));
+        return;
+      }
+      if (key.downArrow) {
+        if (noModifier && (historyCursor !== -1 || buffer.cursor === buffer.text.length)) {
+          navigateHistory(1);
+          return;
+        }
+        updateBuffer((s) => moveDown(s));
+        return;
+      }
+      if (key.ctrl && (input === "p" || input === "P")) {
         navigateHistory(-1);
         return;
       }
-      updateBuffer((s) => moveUp(s));
-      return;
-    }
-    if (key.downArrow) {
-      if (noModifier && (historyCursor !== -1 || buffer.cursor === buffer.text.length)) {
+      if (key.ctrl && (input === "n" || input === "N")) {
         navigateHistory(1);
         return;
       }
-      updateBuffer((s) => moveDown(s));
-      return;
-    }
-    if (key.ctrl && (input === "p" || input === "P")) {
-      navigateHistory(-1);
-      return;
-    }
-    if (key.ctrl && (input === "n" || input === "N")) {
-      navigateHistory(1);
-      return;
-    }
-    if (key.ctrl && (input === "a" || input === "A")) {
-      updateBuffer((s) => moveLineStart(s));
-      return;
-    }
-    if (key.ctrl && (input === "e" || input === "E")) {
-      updateBuffer((s) => moveLineEnd(s));
-      return;
-    }
-    if (key.ctrl && (input === "b" || input === "B")) {
-      updateBuffer((s) => moveLeft(s));
-      return;
-    }
-    if (key.ctrl && (input === "f" || input === "F")) {
-      updateBuffer((s) => moveRight(s));
-      return;
-    }
-    if (key.meta && (input === "b" || input === "B")) {
-      updateBuffer((s) => moveWordLeft(s));
-      return;
-    }
-    if (key.meta && (input === "f" || input === "F")) {
-      updateBuffer((s) => moveWordRight(s));
-      return;
-    }
-    if (key.ctrl && (input === "k" || input === "K")) {
-      updateBuffer((s) => killLine(s));
-      return;
-    }
-    if (key.ctrl && (input === "u" || input === "U")) {
-      updateBuffer(() => EMPTY_BUFFER);
-      return;
-    }
-    if (key.ctrl && (input === "w" || input === "W")) {
-      updateBuffer((s) => deleteWordBefore(s));
-      return;
-    }
-    if (key.ctrl && (input === "j" || input === "J")) {
-      updateBuffer((s) => insertText(s, "\n"));
-      return;
-    }
-    if (input.startsWith("\x1B")) {
-      return;
-    }
-    if (input && !key.ctrl && !key.meta) {
-      const sanitized = input.replace(/\r/g, "");
-      updateBuffer((s) => insertText(s, sanitized));
-    }
-  }, { isActive: !disabled });
+      if (key.ctrl && (input === "a" || input === "A")) {
+        updateBuffer((s) => moveLineStart(s));
+        return;
+      }
+      if (key.ctrl && (input === "e" || input === "E")) {
+        updateBuffer((s) => moveLineEnd(s));
+        return;
+      }
+      if (key.ctrl && (input === "b" || input === "B")) {
+        updateBuffer((s) => moveLeft(s));
+        return;
+      }
+      if (key.ctrl && (input === "f" || input === "F")) {
+        updateBuffer((s) => moveRight(s));
+        return;
+      }
+      if (key.meta && (input === "b" || input === "B")) {
+        updateBuffer((s) => moveWordLeft(s));
+        return;
+      }
+      if (key.meta && (input === "f" || input === "F")) {
+        updateBuffer((s) => moveWordRight(s));
+        return;
+      }
+      if (key.ctrl && (input === "k" || input === "K")) {
+        updateBuffer((s) => killLine(s));
+        return;
+      }
+      if (key.ctrl && (input === "u" || input === "U")) {
+        updateBuffer(() => EMPTY_BUFFER);
+        return;
+      }
+      if (key.ctrl && (input === "w" || input === "W")) {
+        updateBuffer((s) => deleteWordBefore(s));
+        return;
+      }
+      if (key.meta && (input === "d" || input === "D")) {
+        updateBuffer((s) => deleteWordAfter(s));
+        return;
+      }
+      if (key.meta && (input === "\x7F" || input === "\b")) {
+        updateBuffer((s) => deleteWordBefore(s));
+        return;
+      }
+      if (key.ctrl && (input === "j" || input === "J")) {
+        updateBuffer((s) => insertText(s, "\n"));
+        return;
+      }
+      if (input.startsWith("\x1B")) {
+        return;
+      }
+      if (input && !key.ctrl && !key.meta) {
+        const sanitized = input.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        updateBuffer((s) => insertText(s, sanitized));
+      }
+    },
+    { isActive: !disabled }
+  );
   function exitHistoryBrowsing() {
     setHistoryCursor(-1);
     setDraftBeforeHistory(null);
@@ -6111,8 +6317,21 @@ var PromptInput = import_react4.default.memo(function PromptInput2({
       setShowSkillsDropdown(true);
       return;
     }
+    if (item.kind === "model") {
+      clearSlashToken();
+      openModelDropdown();
+      return;
+    }
     if (item.kind === "new") {
       onSubmit({ text: "", imageUrls: [], command: "new" });
+      setBuffer(EMPTY_BUFFER);
+      setImageUrls([]);
+      setSelectedSkills([]);
+      setShowSkillsDropdown(false);
+      return;
+    }
+    if (item.kind === "init") {
+      onSubmit(buildInitPromptSubmission(selectedSkills));
       setBuffer(EMPTY_BUFFER);
       setImageUrls([]);
       setSelectedSkills([]);
@@ -6169,23 +6388,64 @@ var PromptInput = import_react4.default.memo(function PromptInput2({
     exitHistoryBrowsing();
     setBuffer((state) => removeCurrentSlashToken(state));
   }
-  const visibleSkillStart = Math.min(
-    Math.max(0, skillsDropdownIndex - 7),
-    Math.max(0, skills.length - 8)
-  );
+  function openModelDropdown() {
+    const currentModelIndex = MODEL_COMMAND_MODELS.findIndex((model) => model === modelConfig.model);
+    setPendingModel(null);
+    setModelDropdownStep("model");
+    setModelDropdownIndex(currentModelIndex >= 0 ? currentModelIndex : 0);
+    setShowSkillsDropdown(false);
+  }
+  function closeModelDropdown() {
+    setModelDropdownStep(null);
+    setPendingModel(null);
+  }
+  function selectModelDropdownItem() {
+    if (modelDropdownStep === "model") {
+      const model = MODEL_COMMAND_MODELS[modelDropdownIndex] ?? modelConfig.model;
+      setPendingModel(model);
+      setModelDropdownStep("thinking");
+      setModelDropdownIndex(getThinkingOptionIndex(modelConfig));
+      return;
+    }
+    const option = MODEL_COMMAND_THINKING_OPTIONS[modelDropdownIndex] ?? MODEL_COMMAND_THINKING_OPTIONS[0];
+    const selection = {
+      model: pendingModel ?? modelConfig.model,
+      thinkingEnabled: option.thinkingEnabled,
+      reasoningEffort: option.reasoningEffort ?? modelConfig.reasoningEffort
+    };
+    closeModelDropdown();
+    Promise.resolve(onModelConfigChange(selection)).then((message) => {
+      if (message) {
+        setStatusMessage(message);
+      }
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      setStatusMessage(`Failed to update model settings: ${message}`);
+    });
+  }
+  const visibleSkillStart = Math.min(Math.max(0, skillsDropdownIndex - 7), Math.max(0, skills.length - 8));
   const visibleSkills = skills.slice(visibleSkillStart, visibleSkillStart + 8);
-  return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_ink3.Box, { flexDirection: "column", width: screenWidth, children: [
-    imageUrls.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_ink3.Box, { flexDirection: "column", borderStyle: "round", borderColor: "magenta", paddingX: 1, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ink3.Text, { color: "magentaBright", bold: true, children: "\u{1F5BC}  Image Attached" }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ink3.Text, { color: "magenta", children: `${imageUrls.length} image${imageUrls.length === 1 ? "" : "s"} pasted` }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ink3.Text, { dimColor: true, children: IMAGE_ATTACHMENT_CLEAR_HINT })
+  const modelDropdownItems = modelDropdownStep === "model" ? MODEL_COMMAND_MODELS.map((model) => ({
+    label: model,
+    selected: model === (pendingModel ?? modelConfig.model),
+    description: model === modelConfig.model ? "current model" : ""
+  })) : MODEL_COMMAND_THINKING_OPTIONS.map((option) => ({
+    label: option.label,
+    selected: getThinkingOptionIndex(modelConfig) === MODEL_COMMAND_THINKING_OPTIONS.indexOf(option),
+    description: option.thinkingEnabled ? `reasoningEffort: ${option.reasoningEffort}` : "thinking disabled"
+  }));
+  return /* @__PURE__ */ jsxs2(Box2, { flexDirection: "column", width: screenWidth, children: [
+    imageUrls.length > 0 ? /* @__PURE__ */ jsxs2(Box2, { flexDirection: "column", borderStyle: "round", borderColor: "magenta", paddingX: 1, children: [
+      /* @__PURE__ */ jsx2(Text2, { color: "magentaBright", bold: true, children: "\u{1F5BC} Image Attached" }),
+      /* @__PURE__ */ jsx2(Text2, { color: "magenta", children: `${imageUrls.length} image${imageUrls.length === 1 ? "" : "s"} pasted` }),
+      /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: IMAGE_ATTACHMENT_CLEAR_HINT })
     ] }) : null,
-    selectedSkills.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_ink3.Box, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ink3.Text, { color: "magenta", wrap: "truncate-end", children: formatSelectedSkillsStatus(selectedSkills) }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ink3.Text, { dimColor: true, children: " (use /skills to edit)" })
+    selectedSkills.length > 0 ? /* @__PURE__ */ jsxs2(Box2, { children: [
+      /* @__PURE__ */ jsx2(Text2, { color: "magenta", wrap: "truncate-end", children: formatSelectedSkillsStatus(selectedSkills) }),
+      /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: " (use /skills to edit)" })
     ] }) : null,
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-      import_ink3.Box,
+    /* @__PURE__ */ jsxs2(
+      Box2,
       {
         borderStyle: "single",
         borderTop: true,
@@ -6194,40 +6454,54 @@ var PromptInput = import_react4.default.memo(function PromptInput2({
         borderRight: false,
         borderDimColor: true,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(PromptPrefixLine, { busy }),
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ink3.Text, { children: renderBufferWithCursor(buffer, !disabled && hasTerminalFocus, placeholder) })
+          /* @__PURE__ */ jsx2(PromptPrefixLine, { busy }),
+          /* @__PURE__ */ jsx2(Text2, { children: renderBufferWithCursor(buffer, !disabled && hasFocus, placeholder) })
         ]
       }
     ),
-    showSkillsDropdown ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_ink3.Box, { flexDirection: "column", marginBottom: 1, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ink3.Text, { color: "magenta", bold: true, children: "Select Skills" }),
-      skills.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ink3.Text, { dimColor: true, children: "No skills found" }) : visibleSkills.map((skill, idx) => {
+    showSkillsDropdown ? /* @__PURE__ */ jsxs2(Box2, { flexDirection: "column", marginBottom: 1, children: [
+      /* @__PURE__ */ jsx2(Text2, { color: "magenta", bold: true, children: "Select Skills" }),
+      skills.length === 0 ? /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: "No skills found" }) : visibleSkills.map((skill, idx) => {
         const skillIndex = visibleSkillStart + idx;
         const selected = isSkillSelected(selectedSkills, skill);
         const active = skillIndex === skillsDropdownIndex;
-        return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_ink3.Text, { color: active ? "cyanBright" : void 0, wrap: "truncate-end", children: [
+        return /* @__PURE__ */ jsxs2(Text2, { color: active ? "cyanBright" : void 0, wrap: "truncate-end", children: [
           active ? "\u203A " : "  ",
           selected ? "\u25CF" : "\u25CB",
           " ",
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ink3.Text, { bold: true, children: skill.name }),
-          skill.isLoaded ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ink3.Text, { color: "green", children: "  \u2713" }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ink3.Text, { dimColor: true, children: `  ${skill.path}` })
+          /* @__PURE__ */ jsx2(Text2, { bold: true, children: skill.name }),
+          skill.isLoaded ? /* @__PURE__ */ jsx2(Text2, { color: "green", children: " \u2713" }) : null,
+          /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: `  ${skill.path}` })
         ] }, skill.path || skill.name);
       }),
-      visibleSkillStart > 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_ink3.Text, { dimColor: true, children: [
+      visibleSkillStart > 0 ? /* @__PURE__ */ jsxs2(Text2, { dimColor: true, children: [
         "\u2026 ",
         visibleSkillStart,
         " above"
       ] }) : null,
-      visibleSkillStart + visibleSkills.length < skills.length ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_ink3.Text, { dimColor: true, children: [
+      visibleSkillStart + visibleSkills.length < skills.length ? /* @__PURE__ */ jsxs2(Text2, { dimColor: true, children: [
         "\u2026 ",
         skills.length - visibleSkillStart - visibleSkills.length,
         " more"
       ] }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ink3.Text, { dimColor: true, children: "space toggle \xB7 enter toggle \xB7 esc to close" })
+      /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: "space toggle \xB7 enter toggle \xB7 esc to close" })
     ] }) : null,
-    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(SlashCommandMenu_default, { width: screenWidth, items: slashMenu, activeIndex: menuIndex }),
-    !showMenu && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ink3.Box, { children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ink3.Text, { dimColor: true, children: footerText }) })
+    modelDropdownStep ? /* @__PURE__ */ jsxs2(Box2, { flexDirection: "column", marginBottom: 1, children: [
+      /* @__PURE__ */ jsx2(Text2, { color: "magenta", bold: true, children: modelDropdownStep === "model" ? "Select Model" : "Select Thinking Mode" }),
+      modelDropdownItems.map((item, idx) => {
+        const active = idx === modelDropdownIndex;
+        return /* @__PURE__ */ jsxs2(Text2, { color: active ? "cyanBright" : void 0, wrap: "truncate-end", children: [
+          active ? "\u203A " : "  ",
+          item.selected ? "\u25CF" : "\u25CB",
+          " ",
+          /* @__PURE__ */ jsx2(Text2, { bold: true, children: item.label }),
+          item.description ? /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: `  ${item.description}` }) : null
+        ] }, item.label);
+      }),
+      /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: modelDropdownStep === "model" ? "space/enter select model \xB7 esc to cancel" : "space/enter apply \xB7 esc to cancel" })
+    ] }) : null,
+    /* @__PURE__ */ jsx2(SlashCommandMenu_default, { width: screenWidth, items: slashMenu, activeIndex: menuIndex }),
+    !showMenu && /* @__PURE__ */ jsx2(Box2, { children: /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: footerText }) })
   ] });
 });
 var IMAGE_ATTACHMENT_CLEAR_HINT = "Ctrl+X to clear";
@@ -6249,6 +6523,22 @@ function addUniqueSkill(skills, skill) {
 }
 function toggleSkillSelection(skills, skill) {
   return isSkillSelected(skills, skill) ? skills.filter((item) => item.name !== skill.name) : [...skills, skill];
+}
+function buildInitPromptSubmission(selectedSkills) {
+  return {
+    text: "/init",
+    imageUrls: [],
+    selectedSkills: selectedSkills.length > 0 ? selectedSkills : void 0
+  };
+}
+function getThinkingOptionIndex(config) {
+  const index = MODEL_COMMAND_THINKING_OPTIONS.findIndex((option) => {
+    if (!config.thinkingEnabled) {
+      return !option.thinkingEnabled;
+    }
+    return option.thinkingEnabled && option.reasoningEffort === config.reasoningEffort;
+  });
+  return index >= 0 ? index : 0;
 }
 function removeCurrentSlashToken(state) {
   let start = state.cursor;
@@ -6273,9 +6563,9 @@ function renderBufferWithCursor(state, isFocused, placeholder) {
   const after = text.slice(cursor + 1);
   if (text.length === 0 && placeholder) {
     if (!isFocused) {
-      return import_chalk.default.dim(`  ${placeholder}`);
+      return chalk.dim(`  ${placeholder}`);
     }
-    return renderCursorCell(" ") + import_chalk.default.dim(` ${placeholder}`);
+    return renderCursorCell(" ") + chalk.dim(` ${placeholder}`);
   }
   if (!isFocused) {
     return text.endsWith("\n") ? `${text} ` : text;
@@ -6293,10 +6583,10 @@ function renderCursorCell(value) {
 }
 
 // src/ui/MessageView.tsx
-var import_ink4 = require("ink");
+import { Box as Box3, Text as Text3 } from "ink";
 
 // src/ui/markdown.ts
-var import_chalk2 = __toESM(require("chalk"), 1);
+import chalk2 from "chalk";
 function renderMarkdown(text) {
   if (!text) {
     return "";
@@ -6304,8 +6594,8 @@ function renderMarkdown(text) {
   const fenceSegments = splitByFences(text);
   return fenceSegments.map((segment) => {
     if (segment.kind === "code") {
-      const langTag = segment.lang ? import_chalk2.default.dim(`[${segment.lang}]`) + "\n" : "";
-      return langTag + import_chalk2.default.cyan(segment.body);
+      const langTag = segment.lang ? chalk2.dim(`[${segment.lang}]`) + "\n" : "";
+      return langTag + chalk2.cyan(segment.body);
     }
     return renderInlineBlock(segment.body);
   }).join("");
@@ -6360,23 +6650,23 @@ function renderInlineLine(line) {
   const headingMatch = /^(\s*)(#{1,6})\s+(.*)$/.exec(line);
   if (headingMatch) {
     const [, lead, hashes, content] = headingMatch;
-    const styled = hashes.length <= 2 ? import_chalk2.default.bold.cyanBright(content) : import_chalk2.default.bold.cyan(content);
-    return `${lead}${import_chalk2.default.dim(hashes)} ${styled}`;
+    const styled = hashes.length <= 2 ? chalk2.bold.cyanBright(content) : chalk2.bold.cyan(content);
+    return `${lead}${chalk2.dim(hashes)} ${styled}`;
   }
   const listMatch = /^(\s*)([-*+])\s+(.*)$/.exec(line);
   if (listMatch) {
     const [, lead, bullet, content] = listMatch;
-    return `${lead}${import_chalk2.default.yellow(bullet)} ${renderInlineSpans(content)}`;
+    return `${lead}${chalk2.yellow(bullet)} ${renderInlineSpans(content)}`;
   }
   const numListMatch = /^(\s*)(\d+\.)\s+(.*)$/.exec(line);
   if (numListMatch) {
     const [, lead, marker, content] = numListMatch;
-    return `${lead}${import_chalk2.default.yellow(marker)} ${renderInlineSpans(content)}`;
+    return `${lead}${chalk2.yellow(marker)} ${renderInlineSpans(content)}`;
   }
   const quoteMatch = /^(\s*)>\s?(.*)$/.exec(line);
   if (quoteMatch) {
     const [, lead, content] = quoteMatch;
-    return `${lead}${import_chalk2.default.dim("\u2502 ")}${import_chalk2.default.italic(renderInlineSpans(content))}`;
+    return `${lead}${chalk2.dim("\u2502 ")}${chalk2.italic(renderInlineSpans(content))}`;
   }
   return renderInlineSpans(line);
 }
@@ -6385,15 +6675,15 @@ function renderInlineSpans(text) {
     return text;
   }
   let result = text;
-  result = result.replace(/`([^`]+)`/g, (_, inner) => import_chalk2.default.cyan(inner));
-  result = result.replace(/\*\*([^*]+)\*\*/g, (_, inner) => import_chalk2.default.bold(inner));
-  result = result.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, (_, inner) => import_chalk2.default.italic(inner));
-  result = result.replace(/_([^_\n]+)_/g, (_, inner) => import_chalk2.default.italic(inner));
+  result = result.replace(/`([^`]+)`/g, (_, inner) => chalk2.cyan(inner));
+  result = result.replace(/\*\*([^*]+)\*\*/g, (_, inner) => chalk2.bold(inner));
+  result = result.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, (_, inner) => chalk2.italic(inner));
+  result = result.replace(/_([^_\n]+)_/g, (_, inner) => chalk2.italic(inner));
   return result;
 }
 
 // src/ui/MessageView.tsx
-var import_jsx_runtime3 = require("react/jsx-runtime");
+import { jsx as jsx3, jsxs as jsxs3 } from "react/jsx-runtime";
 function MessageView({ message, collapsed }) {
   if (!message.visible) {
     return null;
@@ -6402,11 +6692,11 @@ function MessageView({ message, collapsed }) {
     const text = message.content || "";
     const imageParams = Array.isArray(message.contentParams) ? message.contentParams : null;
     const hasImages = imageParams !== null && imageParams.length > 0;
-    return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Box, { marginLeft: 1, marginBottom: 1, flexDirection: "column", marginY: 0, children: /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_ink4.Box, { flexGrow: 1, gap: 1, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Box, { children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Text, { color: "#229ac3", children: `>` }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_ink4.Box, { flexGrow: 1, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Text, { color: "#229ac3", children: text }),
-        Array.isArray(message.contentParams) && message.contentParams.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Text, { color: "#229ac3", children: `  \u{1F4CE} ${message.contentParams.length} image attachment(s)` }) : null
+    return /* @__PURE__ */ jsx3(Box3, { marginLeft: 1, marginBottom: 1, flexDirection: "column", marginY: 0, children: /* @__PURE__ */ jsxs3(Box3, { flexGrow: 1, gap: 1, children: [
+      /* @__PURE__ */ jsx3(Box3, { children: /* @__PURE__ */ jsx3(Text3, { color: "#229ac3", children: `>` }) }),
+      /* @__PURE__ */ jsxs3(Box3, { flexGrow: 1, children: [
+        /* @__PURE__ */ jsx3(Text3, { color: "#229ac3", children: text }),
+        Array.isArray(message.contentParams) && message.contentParams.length > 0 ? /* @__PURE__ */ jsx3(Text3, { color: "#229ac3", children: `  \u{1F4CE} ${message.contentParams.length} image attachment(s)` }) : null
       ] })
     ] }) });
   }
@@ -6416,23 +6706,23 @@ function MessageView({ message, collapsed }) {
     if (isThinking) {
       const summary = buildThinkingSummary(content, message.messageParams);
       if (collapsed !== false) {
-        return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Box, { marginLeft: 1, marginY: 0, children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(StatusLine, { bulletColor: "gray", name: "Thinking", params: summary }) });
+        return /* @__PURE__ */ jsx3(Box3, { marginLeft: 1, marginY: 0, children: /* @__PURE__ */ jsx3(StatusLine, { bulletColor: "gray", name: "Thinking", params: summary }) });
       }
-      return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_ink4.Box, { marginLeft: 1, flexDirection: "column", marginY: 0, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(StatusLine, { bulletColor: "gray", name: "Thinking", params: summary }),
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Box, { flexDirection: "column", children: content ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Text, { dimColor: true, children: renderMarkdown(content) }) : null })
+      return /* @__PURE__ */ jsxs3(Box3, { marginLeft: 1, flexDirection: "column", marginY: 0, children: [
+        /* @__PURE__ */ jsx3(StatusLine, { bulletColor: "gray", name: "Thinking", params: summary }),
+        /* @__PURE__ */ jsx3(Box3, { flexDirection: "column", children: content ? /* @__PURE__ */ jsx3(Text3, { dimColor: true, children: renderMarkdown(content) }) : null })
       ] });
     }
-    return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_ink4.Box, { marginLeft: 1, marginBottom: 1, flexGrow: 1, gap: 1, marginY: 0, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Box, { children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Text, { color: "#229ac3", children: "\u2726" }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Box, { flexDirection: "column", flexGrow: 1, children: content ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Text, { children: renderMarkdown(content) }) : null })
+    return /* @__PURE__ */ jsxs3(Box3, { marginLeft: 1, marginBottom: 1, flexGrow: 1, gap: 1, marginY: 0, children: [
+      /* @__PURE__ */ jsx3(Box3, { children: /* @__PURE__ */ jsx3(Text3, { color: "#229ac3", children: "\u2726" }) }),
+      /* @__PURE__ */ jsx3(Box3, { flexDirection: "column", flexGrow: 1, children: content ? /* @__PURE__ */ jsx3(Text3, { children: renderMarkdown(content) }) : null })
     ] });
   }
   if (message.role === "tool") {
     const summary = buildToolSummary(message);
     const diffLines = getToolDiffPreviewLines(summary);
-    return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_ink4.Box, { flexDirection: "column", marginLeft: 1, marginBottom: 1, marginY: 0, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+    return /* @__PURE__ */ jsxs3(Box3, { flexDirection: "column", marginLeft: 1, marginBottom: 1, marginY: 0, children: [
+      /* @__PURE__ */ jsx3(
         StatusLine,
         {
           bulletColor: summary.ok ? "green" : "red",
@@ -6440,18 +6730,18 @@ function MessageView({ message, collapsed }) {
           params: formatToolStatusParams(summary)
         }
       ),
-      diffLines.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(DiffPreview, { lines: diffLines }) : null
+      diffLines.length > 0 ? /* @__PURE__ */ jsx3(DiffPreview, { lines: diffLines }) : null
     ] });
   }
   if (message.role === "system") {
     if (message.meta?.skill) {
-      return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Box, { marginY: 0, marginLeft: 1, marginBottom: 1, children: /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_ink4.Text, { color: "magenta", children: [
+      return /* @__PURE__ */ jsx3(Box3, { marginY: 0, marginLeft: 1, marginBottom: 1, children: /* @__PURE__ */ jsxs3(Text3, { color: "magenta", children: [
         "\u26A1 Loaded skill: ",
         message.meta.skill.name
       ] }) });
     }
     if (message.meta?.isSummary) {
-      return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Box, { marginY: 0, marginLeft: 1, marginBottom: 1, children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Text, { dimColor: true, italic: true, children: "(conversation summary inserted)" }) });
+      return /* @__PURE__ */ jsx3(Box3, { marginY: 0, marginLeft: 1, marginBottom: 1, children: /* @__PURE__ */ jsx3(Text3, { dimColor: true, italic: true, children: "(conversation summary inserted)" }) });
     }
     return null;
   }
@@ -6462,11 +6752,11 @@ function StatusLine({
   name,
   params
 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Text, { wrap: "truncate-end", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Text, { color: bulletColor, children: "\u2727" }, "bullet"),
+  return /* @__PURE__ */ jsx3(Text3, { wrap: "truncate-end", children: [
+    /* @__PURE__ */ jsx3(Text3, { color: bulletColor, children: "\u2727" }, "bullet"),
     " ",
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Text, { bold: true, children: name }, "name"),
-    params ? /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Text, { color: "white", children: `  ${params}` }, "params") : null
+    /* @__PURE__ */ jsx3(Text3, { bold: true, children: name }, "name"),
+    params ? /* @__PURE__ */ jsx3(Text3, { color: "white", children: `  ${params}` }, "params") : null
   ] });
 }
 function formatToolStatusParams(summary) {
@@ -6571,11 +6861,11 @@ function parseDiffPreview(diffPreview) {
   });
 }
 function DiffPreview({ lines }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_ink4.Box, { flexDirection: "column", marginLeft: 2, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Text, { dimColor: true, children: "\u2514 Changes" }),
-    /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Box, { flexDirection: "column", marginLeft: 2, children: lines.map((line, index) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_ink4.Text, { wrap: "truncate-end", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Text, { color: line.kind === "added" ? "green" : line.kind === "removed" ? "red" : "gray", children: line.marker }),
-      /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ink4.Text, { color: line.kind === "added" ? "green" : line.kind === "removed" ? "red" : void 0, children: line.content })
+  return /* @__PURE__ */ jsxs3(Box3, { flexDirection: "column", marginLeft: 2, children: [
+    /* @__PURE__ */ jsx3(Text3, { dimColor: true, children: "\u2514 Changes" }),
+    /* @__PURE__ */ jsx3(Box3, { flexDirection: "column", marginLeft: 2, children: lines.map((line, index) => /* @__PURE__ */ jsxs3(Text3, { wrap: "truncate-end", children: [
+      /* @__PURE__ */ jsx3(Text3, { color: line.kind === "added" ? "green" : line.kind === "removed" ? "red" : "gray", children: line.marker }),
+      /* @__PURE__ */ jsx3(Text3, { color: line.kind === "added" ? "green" : line.kind === "removed" ? "red" : void 0, children: line.content })
     ] }, `${index}-${line.marker}-${line.content}`)) })
   ] });
 }
@@ -6617,30 +6907,60 @@ function buildThinkingSummary(content, messageParams) {
 }
 
 // src/ui/SessionList.tsx
-var import_react5 = require("react");
-var import_ink5 = require("ink");
-var import_jsx_runtime4 = require("react/jsx-runtime");
+import { useState as useState4, useMemo } from "react";
+import { Box as Box4, Text as Text4 } from "ink";
+
+// src/ui/useTerminalSize.ts
+import { useEffect as useEffect4, useState as useState3 } from "react";
+import { useStdout as useStdout2 } from "ink";
+var DEFAULT_COLUMNS = 80;
+var DEFAULT_ROWS = 24;
+function useTerminalSize() {
+  const { stdout } = useStdout2();
+  const readSize = () => ({
+    columns: stdout?.columns ?? DEFAULT_COLUMNS,
+    rows: stdout?.rows ?? DEFAULT_ROWS
+  });
+  const [size, setSize] = useState3(() => readSize());
+  useEffect4(() => {
+    setSize(readSize());
+    if (!stdout?.on) {
+      return;
+    }
+    const handleResize = () => {
+      setSize(readSize());
+    };
+    stdout.on("resize", handleResize);
+    return () => {
+      stdout.off("resize", handleResize);
+    };
+  }, [stdout]);
+  return size;
+}
+
+// src/ui/SessionList.tsx
+import { jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
 function SessionList({ sessions, onSelect, onCancel }) {
-  const [index, setIndex] = (0, import_react5.useState)(0);
-  const { columns, rows } = (0, import_ink5.useWindowSize)();
-  const maxVisibleSessions = (0, import_react5.useMemo)(() => {
+  const [index, setIndex] = useState4(0);
+  const { columns, rows } = useTerminalSize();
+  const maxVisibleSessions = useMemo(() => {
     const reservedLines = 8;
     const linesPerSession = 3;
     const availableLines = Math.max(0, Math.min(rows, 30) - reservedLines);
     return Math.max(1, Math.floor(availableLines / linesPerSession));
   }, [rows]);
-  const safeIndex = (0, import_react5.useMemo)(() => {
+  const safeIndex = useMemo(() => {
     if (sessions.length === 0) return 0;
     return Math.max(0, Math.min(index, sessions.length - 1));
   }, [index, sessions.length]);
-  const scrollOffset = (0, import_react5.useMemo)(() => {
+  const scrollOffset = useMemo(() => {
     if (safeIndex < maxVisibleSessions) return 0;
     return safeIndex - maxVisibleSessions + 1;
   }, [safeIndex, maxVisibleSessions]);
-  const visibleSessions = (0, import_react5.useMemo)(() => {
+  const visibleSessions = useMemo(() => {
     return sessions.slice(scrollOffset, scrollOffset + maxVisibleSessions);
   }, [sessions, scrollOffset, maxVisibleSessions]);
-  (0, import_ink5.useInput)((input, key) => {
+  useTerminalInput((input, key) => {
     if (key.escape || key.ctrl && (input === "c" || input === "C")) {
       onCancel();
       return;
@@ -6680,13 +7000,13 @@ function SessionList({ sessions, onSelect, onCancel }) {
     }
   });
   if (sessions.length === 0) {
-    return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ink5.Box, { flexDirection: "column", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ink5.Text, { color: "yellow", children: "No previous sessions found." }),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ink5.Text, { dimColor: true, children: "Press Esc to go back." })
+    return /* @__PURE__ */ jsxs4(Box4, { flexDirection: "column", children: [
+      /* @__PURE__ */ jsx4(Text4, { color: "yellow", children: "No previous sessions found." }),
+      /* @__PURE__ */ jsx4(Text4, { dimColor: true, children: "Press Esc to go back." })
     ] });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
-    import_ink5.Box,
+  return /* @__PURE__ */ jsx4(
+    Box4,
     {
       flexDirection: "column",
       width: Math.max(20, columns - 6),
@@ -6694,17 +7014,18 @@ function SessionList({ sessions, onSelect, onCancel }) {
       overflow: "hidden",
       paddingX: 1,
       marginTop: 1,
-      children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ink5.Box, { flexDirection: "column", borderStyle: "round", borderDimColor: true, flexGrow: 1, overflow: "hidden", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ink5.Box, { paddingX: 1, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ink5.Text, { bold: true, color: "cyanBright", children: "Resume a session" }),
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ink5.Text, { bold: true, color: "#229ac3", children: [
-            " (",
+      children: /* @__PURE__ */ jsxs4(Box4, { flexDirection: "column", borderStyle: "round", borderDimColor: true, flexGrow: 1, overflow: "hidden", children: [
+        /* @__PURE__ */ jsxs4(Box4, { paddingX: 1, children: [
+          /* @__PURE__ */ jsx4(Text4, { bold: true, color: "cyanBright", children: "Resume a session" }),
+          /* @__PURE__ */ jsxs4(Text4, { bold: true, color: "#229ac3", children: [
+            " ",
+            "(",
             sessions.length,
             " total)"
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
-          import_ink5.Box,
+        /* @__PURE__ */ jsxs4(
+          Box4,
           {
             borderTop: true,
             borderBottom: true,
@@ -6719,31 +7040,38 @@ function SessionList({ sessions, onSelect, onCancel }) {
             children: [
               visibleSessions.map((session, i) => {
                 const actualIndex = scrollOffset + i;
-                return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ink5.Box, { height: 2, marginBottom: 1, children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ink5.Box, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ink5.Text, { color: "#229ac3", children: actualIndex === safeIndex ? "\u203A " : "  " }) }),
-                  /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ink5.Box, { flexDirection: "column", flexGrow: 1, children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ink5.Box, { width: "100%", children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ink5.Text, { ...actualIndex === safeIndex ? { bold: true } : {}, color: actualIndex === safeIndex ? "#229ac3" : void 0, children: formatSessionTitle(session.summary || "Untitled") }),
-                      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ink5.Text, { dimColor: true, children: [
+                return /* @__PURE__ */ jsxs4(Box4, { height: 2, marginBottom: 1, children: [
+                  /* @__PURE__ */ jsx4(Box4, { children: /* @__PURE__ */ jsx4(Text4, { color: "#229ac3", children: actualIndex === safeIndex ? "\u203A " : "  " }) }),
+                  /* @__PURE__ */ jsxs4(Box4, { flexDirection: "column", flexGrow: 1, children: [
+                    /* @__PURE__ */ jsxs4(Box4, { width: "100%", children: [
+                      /* @__PURE__ */ jsx4(
+                        Text4,
+                        {
+                          ...actualIndex === safeIndex ? { bold: true } : {},
+                          color: actualIndex === safeIndex ? "#229ac3" : void 0,
+                          children: formatSessionTitle(session.summary || "Untitled")
+                        }
+                      ),
+                      /* @__PURE__ */ jsxs4(Text4, { dimColor: true, children: [
                         " (",
                         session.status,
                         ")"
                       ] })
                     ] }),
-                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ink5.Box, { width: "100%", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ink5.Text, { dimColor: true, children: [
+                    /* @__PURE__ */ jsx4(Box4, { width: "100%", children: /* @__PURE__ */ jsxs4(Text4, { dimColor: true, children: [
                       formatTimestamp(session.updateTime),
                       " "
                     ] }) })
                   ] })
                 ] }, session.id);
               }),
-              scrollOffset > 0 || scrollOffset + maxVisibleSessions < sessions.length ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ink5.Box, { marginTop: 1, children: [
-                scrollOffset > 0 ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ink5.Text, { dimColor: true, children: [
+              scrollOffset > 0 || scrollOffset + maxVisibleSessions < sessions.length ? /* @__PURE__ */ jsxs4(Box4, { marginTop: 1, children: [
+                scrollOffset > 0 ? /* @__PURE__ */ jsxs4(Text4, { dimColor: true, children: [
                   "\u2026 ",
                   scrollOffset,
                   " newer sessions above. "
                 ] }) : null,
-                scrollOffset + maxVisibleSessions < sessions.length ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ink5.Text, { dimColor: true, children: [
+                scrollOffset + maxVisibleSessions < sessions.length ? /* @__PURE__ */ jsxs4(Text4, { dimColor: true, children: [
                   "\u2026 ",
                   sessions.length - scrollOffset - maxVisibleSessions,
                   " older sessions below."
@@ -6752,7 +7080,7 @@ function SessionList({ sessions, onSelect, onCancel }) {
             ]
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ink5.Box, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ink5.Text, { dimColor: true, children: "\u2191/\u2193 navigate \xB7 PgUp/PgDn page \xB7 Enter select \xB7 Esc cancel" }) })
+        /* @__PURE__ */ jsx4(Box4, { children: /* @__PURE__ */ jsx4(Text4, { dimColor: true, children: "\u2191/\u2193 navigate \xB7 PgUp/PgDn page \xB7 Enter select \xB7 Esc cancel" }) })
       ] })
     }
   );
@@ -6847,22 +7175,32 @@ function findExpandedThinkingId(messages) {
 }
 
 // src/ui/WelcomeScreen.tsx
-var import_react6 = require("react");
-var import_ink7 = require("ink");
-var os8 = __toESM(require("node:os"), 1);
-var import_node_path = __toESM(require("node:path"), 1);
+import { useMemo as useMemo2, useState as useState5 } from "react";
+import { Box as Box5, Text as Text6 } from "ink";
+import * as os8 from "node:os";
+import path11 from "node:path";
 
 // src/ui/ThemedGradient.tsx
-var import_ink6 = require("ink");
-var import_ink_gradient = __toESM(require("ink-gradient"), 1);
-var import_jsx_runtime5 = require("react/jsx-runtime");
+import { Text as Text5 } from "ink";
+import Gradient from "ink-gradient";
+import { jsx as jsx5 } from "react/jsx-runtime";
 var THEME_COLOR = "#229ac3";
 var ThemedGradient = ({ children, ...props }) => {
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(import_ink_gradient.default, { colors: [THEME_COLOR, THEME_COLOR], children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(import_ink6.Text, { ...props, children }) });
+  return /* @__PURE__ */ jsx5(Gradient, { colors: [THEME_COLOR, THEME_COLOR], children: /* @__PURE__ */ jsx5(Text5, { ...props, children }) });
 };
 
+// src/AsciiArt.ts
+var AsciiLogo = [
+  "\u2588\u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2588\u2588\u2588\u2588\u2557      \u2588\u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557",
+  "\u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2557\u2588\u2588\u2554\u2550\u2550\u2550\u2550\u255D\u2588\u2588\u2554\u2550\u2550\u2550\u2550\u255D\u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2557    \u2588\u2588\u2554\u2550\u2550\u2550\u2550\u255D\u2588\u2588\u2554\u2550\u2550\u2550\u2588\u2588\u2557\u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2557\u2588\u2588\u2554\u2550\u2550\u2550\u2550\u255D",
+  "\u2588\u2588\u2551  \u2588\u2588\u2551\u2588\u2588\u2588\u2588\u2588\u2557  \u2588\u2588\u2588\u2588\u2588\u2557  \u2588\u2588\u2588\u2588\u2588\u2588\u2554\u255D    \u2588\u2588\u2551     \u2588\u2588\u2551   \u2588\u2588\u2551\u2588\u2588\u2551  \u2588\u2588\u2551\u2588\u2588\u2588\u2588\u2588\u2557",
+  "\u2588\u2588\u2551  \u2588\u2588\u2551\u2588\u2588\u2554\u2550\u2550\u255D  \u2588\u2588\u2554\u2550\u2550\u255D  \u2588\u2588\u2554\u2550\u2550\u2550\u255D     \u2588\u2588\u2551     \u2588\u2588\u2551   \u2588\u2588\u2551\u2588\u2588\u2551  \u2588\u2588\u2551\u2588\u2588\u2554\u2550\u2550\u255D",
+  "\u2588\u2588\u2588\u2588\u2588\u2588\u2554\u255D\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2551         \u255A\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u255A\u2588\u2588\u2588\u2588\u2588\u2588\u2554\u255D\u2588\u2588\u2588\u2588\u2588\u2588\u2554\u255D\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557",
+  "\u255A\u2550\u2550\u2550\u2550\u2550\u255D \u255A\u2550\u2550\u2550\u2550\u2550\u2550\u255D\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u255D\u255A\u2550\u255D          \u255A\u2550\u2550\u2550\u2550\u2550\u255D \u255A\u2550\u2550\u2550\u2550\u2550\u255D \u255A\u2550\u2550\u2550\u2550\u2550\u255D \u255A\u2550\u2550\u2550\u2550\u2550\u2550\u255D"
+].join("\n");
+
 // src/ui/WelcomeScreen.tsx
-var import_jsx_runtime6 = require("react/jsx-runtime");
+import { jsx as jsx6, jsxs as jsxs5 } from "react/jsx-runtime";
 var TITLE_PANEL_WIDTH = 70;
 var PANEL_CONTENT_HEIGHT = 8;
 var SHORTCUT_TIPS = [
@@ -6880,25 +7218,17 @@ function WelcomeScreen({
   version,
   width
 }) {
-  const tips = (0, import_react6.useMemo)(() => buildWelcomeTips(skills), [skills]);
-  const [tipIndex] = (0, import_react6.useState)(() => randomTipIndex(tips.length));
+  const tips = useMemo2(() => buildWelcomeTips(skills), [skills]);
+  const [tipIndex] = useState5(() => randomTipIndex(tips.length));
   const compact = width < TITLE_PANEL_WIDTH + 42;
   const cwd = formatHomeRelativePath(projectRoot);
   const tip = tips[Math.min(tipIndex, Math.max(0, tips.length - 1))] ?? tips[0];
   const panelWidth = compact ? void 0 : Math.min(width, 72);
-  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_ink7.Box, { flexDirection: "column", marginY: 1, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(import_ink7.Box, { flexDirection: "column", width: panelWidth, children: /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_ink7.Box, { flexDirection: "column", paddingX: 1, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
-        import_ink7.Box,
-        {
-          flexDirection: "column",
-          justifyContent: "center",
-          paddingX: 1,
-          children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(import_ink7.Box, { justifyContent: "center", width: compact ? void 0 : TITLE_PANEL_WIDTH, children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(ThemedGradient, { children: "\u2588\u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2588\u2588\u2588\u2588\u2557      \u2588\u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2557\u2588\u2588\u2554\u2550\u2550\u2550\u2550\u255D\u2588\u2588\u2554\u2550\u2550\u2550\u2550\u255D\u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2557    \u2588\u2588\u2554\u2550\u2550\u2550\u2550\u255D\u2588\u2588\u2554\u2550\u2550\u2550\u2588\u2588\u2557\u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2557\u2588\u2588\u2554\u2550\u2550\u2550\u2550\u255D \u2588\u2588\u2551  \u2588\u2588\u2551\u2588\u2588\u2588\u2588\u2588\u2557  \u2588\u2588\u2588\u2588\u2588\u2557  \u2588\u2588\u2588\u2588\u2588\u2588\u2554\u255D    \u2588\u2588\u2551     \u2588\u2588\u2551   \u2588\u2588\u2551\u2588\u2588\u2551  \u2588\u2588\u2551\u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2551  \u2588\u2588\u2551\u2588\u2588\u2554\u2550\u2550\u255D  \u2588\u2588\u2554\u2550\u2550\u255D  \u2588\u2588\u2554\u2550\u2550\u2550\u255D     \u2588\u2588\u2551     \u2588\u2588\u2551   \u2588\u2588\u2551\u2588\u2588\u2551  \u2588\u2588\u2551\u2588\u2588\u2554\u2550\u2550\u255D \u2588\u2588\u2588\u2588\u2588\u2588\u2554\u255D\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2551         \u255A\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u255A\u2588\u2588\u2588\u2588\u2588\u2588\u2554\u255D\u2588\u2588\u2588\u2588\u2588\u2588\u2554\u255D\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557 \u255A\u2550\u2550\u2550\u2550\u2550\u255D \u255A\u2550\u2550\u2550\u2550\u2550\u2550\u255D\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u255D\u255A\u2550\u255D          \u255A\u2550\u2550\u2550\u2550\u2550\u255D \u255A\u2550\u2550\u2550\u2550\u2550\u255D \u255A\u2550\u2550\u2550\u2550\u2550\u255D \u255A\u2550\u2550\u2550\u2550\u2550\u2550\u255D" }) })
-        }
-      ),
-      /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(
-        import_ink7.Box,
+  return /* @__PURE__ */ jsxs5(Box5, { flexDirection: "column", marginY: 1, children: [
+    /* @__PURE__ */ jsx6(Box5, { flexDirection: "column", width: panelWidth, children: /* @__PURE__ */ jsxs5(Box5, { flexDirection: "column", paddingX: 1, children: [
+      /* @__PURE__ */ jsx6(Box5, { flexDirection: "column", justifyContent: "center", paddingX: 1, children: /* @__PURE__ */ jsx6(Box5, { justifyContent: "center", width: compact ? void 0 : TITLE_PANEL_WIDTH, children: /* @__PURE__ */ jsx6(ThemedGradient, { children: AsciiLogo }) }) }),
+      /* @__PURE__ */ jsxs5(
+        Box5,
         {
           borderStyle: "round",
           borderColor: "#229ac3",
@@ -6908,27 +7238,27 @@ function WelcomeScreen({
           marginTop: compact ? 1 : 0,
           paddingX: 1,
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_ink7.Box, { flexGrow: 1, marginBottom: compact ? 1 : 0, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_ink7.Text, { color: "#229ac3", children: [
+            /* @__PURE__ */ jsxs5(Box5, { flexGrow: 1, marginBottom: compact ? 1 : 0, children: [
+              /* @__PURE__ */ jsxs5(Text6, { color: "#229ac3", children: [
                 ">",
                 "_ Deep Code "
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_ink7.Text, { color: "gray", children: [
+              /* @__PURE__ */ jsxs5(Text6, { color: "gray", children: [
                 " (v",
                 version || "unknown",
                 ")"
               ] })
             ] }),
-            !compact ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(import_ink7.Text, { children: " " }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(SettingRow, { label: "Model", value: settings.model }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(SettingRow, { label: "Thinking Enabled", value: String(settings.thinkingEnabled) }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(SettingRow, { label: "Reasoning Effort", value: settings.reasoningEffort }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(SettingRow, { label: "CWD", value: cwd })
+            !compact ? /* @__PURE__ */ jsx6(Text6, { children: " " }) : null,
+            /* @__PURE__ */ jsx6(SettingRow, { label: "Model", value: settings.model }),
+            /* @__PURE__ */ jsx6(SettingRow, { label: "Thinking Enabled", value: String(settings.thinkingEnabled) }),
+            /* @__PURE__ */ jsx6(SettingRow, { label: "Reasoning Effort", value: settings.reasoningEffort }),
+            /* @__PURE__ */ jsx6(SettingRow, { label: "CWD", value: cwd })
           ]
         }
       )
     ] }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(import_ink7.Box, { flexDirection: "column", width: panelWidth, paddingX: 1, children: tip ? /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(import_ink7.Box, { marginTop: 1, children: /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_ink7.Text, { dimColor: true, children: [
+    /* @__PURE__ */ jsx6(Box5, { flexDirection: "column", width: panelWidth, paddingX: 1, children: tip ? /* @__PURE__ */ jsx6(Box5, { marginTop: 1, children: /* @__PURE__ */ jsxs5(Text6, { dimColor: true, children: [
       "Tips: ",
       tip.label,
       " - ",
@@ -6937,20 +7267,20 @@ function WelcomeScreen({
   ] });
 }
 function SettingRow({ label, value }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_ink7.Box, { flexDirection: "row", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(import_ink7.Box, { width: 20, children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(import_ink7.Text, { children: label }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(import_ink7.Box, { flexGrow: 1, justifyContent: "flex-end", children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(import_ink7.Text, { children: value }) })
+  return /* @__PURE__ */ jsxs5(Box5, { flexDirection: "row", children: [
+    /* @__PURE__ */ jsx6(Box5, { width: 20, children: /* @__PURE__ */ jsx6(Text6, { children: label }) }),
+    /* @__PURE__ */ jsx6(Box5, { flexGrow: 1, justifyContent: "flex-end", children: /* @__PURE__ */ jsx6(Text6, { children: value }) })
   ] });
 }
 function formatHomeRelativePath(value, home = os8.homedir()) {
-  const normalizedValue = import_node_path.default.resolve(value);
-  const normalizedHome = import_node_path.default.resolve(home);
-  const relative2 = import_node_path.default.relative(normalizedHome, normalizedValue);
+  const normalizedValue = path11.resolve(value);
+  const normalizedHome = path11.resolve(home);
+  const relative2 = path11.relative(normalizedHome, normalizedValue);
   if (relative2 === "") {
     return "~";
   }
-  if (!relative2.startsWith("..") && !import_node_path.default.isAbsolute(relative2)) {
-    return `~${import_node_path.default.sep}${relative2}`;
+  if (!relative2.startsWith("..") && !path11.isAbsolute(relative2)) {
+    return `~${path11.sep}${relative2}`;
   }
   return normalizedValue;
 }
@@ -6969,30 +7299,30 @@ function randomTipIndex(length) {
 }
 
 // src/ui/AskUserQuestionPrompt.tsx
-var import_react7 = require("react");
-var import_ink8 = require("ink");
-var import_jsx_runtime7 = require("react/jsx-runtime");
+import { useEffect as useEffect5, useMemo as useMemo3, useState as useState6 } from "react";
+import { Box as Box6, Text as Text7 } from "ink";
+import { jsx as jsx7, jsxs as jsxs6 } from "react/jsx-runtime";
 var OTHER_VALUE = "__other__";
 function AskUserQuestionPrompt({ questions, onSubmit, onCancel }) {
-  const [questionIndex, setQuestionIndex] = (0, import_react7.useState)(0);
-  const [cursorIndex, setCursorIndex] = (0, import_react7.useState)(0);
-  const [answers, setAnswers] = (0, import_react7.useState)({});
-  const [selectedValues, setSelectedValues] = (0, import_react7.useState)({});
-  const [otherTexts, setOtherTexts] = (0, import_react7.useState)({});
-  const [statusMessage, setStatusMessage] = (0, import_react7.useState)(null);
+  const [questionIndex, setQuestionIndex] = useState6(0);
+  const [cursorIndex, setCursorIndex] = useState6(0);
+  const [answers, setAnswers] = useState6({});
+  const [selectedValues, setSelectedValues] = useState6({});
+  const [otherTexts, setOtherTexts] = useState6({});
+  const [statusMessage, setStatusMessage] = useState6(null);
   const question = questions[questionIndex];
-  const options = (0, import_react7.useMemo)(() => buildOptions(question), [question]);
+  const options = useMemo3(() => buildOptions(question), [question]);
   const selectedForQuestion = selectedValues[questionIndex] ?? [];
   const otherText = otherTexts[questionIndex] ?? "";
   const isCurrentOther = options[cursorIndex]?.isOther === true;
-  (0, import_react7.useEffect)(() => {
+  useEffect5(() => {
     if (!statusMessage) {
       return;
     }
     const timer = setTimeout(() => setStatusMessage(null), 2500);
     return () => clearTimeout(timer);
   }, [statusMessage]);
-  (0, import_react7.useEffect)(() => {
+  useEffect5(() => {
     setQuestionIndex(0);
     setCursorIndex(0);
     setAnswers({});
@@ -7000,7 +7330,7 @@ function AskUserQuestionPrompt({ questions, onSubmit, onCancel }) {
     setOtherTexts({});
     setStatusMessage(null);
   }, [questions]);
-  (0, import_react7.useEffect)(() => {
+  useEffect5(() => {
     if (cursorIndex >= options.length) {
       setCursorIndex(Math.max(0, options.length - 1));
     }
@@ -7076,7 +7406,9 @@ function AskUserQuestionPrompt({ questions, onSubmit, onCancel }) {
   function commitCurrentQuestion() {
     const answer = buildAnswerForQuestion(question, options[cursorIndex], selectedForQuestion, otherText);
     if (!answer) {
-      setStatusMessage(question.multiSelect ? "Select at least one option with Space, or type an Other answer." : "Select an option, or type an Other answer.");
+      setStatusMessage(
+        question.multiSelect ? "Select at least one option with Space, or type an Other answer." : "Select an option, or type an Other answer."
+      );
       return;
     }
     const nextAnswers = {
@@ -7091,39 +7423,50 @@ function AskUserQuestionPrompt({ questions, onSubmit, onCancel }) {
     setQuestionIndex((index) => index + 1);
     setCursorIndex(0);
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_ink8.Box, { flexDirection: "column", borderStyle: "round", borderColor: "yellow", paddingX: 1, marginY: 1, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_ink8.Box, { marginBottom: 1, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(import_ink8.Text, { color: "yellow", bold: true, children: "Answer questions" }),
-      /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_ink8.Text, { dimColor: true, children: [
-        "  ",
+  return /* @__PURE__ */ jsxs6(Box6, { flexDirection: "column", borderStyle: "round", borderColor: "yellow", paddingX: 1, marginY: 1, children: [
+    /* @__PURE__ */ jsxs6(Box6, { marginBottom: 1, children: [
+      /* @__PURE__ */ jsx7(Text7, { color: "yellow", bold: true, children: "Answer questions" }),
+      /* @__PURE__ */ jsxs6(Text7, { dimColor: true, children: [
+        " ",
         questionIndex + 1,
         "/",
         questions.length
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(import_ink8.Text, { bold: true, children: question.question }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(import_ink8.Box, { flexDirection: "column", marginTop: 1, children: options.map((option, index) => {
+    /* @__PURE__ */ jsx7(Text7, { bold: true, children: question.question }),
+    /* @__PURE__ */ jsx7(Box6, { flexDirection: "column", marginTop: 1, children: options.map((option, index) => {
       const isCursor = index === cursorIndex;
       const isSelected = option.isOther ? selectedForQuestion.includes(OTHER_VALUE) || Boolean(otherText.trim()) : selectedForQuestion.includes(option.value) || answers[question.question] === option.label;
       const marker = question.multiSelect ? isSelected ? "[x]" : "[ ]" : isSelected ? "\u25CF" : "\u25CB";
-      return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_ink8.Box, { flexDirection: "column", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_ink8.Text, { color: isCursor ? "cyanBright" : void 0, children: [
+      return /* @__PURE__ */ jsxs6(Box6, { flexDirection: "column", children: [
+        /* @__PURE__ */ jsxs6(Text7, { color: isCursor ? "cyanBright" : void 0, children: [
           isCursor ? "\u203A " : "  ",
           marker,
           " ",
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(import_ink8.Text, { bold: isCursor, children: option.label })
+          /* @__PURE__ */ jsx7(Text7, { bold: isCursor, children: option.label })
         ] }),
-        option.isOther ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(import_ink8.Box, { marginLeft: 4, marginTop: 0, borderStyle: "single", borderColor: isCursor ? "cyanBright" : "gray", paddingX: 1, width: 64, children: otherText ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_ink8.Text, { color: "white", children: [
-          otherText,
-          isCursor ? /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(import_ink8.Text, { color: "cyanBright", children: "\u258C" }) : null
-        ] }) : /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(import_ink8.Text, { dimColor: true, children: isCursor ? "type your answer here" : "type a custom answer" }) }) : null,
-        option.description ? /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(import_ink8.Text, { dimColor: true, children: [
-          "      ",
+        option.isOther ? /* @__PURE__ */ jsx7(
+          Box6,
+          {
+            marginLeft: 4,
+            marginTop: 0,
+            borderStyle: "single",
+            borderColor: isCursor ? "cyanBright" : "gray",
+            paddingX: 1,
+            width: 64,
+            children: otherText ? /* @__PURE__ */ jsxs6(Text7, { color: "white", children: [
+              otherText,
+              isCursor ? /* @__PURE__ */ jsx7(Text7, { color: "cyanBright", children: "\u258C" }) : null
+            ] }) : /* @__PURE__ */ jsx7(Text7, { dimColor: true, children: isCursor ? "type your answer here" : "type a custom answer" })
+          }
+        ) : null,
+        option.description ? /* @__PURE__ */ jsxs6(Text7, { dimColor: true, children: [
+          " ",
           option.description
         ] }) : null
       ] }, option.value);
     }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(import_ink8.Box, { marginTop: 1, children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(import_ink8.Text, { dimColor: true, children: statusMessage ?? (isCurrentOther ? "Type your answer \xB7 Backspace edit \xB7 Enter submit/next \xB7 \u2191 choose presets \xB7 Esc type manually" : question.multiSelect ? "\u2191/\u2193 move \xB7 Space toggle \xB7 Enter submit/next \xB7 Esc type manually" : "\u2191/\u2193 move \xB7 Enter select/next \xB7 Esc type manually") }) })
+    /* @__PURE__ */ jsx7(Box6, { marginTop: 1, children: /* @__PURE__ */ jsx7(Text7, { dimColor: true, children: statusMessage ?? (isCurrentOther ? "Type your answer \xB7 Backspace edit \xB7 Enter submit/next \xB7 \u2191 choose presets \xB7 Esc type manually" : question.multiSelect ? "\u2191/\u2193 move \xB7 Space toggle \xB7 Enter submit/next \xB7 Esc type manually" : "\u2191/\u2193 move \xB7 Enter select/next \xB7 Esc type manually") }) })
   ] });
 }
 function buildOptions(question) {
@@ -7250,8 +7593,8 @@ function escapeAnswerPart(value) {
 }
 
 // src/ui/exitSummary.ts
-var import_chalk3 = __toESM(require("chalk"), 1);
-var import_gradient_string = __toESM(require("gradient-string"), 1);
+import chalk3 from "chalk";
+import gradientString from "gradient-string";
 var ANSI_RE = /\u001b\[[0-9;]*[a-zA-Z]/g;
 function visibleLength(text) {
   return text.replace(ANSI_RE, "").length;
@@ -7297,15 +7640,11 @@ function buildExitSummaryText(input) {
   const assistantCount = messages.filter((m) => m.role === "assistant").length;
   const innerWidth = 98;
   const contentWidth = innerWidth - 4;
-  const borderColor = import_chalk3.default.hex("#229ac3");
-  const titleColor = (0, import_gradient_string.default)("#229ac3", "#7d33f7");
+  const borderColor = chalk3.hex("#229ac3");
+  const titleColor = gradientString("#229ac3", "#7d33f7");
   const line = (text) => `${borderColor("\u2502")}  ${padRight(text, contentWidth)}  ${borderColor("\u2502")}`;
-  const header = import_chalk3.default.bold(titleColor("Goodbye!"));
-  const rows = [
-    "",
-    `${header}`,
-    ""
-  ];
+  const header = chalk3.bold(titleColor("Goodbye!"));
+  const rows = ["", `${header}`, ""];
   const usage = extractUsageFields(session?.usage ?? null);
   const modelName = model ?? "unknown";
   const hasUsage = usage.promptTokens > 0 || usage.completionTokens > 0;
@@ -7318,13 +7657,13 @@ function buildExitSummaryText(input) {
     const tableWidth = colModel + colReqs + colInput + colOutput + colCached;
     const divider = "\u2500".repeat(tableWidth);
     const headerRow = padRight("Model Usage", colModel) + padLeft("Reqs", colReqs) + padLeft("Input Tokens", colInput) + padLeft("Output Tokens", colOutput) + padLeft("Cached Tokens", colCached);
-    rows.push(import_chalk3.default.bold(headerRow));
+    rows.push(chalk3.bold(headerRow));
     rows.push(divider);
     const reqsStr = String(assistantCount).padStart(colReqs);
     const inputStr = formatNumber(usage.promptTokens).padStart(colInput);
     const outputStr = formatNumber(usage.completionTokens).padStart(colOutput);
     const cachedStr = formatNumber(usage.cachedTokens).padStart(colCached);
-    const dataRow = padRight(modelName, colModel) + padRight(reqsStr, colReqs) + padRight(import_chalk3.default.yellow(inputStr), colInput) + padRight(import_chalk3.default.yellow(outputStr), colOutput) + padRight(import_chalk3.default.yellow(cachedStr), colCached);
+    const dataRow = padRight(modelName, colModel) + padRight(reqsStr, colReqs) + padRight(chalk3.yellow(inputStr), colInput) + padRight(chalk3.yellow(outputStr), colOutput) + padRight(chalk3.yellow(cachedStr), colCached);
     rows.push(dataRow);
     rows.push("");
   }
@@ -7337,33 +7676,34 @@ function buildExitSummaryText(input) {
 }
 
 // src/ui/App.tsx
-var import_jsx_runtime8 = require("react/jsx-runtime");
+import { jsx as jsx8, jsxs as jsxs7 } from "react/jsx-runtime";
 function App({ projectRoot, version = "", onRestart }) {
-  const { exit } = (0, import_ink9.useApp)();
-  const { stdout, write } = (0, import_ink9.useStdout)();
-  const { columns } = (0, import_ink9.useWindowSize)();
-  const [view, setView] = (0, import_react8.useState)("chat");
-  const [busy, setBusy] = (0, import_react8.useState)(false);
-  const [skills, setSkills] = (0, import_react8.useState)([]);
-  const [messages, setMessages] = (0, import_react8.useState)([]);
-  const [sessions, setSessions] = (0, import_react8.useState)([]);
-  const [statusLine, setStatusLine] = (0, import_react8.useState)("");
-  const [errorLine, setErrorLine] = (0, import_react8.useState)(null);
-  const [streamProgress, setStreamProgress] = (0, import_react8.useState)(null);
-  const [runningProcesses, setRunningProcesses] = (0, import_react8.useState)(null);
-  const [activeStatus, setActiveStatus] = (0, import_react8.useState)(null);
-  const [dismissedQuestionIds, setDismissedQuestionIds] = (0, import_react8.useState)(() => /* @__PURE__ */ new Set());
-  const [isExiting, setIsExiting] = (0, import_react8.useState)(false);
-  const [showWelcome, setShowWelcome] = (0, import_react8.useState)(true);
-  const [welcomeNonce, setWelcomeNonce] = (0, import_react8.useState)(0);
-  const [nowTick, setNowTick] = (0, import_react8.useState)(0);
-  const messagesRef = (0, import_react8.useRef)([]);
+  const { exit } = useApp2();
+  const { stdout, write } = useStdout3();
+  const { columns } = useTerminalSize();
+  const [view, setView] = useState7("chat");
+  const [busy, setBusy] = useState7(false);
+  const [skills, setSkills] = useState7([]);
+  const [messages, setMessages] = useState7([]);
+  const [sessions, setSessions] = useState7([]);
+  const [statusLine, setStatusLine] = useState7("");
+  const [errorLine, setErrorLine] = useState7(null);
+  const [streamProgress, setStreamProgress] = useState7(null);
+  const [runningProcesses, setRunningProcesses] = useState7(null);
+  const [activeStatus, setActiveStatus] = useState7(null);
+  const [dismissedQuestionIds, setDismissedQuestionIds] = useState7(() => /* @__PURE__ */ new Set());
+  const [isExiting, setIsExiting] = useState7(false);
+  const [showWelcome, setShowWelcome] = useState7(true);
+  const [welcomeNonce, setWelcomeNonce] = useState7(0);
+  const [resolvedSettings, setResolvedSettings] = useState7(() => resolveCurrentSettings2());
+  const [nowTick, setNowTick] = useState7(0);
+  const messagesRef = useRef3([]);
   messagesRef.current = messages;
-  const sessionManager = (0, import_react8.useMemo)(() => {
+  const sessionManager = useMemo4(() => {
     return new SessionManager({
       projectRoot,
-      createOpenAIClient: () => createOpenAIClient(),
-      getResolvedSettings: () => resolveCurrentSettings(),
+      createOpenAIClient: () => createOpenAIClient2(),
+      getResolvedSettings: () => resolveCurrentSettings2(),
       renderMarkdown: (text) => text,
       onAssistantMessage: (message) => {
         setMessages((prev) => [...prev, message]);
@@ -7382,33 +7722,36 @@ function App({ projectRoot, version = "", onRestart }) {
       }
     });
   }, [projectRoot]);
-  (0, import_react8.useEffect)(() => {
+  useEffect6(() => {
     if (!busy) {
       return;
     }
     const id = setInterval(() => setNowTick((tick) => tick + 1), 500);
     return () => clearInterval(id);
   }, [busy]);
-  (0, import_react8.useEffect)(() => {
-    refreshSessionsList();
-    void refreshSkills();
-  }, []);
   function loadVisibleMessages(manager, sessionId) {
     return manager.listSessionMessages(sessionId).filter((m) => m.visible);
   }
-  function refreshSessionsList() {
+  const refreshSessionsList = useCallback2(() => {
     setSessions(sessionManager.listSessions());
-  }
-  async function refreshSkills(sessionId) {
-    try {
-      const list = await sessionManager.listSkills(sessionId ?? sessionManager.getActiveSessionId() ?? void 0);
-      setSkills(list);
-    } catch {
-    }
-  }
-  const writeRef = (0, import_react8.useRef)(write);
+  }, [sessionManager]);
+  const refreshSkills = useCallback2(
+    async (sessionId) => {
+      try {
+        const list = await sessionManager.listSkills(sessionId ?? sessionManager.getActiveSessionId() ?? void 0);
+        setSkills(list);
+      } catch {
+      }
+    },
+    [sessionManager]
+  );
+  useEffect6(() => {
+    refreshSessionsList();
+    void refreshSkills();
+  }, [refreshSessionsList, refreshSkills]);
+  const writeRef = useRef3(write);
   writeRef.current = write;
-  const handlePrompt = (0, import_react8.useCallback)(
+  const handlePrompt = useCallback2(
     async (submission) => {
       if (submission.command === "exit") {
         setIsExiting(true);
@@ -7416,10 +7759,10 @@ function App({ projectRoot, version = "", onRestart }) {
           const activeSessionId = sessionManager.getActiveSessionId();
           const session = activeSessionId ? sessionManager.getSession(activeSessionId) : null;
           const allMessages = activeSessionId ? sessionManager.listSessionMessages(activeSessionId) : messagesRef.current;
-          const resolved = resolveCurrentSettings();
+          const resolved = resolveCurrentSettings2();
           const summary = buildExitSummaryText({ session, messages: allMessages, model: resolved.model });
           process.stdout.write("\n");
-          process.stdout.write(import_chalk4.default.green("> /exit "));
+          process.stdout.write(chalk4.green("> /exit "));
           process.stdout.write("\n\n");
           process.stdout.write(summary);
           process.stdout.write("\n\n");
@@ -7461,10 +7804,7 @@ function App({ projectRoot, version = "", onRestart }) {
       const selectedSkillNames = submission.selectedSkills?.map((skill) => skill.name).filter(Boolean) ?? [];
       const userDisplayContent = trimmedText || (selectedSkillNames.length > 0 ? `Use skills: ${selectedSkillNames.join(", ")}` : "") || (submission.imageUrls.length > 0 ? "\u{1F5BC} Image" : "");
       if (userDisplayContent) {
-        setMessages((prev) => [
-          ...prev,
-          buildSyntheticUserMessage(userDisplayContent, submission.imageUrls.length)
-        ]);
+        setMessages((prev) => [...prev, buildSyntheticUserMessage(userDisplayContent, submission.imageUrls.length)]);
       }
       setBusy(true);
       setErrorLine(null);
@@ -7482,18 +7822,28 @@ function App({ projectRoot, version = "", onRestart }) {
         setRunningProcesses(null);
       }
     },
-    [exit, onRestart, sessionManager]
+    [exit, onRestart, sessionManager, refreshSkills, refreshSessionsList]
   );
-  const handleInterrupt = (0, import_react8.useCallback)(() => {
+  const handleInterrupt = useCallback2(() => {
     sessionManager.interruptActiveSession();
   }, [sessionManager]);
-  const handleSubmit = (0, import_react8.useCallback)(
+  const handleModelConfigChange = useCallback2((selection) => {
+    const current = resolveCurrentSettings2();
+    const { changed } = writeModelConfigSelection(selection, current);
+    const next = resolveCurrentSettings2();
+    setResolvedSettings(next);
+    if (!changed) {
+      return "Model settings unchanged";
+    }
+    return `Model settings updated: ${formatModelConfig(current)} \u2192 ${formatModelConfig(next)}`;
+  }, []);
+  const handleSubmit = useCallback2(
     (submission) => {
       void handlePrompt(submission);
     },
     [handlePrompt]
   );
-  const handleSelectSession = (0, import_react8.useCallback)(
+  const handleSelectSession = useCallback2(
     async (sessionId) => {
       const currentSessionId = sessionManager.getActiveSessionId();
       if (currentSessionId !== sessionId) {
@@ -7514,49 +7864,75 @@ function App({ projectRoot, version = "", onRestart }) {
       setActiveStatus(session?.status ?? null);
       await refreshSkills(sessionId);
     },
-    [sessionManager]
+    [sessionManager, refreshSkills]
   );
-  const [stableColumns, setStableColumns] = (0, import_react8.useState)(columns);
-  (0, import_react8.useEffect)(() => {
+  const [stableColumns, setStableColumns] = useState7(columns);
+  useEffect6(() => {
     const timer = setTimeout(() => setStableColumns(columns), 100);
     return () => clearTimeout(timer);
   }, [columns]);
-  const screenWidth = (0, import_react8.useMemo)(() => stableColumns ?? stdout?.columns ?? 80, [stableColumns, stdout]);
-  const promptHistory = (0, import_react8.useMemo)(() => {
+  const lastRenderedColumnsRef = useRef3(null);
+  useEffect6(() => {
+    if (!stdout?.isTTY) {
+      return;
+    }
+    if (stableColumns <= 0) {
+      return;
+    }
+    if (lastRenderedColumnsRef.current === null) {
+      lastRenderedColumnsRef.current = stableColumns;
+      return;
+    }
+    if (lastRenderedColumnsRef.current === stableColumns) {
+      return;
+    }
+    lastRenderedColumnsRef.current = stableColumns;
+    writeRef.current("\x1B[2J\x1B[H");
+    setMessages([]);
+    setShowWelcome(false);
+    setWelcomeNonce((n) => n + 1);
+    const activeSessionId = sessionManager.getActiveSessionId();
+    const nextMessages = activeSessionId && !busy ? loadVisibleMessages(sessionManager, activeSessionId) : messagesRef.current;
+    setTimeout(() => {
+      setMessages(nextMessages);
+      setShowWelcome(true);
+    }, 0);
+  }, [busy, sessionManager, stableColumns, stdout]);
+  const screenWidth = useMemo4(() => stableColumns ?? stdout?.columns ?? 80, [stableColumns, stdout]);
+  const promptHistory = useMemo4(() => {
     return messages.filter((message) => message.role === "user" && typeof message.content === "string").map((message) => (message.content ?? "").trim()).filter((content) => content.length > 0);
   }, [messages]);
   const expandedThinkingId = findExpandedThinkingId(messages);
-  const pendingQuestion = (0, import_react8.useMemo)(
-    () => findPendingAskUserQuestion(messages, activeStatus),
-    [activeStatus, messages]
-  );
-  const shouldShowQuestionPrompt = Boolean(
-    pendingQuestion && !dismissedQuestionIds.has(pendingQuestion.messageId)
-  );
-  const loadingText = (0, import_react8.useMemo)(
+  const pendingQuestion = useMemo4(() => findPendingAskUserQuestion(messages, activeStatus), [activeStatus, messages]);
+  const shouldShowQuestionPrompt = Boolean(pendingQuestion && !dismissedQuestionIds.has(pendingQuestion.messageId));
+  const loadingText = useMemo4(
     () => busy ? buildLoadingText({ progress: streamProgress, processes: runningProcesses, now: Date.now() }) : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nowTick forces periodic recalculation for spinner animation
     [busy, streamProgress, runningProcesses, nowTick]
   );
-  const welcomeSettings = (0, import_react8.useMemo)(() => resolveCurrentSettings(), []);
-  const welcomeItem = (0, import_react8.useMemo)(() => ({
-    id: `__welcome__${welcomeNonce}`,
-    sessionId: "",
-    role: "system",
-    content: "",
-    contentParams: null,
-    messageParams: null,
-    compacted: false,
-    visible: true,
-    createTime: "",
-    updateTime: ""
-  }), [welcomeNonce]);
-  const staticItems = (0, import_react8.useMemo)(() => {
+  const welcomeSettings = resolvedSettings;
+  const welcomeItem = useMemo4(
+    () => ({
+      id: `__welcome__${welcomeNonce}`,
+      sessionId: "",
+      role: "system",
+      content: "",
+      contentParams: null,
+      messageParams: null,
+      compacted: false,
+      visible: true,
+      createTime: "",
+      updateTime: ""
+    }),
+    [welcomeNonce]
+  );
+  const staticItems = useMemo4(() => {
     if (showWelcome && view === "chat") {
       return [welcomeItem, ...messages];
     }
     return messages;
   }, [showWelcome, view, messages, welcomeItem]);
-  const handleQuestionAnswers = (0, import_react8.useCallback)(
+  const handleQuestionAnswers = useCallback2(
     (answers) => {
       void handlePrompt({
         text: formatAskUserQuestionAnswers(answers),
@@ -7565,16 +7941,16 @@ function App({ projectRoot, version = "", onRestart }) {
     },
     [handlePrompt]
   );
-  const handleQuestionCancel = (0, import_react8.useCallback)(() => {
+  const handleQuestionCancel = useCallback2(() => {
     if (!pendingQuestion) {
       return;
     }
     setDismissedQuestionIds((prev) => new Set(prev).add(pendingQuestion.messageId));
   }, [pendingQuestion]);
-  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_ink9.Box, { flexDirection: "column", width: screenWidth, minWidth: 80, overflowX: "visible", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(import_ink9.Static, { items: staticItems, children: (item) => {
+  return /* @__PURE__ */ jsxs7(Box7, { flexDirection: "column", width: screenWidth, minWidth: 80, overflowX: "visible", children: [
+    /* @__PURE__ */ jsx8(Static, { items: staticItems, children: (item) => {
       if (item.id.startsWith("__welcome__")) {
-        return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+        return /* @__PURE__ */ jsx8(
           WelcomeScreen,
           {
             projectRoot,
@@ -7586,43 +7962,38 @@ function App({ projectRoot, version = "", onRestart }) {
           item.id
         );
       }
-      return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
-        MessageView,
-        {
-          message: item,
-          collapsed: isCollapsedThinking(item, expandedThinkingId)
-        },
-        item.id
-      );
+      return /* @__PURE__ */ jsx8(MessageView, { message: item, collapsed: isCollapsedThinking(item, expandedThinkingId) }, item.id);
     } }),
-    statusLine ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(import_ink9.Box, { children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(import_ink9.Text, { dimColor: true, children: statusLine }) }) : null,
-    errorLine ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(import_ink9.Box, { children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_ink9.Text, { color: "red", children: [
+    statusLine ? /* @__PURE__ */ jsx8(Box7, { children: /* @__PURE__ */ jsx8(Text8, { dimColor: true, children: statusLine }) }) : null,
+    errorLine ? /* @__PURE__ */ jsx8(Box7, { children: /* @__PURE__ */ jsxs7(Text8, { color: "red", children: [
       "Error: ",
       errorLine
     ] }) }) : null,
-    view === "session-list" ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+    view === "session-list" ? /* @__PURE__ */ jsx8(
       SessionList,
       {
         sessions,
         onSelect: (id) => void handleSelectSession(id),
         onCancel: () => setView("chat")
       }
-    ) : shouldShowQuestionPrompt && pendingQuestion && !busy ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+    ) : shouldShowQuestionPrompt && pendingQuestion && !busy ? /* @__PURE__ */ jsx8(
       AskUserQuestionPrompt,
       {
         questions: pendingQuestion.questions,
         onSubmit: handleQuestionAnswers,
         onCancel: handleQuestionCancel
       }
-    ) : isExiting ? null : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+    ) : isExiting ? null : /* @__PURE__ */ jsx8(
       PromptInput,
       {
         screenWidth,
         skills,
+        modelConfig: resolvedSettings,
         promptHistory,
         busy,
         loadingText,
         onSubmit: handleSubmit,
+        onModelConfigChange: handleModelConfigChange,
         onInterrupt: handleInterrupt,
         placeholder: "Type your message..."
       }
@@ -7667,19 +8038,106 @@ function buildStatusLine(entry) {
   }
   return parts.join(" \xB7 ");
 }
+function readSettings2() {
+  try {
+    const settingsPath = getSettingsPath();
+    if (!fs12.existsSync(settingsPath)) {
+      return null;
+    }
+    const raw = fs12.readFileSync(settingsPath, "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+function writeSettings(settings) {
+  const settingsPath = getSettingsPath();
+  fs12.mkdirSync(path12.dirname(settingsPath), { recursive: true });
+  fs12.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}
+`, "utf8");
+}
+function writeModelConfigSelection(selection, current = resolveCurrentSettings2()) {
+  const rawSettings = readSettings2();
+  const result = applyModelConfigSelection(rawSettings, current, selection);
+  if (result.changed) {
+    writeSettings(result.settings);
+  }
+  return result;
+}
+function resolveCurrentSettings2() {
+  return resolveSettings(readSettings2(), {
+    model: DEFAULT_MODEL,
+    baseURL: DEFAULT_BASE_URL
+  });
+}
+function createOpenAIClient2() {
+  const settings = resolveCurrentSettings2();
+  if (!settings.apiKey) {
+    return {
+      client: null,
+      model: settings.model,
+      baseURL: settings.baseURL,
+      thinkingEnabled: settings.thinkingEnabled,
+      reasoningEffort: settings.reasoningEffort,
+      debugLogEnabled: settings.debugLogEnabled,
+      notify: settings.notify,
+      webSearchTool: settings.webSearchTool,
+      machineId: getMachineId2()
+    };
+  }
+  const client = new OpenAI2({
+    apiKey: settings.apiKey,
+    baseURL: settings.baseURL || void 0
+  });
+  return {
+    client,
+    model: settings.model,
+    baseURL: settings.baseURL,
+    thinkingEnabled: settings.thinkingEnabled,
+    reasoningEffort: settings.reasoningEffort,
+    debugLogEnabled: settings.debugLogEnabled,
+    notify: settings.notify,
+    webSearchTool: settings.webSearchTool,
+    machineId: getMachineId2()
+  };
+}
+function getMachineId2() {
+  try {
+    const idPath = path12.join(os9.homedir(), ".deepcode", "machine-id");
+    if (fs12.existsSync(idPath)) {
+      const raw = fs12.readFileSync(idPath, "utf8").trim();
+      if (raw) {
+        return raw;
+      }
+    }
+    const generated = `${os9.hostname()}-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+    fs12.mkdirSync(path12.dirname(idPath), { recursive: true });
+    fs12.writeFileSync(idPath, generated, "utf8");
+    return generated;
+  } catch {
+    return void 0;
+  }
+}
+function getSettingsPath() {
+  return path12.join(os9.homedir(), ".deepcode", "settings.json");
+}
+function formatThinkingMode(settings) {
+  if (!settings.thinkingEnabled) {
+    return "no thinking";
+  }
+  return `thinking ${settings.reasoningEffort}`;
+}
+function formatModelConfig(settings) {
+  return `${settings.model}, ${formatThinkingMode(settings)}`;
+}
 
 // src/ui/UpdatePrompt.tsx
-var import_react9 = require("react");
-var import_ink10 = require("ink");
-var import_jsx_runtime9 = require("react/jsx-runtime");
-function UpdatePrompt({
-  currentVersion,
-  latestVersion,
-  installCommand,
-  onSelect
-}) {
-  const { exit } = (0, import_ink10.useApp)();
-  const [selectedIndex, setSelectedIndex] = (0, import_react9.useState)(0);
+import { useState as useState8 } from "react";
+import { Box as Box8, Text as Text9, useApp as useApp3, useInput } from "ink";
+import { jsx as jsx9, jsxs as jsxs8 } from "react/jsx-runtime";
+function UpdatePrompt({ currentVersion, latestVersion, installCommand, onSelect }) {
+  const { exit } = useApp3();
+  const [selectedIndex, setSelectedIndex] = useState8(0);
   const options = [
     {
       value: "install",
@@ -7694,7 +8152,7 @@ function UpdatePrompt({
       label: `Ignore this version (${latestVersion})`
     }
   ];
-  (0, import_ink10.useInput)((input, key) => {
+  useInput((input, key) => {
     if (key.upArrow) {
       setSelectedIndex((index) => (index - 1 + options.length) % options.length);
       return;
@@ -7718,34 +8176,34 @@ function UpdatePrompt({
       exit();
     }
   });
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_ink10.Box, { flexDirection: "column", marginY: 1, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_ink10.Text, { bold: true, children: [
+  return /* @__PURE__ */ jsxs8(Box8, { flexDirection: "column", marginY: 1, children: [
+    /* @__PURE__ */ jsxs8(Text9, { bold: true, children: [
       "Deep Code latest version has been released: ",
       currentVersion,
       " -> ",
       latestVersion
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(import_ink10.Box, { flexDirection: "column", marginTop: 1, children: options.map((option, index) => {
+    /* @__PURE__ */ jsx9(Box8, { flexDirection: "column", marginTop: 1, children: options.map((option, index) => {
       const selected = index === selectedIndex;
-      return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_ink10.Text, { color: selected ? "green" : void 0, children: [
+      return /* @__PURE__ */ jsxs8(Text9, { color: selected ? "green" : void 0, children: [
         selected ? "> " : "  ",
         index + 1,
         ". ",
         option.label
       ] }, option.value);
     }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(import_ink10.Box, { marginTop: 1, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(import_ink10.Text, { dimColor: true, children: "Use Up/Down to choose, Enter to confirm, Esc to ignore once." }) })
+    /* @__PURE__ */ jsx9(Box8, { marginTop: 1, children: /* @__PURE__ */ jsx9(Text9, { dimColor: true, children: "Use Up/Down to choose, Enter to confirm, Esc to ignore once." }) })
   ] });
 }
 
 // src/updateCheck.ts
-var import_child_process7 = require("child_process");
-var import_react10 = __toESM(require("react"), 1);
-var fs12 = __toESM(require("fs"), 1);
-var os9 = __toESM(require("os"), 1);
-var path12 = __toESM(require("path"), 1);
-var import_ink11 = require("ink");
-var import_chalk5 = __toESM(require("chalk"), 1);
+import { spawn as spawn4 } from "child_process";
+import React8 from "react";
+import * as fs13 from "fs";
+import * as os10 from "os";
+import * as path13 from "path";
+import { render } from "ink";
+import chalk5 from "chalk";
 var UPDATE_STATE_FILE = "update-check.json";
 var NPM_VIEW_TIMEOUT_MS = 5e3;
 var MAX_NPM_VIEW_OUTPUT_CHARS = 64 * 1024;
@@ -7775,10 +8233,12 @@ async function promptForPendingUpdate(packageInfo2) {
     const ok = await runNpmInstallGlobal(installSpec);
     if (ok) {
       writeUpdateState({ ...state, pending: null });
-      process.stdout.write(`
-${import_chalk5.default.red("Deep Code has been updated. Please restart the CLI to use the new version.")}
+      process.stdout.write(
+        `
+${chalk5.red("Deep Code has been updated. Please restart the CLI to use the new version.")}
 
-`);
+`
+      );
     }
     return { installed: ok };
   }
@@ -7834,14 +8294,14 @@ function compareVersions(a, b) {
   return 0;
 }
 function getUpdateStatePath() {
-  return path12.join(os9.homedir(), ".deepcode", UPDATE_STATE_FILE);
+  return path13.join(os10.homedir(), ".deepcode", UPDATE_STATE_FILE);
 }
 async function promptUpdateChoice({
   currentVersion,
   latestVersion,
   installCommand
 }) {
-  return new Promise((resolve4) => {
+  return new Promise((resolve6) => {
     let selected = false;
     let instance = null;
     const handleSelect = (choice) => {
@@ -7849,11 +8309,11 @@ async function promptUpdateChoice({
         return;
       }
       selected = true;
-      resolve4(choice);
+      resolve6(choice);
       instance?.unmount();
     };
-    instance = (0, import_ink11.render)(
-      import_react10.default.createElement(UpdatePrompt, {
+    instance = render(
+      React8.createElement(UpdatePrompt, {
         currentVersion,
         latestVersion,
         installCommand,
@@ -7864,24 +8324,24 @@ async function promptUpdateChoice({
   });
 }
 async function runNpmInstallGlobal(installSpec) {
-  return new Promise((resolve4) => {
-    const child = (0, import_child_process7.spawn)("npm", ["install", "-g", installSpec], {
+  return new Promise((resolve6) => {
+    const child = spawn4("npm", ["install", "-g", installSpec], {
       stdio: "inherit",
       shell: process.platform === "win32"
     });
     child.on("error", (error) => {
       process.stderr.write(`Failed to start npm install: ${error.message}
 `);
-      resolve4(false);
+      resolve6(false);
     });
     child.on("close", (code) => {
       if (code === 0) {
-        resolve4(true);
+        resolve6(true);
         return;
       }
       process.stderr.write(`npm install exited with code ${code ?? "unknown"}.
 `);
-      resolve4(false);
+      resolve6(false);
     });
   });
 }
@@ -7897,12 +8357,12 @@ async function fetchLatestNpmVersion(packageName) {
   return parseNpmViewVersion(result.stdout);
 }
 function runNpmViewLatestVersion(packageName, registry, timeoutMs) {
-  return new Promise((resolve4) => {
+  return new Promise((resolve6) => {
     const args2 = ["view", packageName, "dist-tags.latest", "--json"];
     if (registry) {
       args2.push("--registry", registry);
     }
-    const child = (0, import_child_process7.spawn)("npm", args2, {
+    const child = spawn4("npm", args2, {
       stdio: ["ignore", "pipe", "pipe"],
       shell: process.platform === "win32"
     });
@@ -7914,7 +8374,7 @@ function runNpmViewLatestVersion(packageName, registry, timeoutMs) {
       }
       settled = true;
       clearTimeout(timer);
-      resolve4(result);
+      resolve6(result);
     };
     const timer = setTimeout(() => {
       child.kill();
@@ -7947,14 +8407,16 @@ function parseNpmViewVersion(output) {
 }
 function readUpdateState() {
   const statePath = getUpdateStatePath();
-  if (!fs12.existsSync(statePath)) {
+  if (!fs13.existsSync(statePath)) {
     return {};
   }
   try {
-    const parsed = JSON.parse(fs12.readFileSync(statePath, "utf8"));
+    const parsed = JSON.parse(fs13.readFileSync(statePath, "utf8"));
     return {
       pending: parsed.pending ?? null,
-      ignoredVersions: Array.isArray(parsed.ignoredVersions) ? parsed.ignoredVersions.filter((value) => typeof value === "string" && value.trim().length > 0) : []
+      ignoredVersions: Array.isArray(parsed.ignoredVersions) ? parsed.ignoredVersions.filter(
+        (value) => typeof value === "string" && value.trim().length > 0
+      ) : []
     };
   } catch {
     return {};
@@ -7962,8 +8424,8 @@ function readUpdateState() {
 }
 function writeUpdateState(state) {
   const statePath = getUpdateStatePath();
-  fs12.mkdirSync(path12.dirname(statePath), { recursive: true });
-  fs12.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}
+  fs13.mkdirSync(path13.dirname(statePath), { recursive: true });
+  fs13.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}
 `, "utf8");
 }
 function clearPendingUpdate(state = readUpdateState()) {
@@ -7977,8 +8439,8 @@ function parseVersion(value) {
 }
 
 // src/headless.ts
-var readline = __toESM(require("readline"), 1);
-var fs13 = __toESM(require("fs"), 1);
+import * as readline from "readline";
+import * as fs14 from "fs";
 function jsonReplacer(_key, value) {
   if (value instanceof Map) {
     return Object.fromEntries(value);
@@ -8011,7 +8473,7 @@ async function runHeadlessWithOptions(options, packageVersion) {
   const projectRoot = options.projectRoot && options.projectRoot.trim().length > 0 ? options.projectRoot : process.cwd();
   const input = options.input ?? process.stdin;
   const output = options.output ?? process.stdout;
-  const createOpenAIClient2 = options.createOpenAIClient ?? createOpenAIClient;
+  const createOpenAIClient3 = options.createOpenAIClient ?? createOpenAIClient;
   const exitOnClose = options.exitOnClose ?? true;
   function emit(event) {
     output.write(`${JSON.stringify(event, jsonReplacer)}
@@ -8019,7 +8481,7 @@ async function runHeadlessWithOptions(options, packageVersion) {
   }
   const manager = new SessionManager({
     projectRoot,
-    createOpenAIClient: createOpenAIClient2,
+    createOpenAIClient: createOpenAIClient3,
     getResolvedSettings: () => resolveCurrentSettings(),
     renderMarkdown: (text) => text,
     onAssistantMessage: (message) => {
@@ -8064,13 +8526,13 @@ async function runHeadlessWithOptions(options, packageVersion) {
       emit({ type: "error", error: `Internal error: ${message}` });
     });
   });
-  return new Promise((resolve4) => {
+  return new Promise((resolve6) => {
     rl.on("close", () => {
       chain.finally(() => {
         if (exitOnClose) {
           process.exit(0);
         }
-        resolve4();
+        resolve6();
       });
     });
   });
@@ -8133,7 +8595,7 @@ async function runHeadlessWithOptions(options, packageVersion) {
           return;
         }
         try {
-          const stat = fs13.statSync(newPath);
+          const stat = fs14.statSync(newPath);
           if (!stat.isDirectory()) {
             emit({ type: "error", id: inbound.id, error: `path is not a directory: ${newPath}` });
             return;
@@ -8193,7 +8655,7 @@ async function runHeadlessWithOptions(options, packageVersion) {
 }
 
 // src/cli.tsx
-var import_jsx_runtime10 = require("react/jsx-runtime");
+import { jsx as jsx10 } from "react/jsx-runtime";
 var args = process.argv.slice(2);
 var packageInfo = readPackageInfo();
 if (args.includes("--version") || args.includes("-v")) {
@@ -8232,6 +8694,7 @@ if (args.includes("--help") || args.includes("-h")) {
       "  esc              Interrupt the current model turn",
       "  /                Open the skills/commands menu",
       "  /new             Start a fresh conversation",
+      "  /init            Initialize an AGENTS.md file with instructions for LLM",
       "  /resume          Pick a previous conversation to continue",
       "  /exit            Quit",
       "  ctrl+d twice     Quit"
@@ -8261,15 +8724,8 @@ async function main() {
   const updatePromptResult = await promptForPendingUpdate(packageInfo);
   const restartRef = { current: null };
   function startApp() {
-    const inkInstance = (0, import_ink12.render)(
-      /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
-        App,
-        {
-          projectRoot: process.cwd(),
-          version: packageInfo.version,
-          onRestart: () => restartRef.current?.()
-        }
-      ),
+    const inkInstance = render2(
+      /* @__PURE__ */ jsx10(App, { projectRoot: process.cwd(), version: packageInfo.version, onRestart: () => restartRef.current?.() }),
       { exitOnCtrlC: false }
     );
     restartRef.current = () => {
@@ -8301,7 +8757,19 @@ function configureWindowsShell() {
 }
 function readPackageInfo() {
   try {
-    const pkg = require_package();
+    const bundleDir = dirname9(fileURLToPath3(import.meta.url));
+    const packageJsonCandidates = [resolve5(bundleDir, "../package.json"), resolve5(bundleDir, "package.json")];
+    const packageJson = packageJsonCandidates.map((candidate) => {
+      try {
+        return readFileSync10(candidate, "utf8");
+      } catch {
+        return "";
+      }
+    }).find((content) => content.length > 0);
+    if (!packageJson) {
+      return { name: "@vegamo/deepcode-cli", version: "" };
+    }
+    const pkg = JSON.parse(packageJson);
     return {
       name: typeof pkg.name === "string" ? pkg.name : "@vegamo/deepcode-cli",
       version: typeof pkg.version === "string" ? pkg.version : ""
