@@ -32,7 +32,7 @@ export function useTerminalSize(): TerminalSize {
 
     stdout.on("resize", handleResize);
     return () => {
-      stdout.off?.("resize", handleResize);
+      stdout.off("resize", handleResize);
     };
   }, [stdout]);
 
