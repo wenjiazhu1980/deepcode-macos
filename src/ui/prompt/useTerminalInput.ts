@@ -1,6 +1,26 @@
 import { useEffect, useRef } from "react";
 import { useStdin } from "ink";
 
+// Reference-counted raw mode management to prevent race conditions
+// when multiple components use useTerminalInput simultaneously.
+// Tracks each registered setter individually so that releasing one
+// component never accidentally disables raw mode for another.
+const rawModeSetters = new Set<(mode: boolean) => void>();
+
+function acquireRawMode(setRawMode: (mode: boolean) => void): void {
+  if (rawModeSetters.size === 0) {
+    setRawMode(true);
+  }
+  rawModeSetters.add(setRawMode);
+}
+
+function releaseRawMode(setRawMode: (mode: boolean) => void): void {
+  rawModeSetters.delete(setRawMode);
+  if (rawModeSetters.size === 0) {
+    setRawMode(false);
+  }
+}
+
 export type InputKey = {
   upArrow: boolean;
   downArrow: boolean;
@@ -116,9 +136,11 @@ export function useTerminalInput(
     if (!isActive) {
       return;
     }
-    setRawMode(true);
+    // Use reference-counted raw mode to prevent race conditions
+    // when multiple components mount/unmount simultaneously.
+    acquireRawMode(setRawMode);
     return () => {
-      setRawMode(false);
+      releaseRawMode(setRawMode);
     };
   }, [isActive, setRawMode]);
 
