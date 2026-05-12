@@ -308,6 +308,7 @@ export function useTerminalCursor(
       // Hide cursor when no placement provided
       directWrite(hideCursor());
       activePlacementRef.current = null;
+      lastPlacementRef.current = null;
     }
 
     return () => {

@@ -149,7 +149,17 @@ export const PromptInput = React.memo(function PromptInput({
     return null;
   }, [buffer, screenWidth, footerText, showMenu, showSkillsDropdown]);
 
-  const { hasFocus, handleFocusEvent } = useTerminalCursor(stdout, !disabled, cursorPlacement);
+  const { hasFocus, handleFocusEvent, resetFocus } = useTerminalCursor(stdout, !disabled, cursorPlacement);
+
+  // Reset focus state after LLM processing completes to ensure the simulated
+  // cursor is visible. Without this, a missed focusIn event (or an accidental
+  // focusOut during rendering) can leave hasFocus stuck at false, hiding the
+  // cursor indicator until the 5s focus-reporting cycle re-fires.
+  useEffect(() => {
+    if (!busy) {
+      resetFocus();
+    }
+  }, [busy, resetFocus]);
 
   useEffect(() => {
     if (!showMenu) {
