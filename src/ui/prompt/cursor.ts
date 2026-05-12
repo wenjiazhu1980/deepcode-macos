@@ -156,33 +156,44 @@ export function useTerminalFocusReporting(
 
 /**
  * Hook to manage focus state with timeout handling.
- * Returns focus state and a handler function to be called by useTerminalInput.
+ * When a focusOut event is not followed by focusIn within 5 seconds,
+ * re-requests focus reporting from the terminal instead of blindly
+ * assuming focus was regained.
  */
-export function useFocusState(): { 
-  hasFocus: boolean; 
+export function useFocusState(
+  stdout: NodeJS.WriteStream | undefined
+): {
+  hasFocus: boolean;
   handleFocusEvent: (focused: boolean) => void;
   resetFocus: () => void;
 } {
   const [hasFocus, setHasFocus] = useState(true);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stdoutRef = useRef(stdout);
+  stdoutRef.current = stdout;
 
   const handleFocusEvent = useCallback((focused: boolean) => {
     setHasFocus(focused);
-    
-    // Reset timeout when focus changes
+
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
-    
-    // If we received a focusOut event, set a timeout to auto-reset focus
-    // This handles cases where focusIn event might be missed
+
+    // If we received a focusOut event, set a timeout to re-request
+    // focus reporting from the terminal. This handles cases where the
+    // focusIn event was lost — the terminal will re-send the correct
+    // event rather than us guessing.
     if (!focused) {
       timeoutRef.current = setTimeout(() => {
-        // Auto-reset focus after timeout to prevent permanent focus loss
-        setHasFocus(true);
         timeoutRef.current = null;
-      }, 2000);
+        const s = stdoutRef.current;
+        if (s?.isTTY) {
+          // Disable then re-enable to force the terminal to re-report
+          s.write(disableTerminalFocusReporting());
+          s.write(enableTerminalFocusReporting());
+        }
+      }, 5000);
     }
   }, []);
 
@@ -219,7 +230,7 @@ export function useTerminalCursor(
   useTerminalFocusReporting(stdout, isActive);
   
   // Manage focus state
-  const { hasFocus, handleFocusEvent, resetFocus } = useFocusState();
+  const { hasFocus, handleFocusEvent, resetFocus } = useFocusState(stdout);
   
   const directWriteRef = useRef<((data: string) => void) | null>(null);
   const activePlacementRef = useRef<CursorPlacement | null>(null);
