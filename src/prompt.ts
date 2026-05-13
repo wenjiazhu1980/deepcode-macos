@@ -4,7 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import type { SessionMessage } from "./session";
-import { findGitBashPath, resolveShellPath } from "./tools/shell-utils";
+import { findGitBashPath, resolveShellPath } from "./common/shell-utils";
 
 export const AGENT_DRIFT_GUARD_SKILL = `
 ---
@@ -428,7 +428,7 @@ export type ToolDefinition = {
   };
 };
 
-export function getTools(_options: PromptToolOptions = {}): ToolDefinition[] {
+export function getTools(_options: PromptToolOptions = {}, externalTools: ToolDefinition[] = []): ToolDefinition[] {
   const tools: ToolDefinition[] = [
     {
       type: "function",
@@ -618,6 +618,10 @@ export function getTools(_options: PromptToolOptions = {}): ToolDefinition[] {
       },
     },
   });
+
+  for (const tool of externalTools) {
+    tools.push(tool);
+  }
 
   return tools;
 }

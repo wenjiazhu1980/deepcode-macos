@@ -11,14 +11,14 @@ import { useCallback as useCallback2, useEffect as useEffect6, useMemo as useMem
 import { Box as Box7, Static, Text as Text8, useApp as useApp2, useStdout as useStdout3 } from "ink";
 import chalk4 from "chalk";
 import * as fs12 from "fs";
-import * as os9 from "os";
-import * as path12 from "path";
+import * as os10 from "os";
+import * as path13 from "path";
 import OpenAI2 from "openai";
 
 // src/session.ts
 import * as fs9 from "fs";
-import * as path8 from "path";
-import * as os5 from "os";
+import * as path9 from "path";
+import * as os6 from "os";
 import * as crypto from "crypto";
 import { fileURLToPath as fileURLToPath2 } from "url";
 import matter from "gray-matter";
@@ -90,7 +90,7 @@ import * as os2 from "os";
 import * as path2 from "path";
 import { fileURLToPath } from "url";
 
-// src/tools/shell-utils.ts
+// src/common/shell-utils.ts
 import { execFileSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
@@ -636,7 +636,7 @@ function getExtensionRoot() {
   }
   return candidates[0] ?? process.cwd();
 }
-function getTools(_options = {}) {
+function getTools(_options = {}, externalTools = []) {
   const tools = [
     {
       type: "function",
@@ -820,6 +820,9 @@ function getTools(_options = {}) {
       }
     }
   });
+  for (const tool of externalTools) {
+    tools.push(tool);
+  }
   return tools;
 }
 
@@ -1126,7 +1129,7 @@ function formatResult(result, name, errorMessage) {
 import * as fs4 from "fs";
 import { z as z2 } from "zod";
 
-// src/tools/file-utils.ts
+// src/common/file-utils.ts
 import * as fs3 from "fs";
 import * as path3 from "path";
 function normalizeContent(value) {
@@ -1224,7 +1227,7 @@ function toDiffLines(content) {
   return lines;
 }
 
-// src/tools/runtime.ts
+// src/common/runtime.ts
 import { z } from "zod";
 function semanticBoolean(defaultValue = false) {
   return z.preprocess((value) => {
@@ -1261,21 +1264,21 @@ function formatZodError(error) {
   if (!issue) {
     return "Invalid tool input.";
   }
-  const path14 = issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
-  return `${path14}${issue.message}`;
+  const path15 = issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
+  return `${path15}${issue.message}`;
 }
 
-// src/tools/state.ts
+// src/common/state.ts
 import * as path4 from "path";
 var fileStatesBySession = /* @__PURE__ */ new Map();
 var snippetsBySession = /* @__PURE__ */ new Map();
 var snippetCountersBySession = /* @__PURE__ */ new Map();
-function normalizeFilePath(filePath, platform = process.platform) {
-  const nativePath = normalizeNativeFilePath(filePath, platform);
-  return platform === "win32" ? path4.win32.normalize(nativePath) : path4.normalize(nativePath);
+function normalizeFilePath(filePath, platform2 = process.platform) {
+  const nativePath = normalizeNativeFilePath(filePath, platform2);
+  return platform2 === "win32" ? path4.win32.normalize(nativePath) : path4.normalize(nativePath);
 }
-function normalizeNativeFilePath(filePath, platform = process.platform) {
-  if (platform !== "win32") {
+function normalizeNativeFilePath(filePath, platform2 = process.platform) {
+  if (platform2 !== "win32") {
     return filePath;
   }
   if (isGitBashAbsolutePath(filePath)) {
@@ -1283,9 +1286,9 @@ function normalizeNativeFilePath(filePath, platform = process.platform) {
   }
   return filePath;
 }
-function isAbsoluteFilePath(filePath, platform = process.platform) {
-  const nativePath = normalizeNativeFilePath(filePath, platform);
-  if (platform !== "win32") {
+function isAbsoluteFilePath(filePath, platform2 = process.platform) {
+  const nativePath = normalizeNativeFilePath(filePath, platform2);
+  if (platform2 !== "win32") {
     return path4.isAbsolute(nativePath);
   }
   const normalized = path4.win32.normalize(nativePath);
@@ -2979,10 +2982,12 @@ async function handleWriteTool(args2, context) {
 var ToolExecutor = class {
   projectRoot;
   createOpenAIClient;
+  mcpManager;
   toolHandlers = /* @__PURE__ */ new Map();
-  constructor(projectRoot, createOpenAIClient3) {
+  constructor(projectRoot, createOpenAIClient3, mcpManager) {
     this.projectRoot = projectRoot;
     this.createOpenAIClient = createOpenAIClient3;
+    this.mcpManager = mcpManager;
     this.registerToolHandlers();
   }
   setProjectRoot(projectRoot) {
@@ -3044,6 +3049,11 @@ var ToolExecutor = class {
     const toolName = toolCall.function.name;
     const handler = this.toolHandlers.get(toolName);
     if (!handler) {
+      if (this.mcpManager?.isMcpTool(toolName)) {
+        const parsedArgs2 = this.parseToolArguments(toolCall.function.arguments);
+        const args2 = parsedArgs2.ok ? parsedArgs2.args : {};
+        return this.mcpManager.executeMcpTool(toolName, args2);
+      }
       return {
         ok: false,
         name: toolName,
@@ -3115,12 +3125,348 @@ var ToolExecutor = class {
   }
 };
 
+// src/mcp/mcp-client.ts
+import { spawn as spawn4 } from "child_process";
+import { createInterface } from "readline";
+import * as os3 from "os";
+import * as path6 from "path";
+var McpClient = class {
+  constructor(serverName, command, args2 = [], env) {
+    this.serverName = serverName;
+    this.command = command;
+    this.args = args2;
+    this.env = env;
+  }
+  serverName;
+  command;
+  args;
+  env;
+  process = null;
+  reader = null;
+  nextId = 1;
+  pendingRequests = /* @__PURE__ */ new Map();
+  stderrBuffer = "";
+  async connect(timeoutMs) {
+    return new Promise((resolve6, reject) => {
+      const childEnv = {
+        ...process.env,
+        ...this.env
+      };
+      const args2 = this.withNpxYesArg(this.command, this.args);
+      const isWindows = os3.platform() === "win32";
+      if (isWindows) {
+        const cmd = [this.command + ".cmd", ...args2].join(" ");
+        this.process = spawn4(cmd, [], {
+          stdio: ["pipe", "pipe", "pipe"],
+          env: childEnv,
+          shell: true,
+          windowsHide: true
+        });
+      } else {
+        this.process = spawn4(this.command, args2, {
+          stdio: ["pipe", "pipe", "pipe"],
+          env: childEnv
+        });
+      }
+      this.process.on("error", (err) => {
+        reject(this.withStderr(`Failed to start MCP server "${this.serverName}" (${this.command}): ${err.message}`));
+      });
+      this.process.on("close", (code) => {
+        const error = this.withStderr(`MCP server "${this.serverName}" exited with code ${code}`);
+        for (const [, pending] of this.pendingRequests) {
+          clearTimeout(pending.timer);
+          pending.reject(error);
+        }
+        this.pendingRequests.clear();
+      });
+      if (this.process.stderr) {
+        this.process.stderr.on("data", (data) => {
+          this.appendStderr(data.toString("utf8"));
+        });
+      }
+      this.reader = createInterface({ input: this.process.stdout });
+      this.reader.on("line", (line) => {
+        this.handleLine(line);
+      });
+      this.sendRequest(
+        "initialize",
+        {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "deepcode-cli", version: "0.1.0" }
+        },
+        timeoutMs
+      ).then(() => {
+        this.sendNotification("notifications/initialized");
+        resolve6();
+      }).catch(reject);
+    });
+  }
+  async listTools(timeoutMs) {
+    const tools = [];
+    let cursor;
+    for (let page = 0; page < 100; page++) {
+      const params = cursor ? { cursor } : {};
+      const result = await this.sendRequest("tools/list", params, timeoutMs);
+      tools.push(...result.tools ?? []);
+      cursor = typeof result.nextCursor === "string" && result.nextCursor ? result.nextCursor : void 0;
+      if (!cursor) {
+        return tools;
+      }
+    }
+    throw this.withStderr(`MCP server "${this.serverName}" returned too many tools/list pages`);
+  }
+  async callTool(name, args2) {
+    return await this.sendRequest("tools/call", { name, arguments: args2 });
+  }
+  disconnect() {
+    if (this.reader) {
+      this.reader.close();
+      this.reader = null;
+    }
+    if (this.process) {
+      this.process.kill();
+      this.process = null;
+    }
+  }
+  sendRequest(method, params, timeoutMs = 3e4) {
+    return new Promise((resolve6, reject) => {
+      const id = this.nextId++;
+      const request = {
+        jsonrpc: "2.0",
+        id,
+        method,
+        params
+      };
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(
+          this.withStderr(
+            `Timed out after ${timeoutMs}ms waiting for MCP server "${this.serverName}" to respond to ${method}`
+          )
+        );
+      }, timeoutMs);
+      this.pendingRequests.set(id, { resolve: resolve6, reject, timer });
+      this.writeLine(JSON.stringify(request));
+    });
+  }
+  sendNotification(method, params) {
+    const notification = {
+      jsonrpc: "2.0",
+      method,
+      params
+    };
+    this.writeLine(JSON.stringify(notification));
+  }
+  writeLine(data) {
+    if (this.process?.stdin) {
+      this.process.stdin.write(data + "\n");
+    }
+  }
+  handleLine(line) {
+    try {
+      const message = JSON.parse(line);
+      if (message.id !== void 0 && this.pendingRequests.has(message.id)) {
+        const pending = this.pendingRequests.get(message.id);
+        this.pendingRequests.delete(message.id);
+        clearTimeout(pending.timer);
+        if (message.error) {
+          pending.reject(this.withStderr(`MCP error: ${message.error.message}`));
+        } else {
+          pending.resolve(message.result);
+        }
+      }
+    } catch {
+    }
+  }
+  withNpxYesArg(command, args2) {
+    const executable = path6.basename(command).toLowerCase().replace(/\.cmd$/, "");
+    if (executable !== "npx") {
+      return args2;
+    }
+    if (args2.includes("-y") || args2.includes("--yes")) {
+      return args2;
+    }
+    return ["-y", ...args2];
+  }
+  appendStderr(text) {
+    this.stderrBuffer = `${this.stderrBuffer}${text}`;
+    if (this.stderrBuffer.length > 4e3) {
+      this.stderrBuffer = this.stderrBuffer.slice(-4e3);
+    }
+  }
+  withStderr(message) {
+    const stderr = this.stderrBuffer.trim();
+    return new Error(stderr ? `${message}. stderr: ${stderr}` : message);
+  }
+};
+
+// src/mcp/mcp-manager.ts
+var MCP_STARTUP_TIMEOUT_MS = 3e4;
+var McpManager = class {
+  clients = [];
+  tools = [];
+  initialized = false;
+  disposed = false;
+  configuredServerNames = [];
+  serverStatuses = [];
+  prepare(servers) {
+    if (!servers || Object.keys(servers).length === 0) return;
+    this.disposed = false;
+    for (const name of Object.keys(servers)) {
+      if (!this.configuredServerNames.includes(name)) {
+        this.configuredServerNames.push(name);
+      }
+      if (this.serverStatuses.some((status) => status.name === name)) {
+        continue;
+      }
+      this.setStatus({
+        name,
+        status: "starting",
+        connected: false,
+        toolCount: 0,
+        tools: []
+      });
+    }
+  }
+  async initialize(servers) {
+    if (this.initialized || this.disposed) return;
+    this.initialized = true;
+    if (!servers || Object.keys(servers).length === 0) return;
+    const entries = Object.entries(servers);
+    this.prepare(servers);
+    for (const [name, config] of entries) {
+      if (this.disposed) break;
+      let client = null;
+      try {
+        client = new McpClient(name, config.command, config.args ?? [], config.env);
+        await client.connect(MCP_STARTUP_TIMEOUT_MS);
+        if (this.disposed) {
+          client.disconnect();
+          break;
+        }
+        this.clients.push(client);
+        const serverTools = await client.listTools(MCP_STARTUP_TIMEOUT_MS);
+        if (this.disposed) break;
+        const toolNamespacedNames = [];
+        for (const tool of serverTools) {
+          const namespacedName = `mcp__${name}__${tool.name}`;
+          this.tools.push({
+            serverName: name,
+            originalName: tool.name,
+            namespacedName,
+            definition: tool,
+            client
+          });
+          toolNamespacedNames.push(namespacedName);
+        }
+        this.setStatus({
+          name,
+          status: "ready",
+          connected: true,
+          toolCount: serverTools.length,
+          tools: toolNamespacedNames
+        });
+      } catch (err) {
+        if (this.disposed) break;
+        client?.disconnect();
+        const message = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`[deepcode] MCP server "${name}" failed to initialize: ${message}
+`);
+        this.setStatus({
+          name,
+          status: "failed",
+          connected: false,
+          error: message,
+          toolCount: 0,
+          tools: []
+        });
+      }
+    }
+  }
+  getStatus() {
+    const result = [...this.serverStatuses];
+    const knownNames = new Set(result.map((s) => s.name));
+    for (const name of this.configuredServerNames) {
+      if (!knownNames.has(name)) {
+        result.push({
+          name,
+          status: "starting",
+          connected: false,
+          toolCount: 0,
+          tools: []
+        });
+      }
+    }
+    return result;
+  }
+  getMcpToolDefinitions() {
+    return this.tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.namespacedName,
+        description: t.definition.description ?? `${t.serverName}: ${t.originalName}`,
+        parameters: {
+          type: "object",
+          properties: t.definition.inputSchema.properties,
+          required: t.definition.inputSchema.required,
+          additionalProperties: false
+        }
+      }
+    }));
+  }
+  isMcpTool(name) {
+    return name.startsWith("mcp__");
+  }
+  async executeMcpTool(name, args2) {
+    const tool = this.tools.find((t) => t.namespacedName === name);
+    if (!tool) {
+      return { ok: false, name, error: `Unknown MCP tool: ${name}` };
+    }
+    try {
+      const result = await tool.client.callTool(tool.originalName, args2);
+      const text = result.content.filter((c) => c.type === "text" && c.text).map((c) => c.text).join("\n");
+      return {
+        ok: !result.isError,
+        name,
+        output: text || JSON.stringify(result.content)
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        name,
+        error: err instanceof Error ? err.message : String(err)
+      };
+    }
+  }
+  disconnect() {
+    this.disposed = true;
+    for (const client of this.clients) {
+      client.disconnect();
+    }
+    this.clients = [];
+    this.tools = [];
+    this.serverStatuses = [];
+    this.configuredServerNames = [];
+    this.initialized = false;
+  }
+  setStatus(status) {
+    if (this.disposed) return;
+    const index = this.serverStatuses.findIndex((s) => s.name === status.name);
+    if (index === -1) {
+      this.serverStatuses.push(status);
+      return;
+    }
+    this.serverStatuses[index] = status;
+  }
+};
+
 // src/error-logger.ts
 import * as fs7 from "fs";
-import * as path6 from "path";
-import * as os3 from "os";
-var LOG_DIR = path6.join(os3.homedir(), ".deepcode", "logs");
-var ERROR_LOG_PATH = path6.join(LOG_DIR, "error.log");
+import * as path7 from "path";
+import * as os4 from "os";
+var LOG_DIR = path7.join(os4.homedir(), ".deepcode", "logs");
+var ERROR_LOG_PATH = path7.join(LOG_DIR, "error.log");
 function ensureLogDir() {
   if (!fs7.existsSync(LOG_DIR)) {
     fs7.mkdirSync(LOG_DIR, { recursive: true });
@@ -3191,14 +3537,14 @@ function logApiError(entry) {
 
 // src/debug-logger.ts
 import * as fs8 from "fs";
-import * as os4 from "os";
-import * as path7 from "path";
+import * as os5 from "os";
+import * as path8 from "path";
 var DEBUG_LOG_FILE = "debug.log";
 var MAX_LOG_SIZE_BYTES = 10 * 1024 * 1024;
 function logOpenAIChatCompletionDebug(entry) {
   try {
     const logPath = getDebugLogPath();
-    fs8.mkdirSync(path7.dirname(logPath), { recursive: true });
+    fs8.mkdirSync(path8.dirname(logPath), { recursive: true });
     rotateIfNeeded(logPath);
     fs8.appendFileSync(logPath, `${JSON.stringify(toSerializable(entry))}
 `, "utf8");
@@ -3216,7 +3562,7 @@ function rotateIfNeeded(logPath) {
   }
 }
 function getDebugLogPath() {
-  return path7.join(os4.homedir(), ".deepcode", "logs", DEBUG_LOG_FILE);
+  return path8.join(os5.homedir(), ".deepcode", "logs", DEBUG_LOG_FILE);
 }
 function normalizeDebugError(error) {
   if (error instanceof Error) {
@@ -3301,10 +3647,10 @@ function accumulateUsage(current, next) {
 }
 function getExtensionRoot2() {
   if (typeof __dirname !== "undefined") {
-    return path8.resolve(__dirname, "..");
+    return path9.resolve(__dirname, "..");
   }
   const currentFilePath = fileURLToPath2(import.meta.url);
-  return path8.resolve(path8.dirname(currentFilePath), "..");
+  return path9.resolve(path9.dirname(currentFilePath), "..");
 }
 function getTotalTokens(usage) {
   if (!isUsageRecord(usage)) {
@@ -3324,6 +3670,8 @@ var SessionManager = class {
   activePromptController = null;
   sessionControllers = /* @__PURE__ */ new Map();
   toolExecutor;
+  mcpManager = new McpManager();
+  mcpToolDefinitions = [];
   constructor(options) {
     this.projectRoot = options.projectRoot;
     this.createOpenAIClient = options.createOpenAIClient;
@@ -3331,7 +3679,18 @@ var SessionManager = class {
     this.onAssistantMessage = options.onAssistantMessage;
     this.onSessionEntryUpdated = options.onSessionEntryUpdated;
     this.onLlmStreamProgress = options.onLlmStreamProgress;
-    this.toolExecutor = new ToolExecutor(this.projectRoot, this.createOpenAIClient);
+    this.toolExecutor = new ToolExecutor(this.projectRoot, this.createOpenAIClient, this.mcpManager);
+    this.mcpManager.prepare(this.getResolvedSettings().mcpServers);
+  }
+  async initMcpServers(servers) {
+    await this.mcpManager.initialize(servers);
+    this.mcpToolDefinitions = this.mcpManager.getMcpToolDefinitions();
+  }
+  getMcpStatus() {
+    return this.mcpManager.getStatus();
+  }
+  dispose() {
+    this.mcpManager.disconnect();
   }
   changeProjectRoot(newRoot) {
     this.projectRoot = newRoot;
@@ -3657,10 +4016,10 @@ The candidate skills are as follows:
     }
   }
   async listSkills(sessionId) {
-    const homeDir = os5.homedir();
-    const agentsRoot = path8.join(homeDir, ".agents", "skills");
-    const legacyProjectSkillsRoot = path8.join(this.projectRoot, ".deepcode", "skills");
-    const projectAgentsSkillsRoot = path8.join(this.projectRoot, ".agents", "skills");
+    const homeDir = os6.homedir();
+    const agentsRoot = path9.join(homeDir, ".agents", "skills");
+    const legacyProjectSkillsRoot = path9.join(this.projectRoot, ".deepcode", "skills");
+    const projectAgentsSkillsRoot = path9.join(this.projectRoot, ".agents", "skills");
     const skillsByName = /* @__PURE__ */ new Map();
     const collectSkills = (root, displayRoot) => {
       if (!fs9.existsSync(root)) {
@@ -3678,7 +4037,7 @@ The candidate skills are as follows:
           continue;
         }
         const skillName = entry.name;
-        const skillPath = path8.join(root, skillName, "SKILL.md");
+        const skillPath = path9.join(root, skillName, "SKILL.md");
         try {
           if (!fs9.existsSync(skillPath)) {
             continue;
@@ -3715,21 +4074,21 @@ The candidate skills are as follows:
   }
   resolveSkillPath(skillPath) {
     if (skillPath.startsWith("~/")) {
-      return path8.join(os5.homedir(), skillPath.slice(2));
+      return path9.join(os6.homedir(), skillPath.slice(2));
     }
     if (skillPath.startsWith("~\\")) {
-      return path8.join(os5.homedir(), skillPath.slice(2));
+      return path9.join(os6.homedir(), skillPath.slice(2));
     }
     if (skillPath.startsWith("./")) {
-      return path8.join(this.projectRoot, skillPath.slice(2));
+      return path9.join(this.projectRoot, skillPath.slice(2));
     }
     if (skillPath.startsWith(".\\")) {
-      return path8.join(this.projectRoot, skillPath.slice(2));
+      return path9.join(this.projectRoot, skillPath.slice(2));
     }
-    if (path8.isAbsolute(skillPath)) {
+    if (path9.isAbsolute(skillPath)) {
       return skillPath;
     }
-    return path8.join(os5.homedir(), skillPath);
+    return path9.join(os6.homedir(), skillPath);
   }
   readSkillInfo(skillPath, displayPath, fallbackName) {
     const fallbackSkill = {
@@ -3839,7 +4198,6 @@ The candidate skills are as follows:
     this.reportNewPrompt();
     const signal = controller?.signal;
     this.throwIfAborted(signal);
-    this.applyInitCommandPrompt(userPrompt);
     if (userPrompt.text) {
       const skills = await this.listSkills();
       const skillNames = await this.identifyMatchingSkillNames(skills, userPrompt.text, { signal });
@@ -3924,7 +4282,6 @@ ${skillMd}
   async replySession(sessionId, userPrompt, controller) {
     const signal = controller?.signal;
     this.throwIfAborted(signal);
-    this.applyInitCommandPrompt(userPrompt);
     const now = (/* @__PURE__ */ new Date()).toISOString();
     const updated = this.updateSessionEntry(sessionId, (entry) => ({
       ...entry,
@@ -4040,7 +4397,7 @@ ${skillMd}
           {
             model,
             messages,
-            tools: getTools(this.getPromptToolOptions()),
+            tools: getTools(this.getPromptToolOptions(), this.mcpToolDefinitions),
             ...thinkingOptions
           },
           { signal: sessionController.signal },
@@ -4337,8 +4694,8 @@ ${compactedSummary}`,
   }
   getProjectStorage() {
     const projectCode = this.getProjectCode(this.projectRoot);
-    const projectDir = path8.join(os5.homedir(), ".deepcode", "projects", projectCode);
-    const sessionsIndexPath = path8.join(projectDir, "sessions-index.json");
+    const projectDir = path9.join(os6.homedir(), ".deepcode", "projects", projectCode);
+    const sessionsIndexPath = path9.join(projectDir, "sessions-index.json");
     return { projectCode, projectDir, sessionsIndexPath };
   }
   ensureProjectDir() {
@@ -4380,7 +4737,7 @@ ${compactedSummary}`,
   }
   getSessionMessagesPath(sessionId) {
     const { projectDir } = this.getProjectStorage();
-    return path8.join(projectDir, `${sessionId}.jsonl`);
+    return path9.join(projectDir, `${sessionId}.jsonl`);
   }
   removeSessionMessages(sessionIds) {
     for (const sessionId of sessionIds) {
@@ -4437,14 +4794,8 @@ ${compactedSummary}`,
       updateTime: now
     };
   }
-  applyInitCommandPrompt(userPrompt) {
-    if (userPrompt.text !== "/init") {
-      return;
-    }
-    userPrompt.text = this.renderInitCommandPrompt();
-  }
   renderInitCommandPrompt() {
-    const templatePath = path8.join(getExtensionRoot2(), "docs", "prompts", "init_command.md.ejs");
+    const templatePath = path9.join(getExtensionRoot2(), "docs", "prompts", "init_command.md.ejs");
     const template = fs9.readFileSync(templatePath, "utf8");
     return ejs.render(template, {
       agentsMdFile: this.getEffectiveProjectAgentsMdFile()
@@ -4456,11 +4807,11 @@ ${compactedSummary}`,
   loadProjectAgentInstructions() {
     const candidatePaths = [
       {
-        absolutePath: path8.join(this.projectRoot, ".deepcode", "AGENTS.md"),
+        absolutePath: path9.join(this.projectRoot, ".deepcode", "AGENTS.md"),
         displayPath: "./.deepcode/AGENTS.md"
       },
       {
-        absolutePath: path8.join(this.projectRoot, "AGENTS.md"),
+        absolutePath: path9.join(this.projectRoot, "AGENTS.md"),
         displayPath: "./AGENTS.md"
       }
     ];
@@ -4491,7 +4842,7 @@ ${compactedSummary}`,
     if (projectInstructions) {
       return projectInstructions.content;
     }
-    return this.readNonEmptyFile(path8.join(os5.homedir(), ".deepcode", "AGENTS.md"));
+    return this.readNonEmptyFile(path9.join(os6.homedir(), ".deepcode", "AGENTS.md"));
   }
   buildSystemMessage(sessionId, content, contentParams = null) {
     const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -4634,9 +4985,10 @@ ${compactedSummary}`,
     return openAIMessages;
   }
   sessionMessageToOpenAIMessage(message, thinkingEnabled) {
+    const content = this.renderOpenAIMessageContent(message);
     const base = {
       role: message.role,
-      content: message.content ?? ""
+      content
     };
     const messageParams = message.messageParams;
     if (messageParams?.tool_calls) {
@@ -4652,8 +5004,8 @@ ${compactedSummary}`,
     }
     if ((message.role === "user" || message.role === "system") && message.contentParams) {
       const contentParts = [];
-      if (message.content) {
-        contentParts.push({ type: "text", text: message.content });
+      if (content) {
+        contentParts.push({ type: "text", text: content });
       }
       const params = Array.isArray(message.contentParams) ? message.contentParams : [message.contentParams];
       for (const param of params) {
@@ -4661,10 +5013,16 @@ ${compactedSummary}`,
           contentParts.push(param);
         }
       }
-      const contentValue = contentParts.length > 0 ? contentParts : message.content ?? "";
+      const contentValue = contentParts.length > 0 ? contentParts : content;
       base.content = contentValue;
     }
     return base;
+  }
+  renderOpenAIMessageContent(message) {
+    if (message.role === "user" && message.content === "/init") {
+      return this.renderInitCommandPrompt();
+    }
+    return message.content ?? "";
   }
   pairToolMessages(messages) {
     const pairings = /* @__PURE__ */ new Map();
@@ -4980,8 +5338,8 @@ ${compactedSummary}`,
 
 // src/clientFactory.ts
 import * as fs10 from "fs";
-import * as os6 from "os";
-import * as path9 from "path";
+import * as os7 from "os";
+import * as path10 from "path";
 import OpenAI from "openai";
 
 // src/settings.ts
@@ -5004,6 +5362,7 @@ function resolveSettings(settings, defaults) {
   const model = topLevelModel || env.MODEL?.trim() || defaults.model;
   const notify = typeof settings?.notify === "string" ? settings.notify.trim() : "";
   const webSearchTool = typeof settings?.webSearchTool === "string" ? settings.webSearchTool.trim() : "";
+  const mcpServers = settings?.mcpServers;
   return {
     apiKey: env.API_KEY?.trim(),
     baseURL: env.BASE_URL?.trim() || defaults.baseURL,
@@ -5012,7 +5371,8 @@ function resolveSettings(settings, defaults) {
     reasoningEffort: resolveReasoningEffort(settings?.reasoningEffort),
     debugLogEnabled: settings?.debugLogEnabled === true,
     notify: notify || void 0,
-    webSearchTool: webSearchTool || void 0
+    webSearchTool: webSearchTool || void 0,
+    mcpServers
   };
 }
 function modelConfigKey(config) {
@@ -5041,7 +5401,7 @@ var DEFAULT_MODEL = "deepseek-v4-pro";
 var DEFAULT_BASE_URL = "https://api.deepseek.com";
 function readSettings() {
   try {
-    const settingsPath = path9.join(os6.homedir(), ".deepcode", "settings.json");
+    const settingsPath = path10.join(os7.homedir(), ".deepcode", "settings.json");
     if (!fs10.existsSync(settingsPath)) {
       return null;
     }
@@ -5058,7 +5418,7 @@ function resolveCurrentSettings() {
   });
 }
 function writeLastProjectRoot(projectRoot) {
-  const settingsPath = path9.join(os6.homedir(), ".deepcode", "settings.json");
+  const settingsPath = path10.join(os7.homedir(), ".deepcode", "settings.json");
   let settings = {};
   try {
     if (fs10.existsSync(settingsPath)) {
@@ -5068,7 +5428,7 @@ function writeLastProjectRoot(projectRoot) {
   } catch {
   }
   settings.lastProjectRoot = projectRoot;
-  const dir = path9.dirname(settingsPath);
+  const dir = path10.dirname(settingsPath);
   fs10.mkdirSync(dir, { recursive: true });
   fs10.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf8");
 }
@@ -5103,15 +5463,15 @@ function createOpenAIClient() {
 }
 function getMachineId() {
   try {
-    const idPath = path9.join(os6.homedir(), ".deepcode", "machine-id");
+    const idPath = path10.join(os7.homedir(), ".deepcode", "machine-id");
     if (fs10.existsSync(idPath)) {
       const raw = fs10.readFileSync(idPath, "utf8").trim();
       if (raw) {
         return raw;
       }
     }
-    const generated = `${os6.hostname()}-${Math.random().toString(36).slice(2)}-${Date.now()}`;
-    fs10.mkdirSync(path9.dirname(idPath), { recursive: true });
+    const generated = `${os7.hostname()}-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+    fs10.mkdirSync(path10.dirname(idPath), { recursive: true });
     fs10.writeFileSync(idPath, generated, "utf8");
     return generated;
   } catch {
@@ -5320,6 +5680,12 @@ var BUILTIN_SLASH_COMMANDS = [
     description: "Pick a previous conversation to continue"
   },
   {
+    kind: "mcp",
+    name: "mcp",
+    label: "/mcp",
+    description: "Show MCP server status and available tools"
+  },
+  {
     kind: "exit",
     name: "exit",
     label: "/exit",
@@ -5364,8 +5730,8 @@ function formatSlashCommandLabel(item) {
 // src/ui/clipboard.ts
 import { spawnSync, execSync as execSync2 } from "child_process";
 import * as fs11 from "fs";
-import * as os7 from "os";
-import * as path10 from "path";
+import * as os8 from "os";
+import * as path11 from "path";
 var PNG_MIME = "image/png";
 var IMAGE_MIME_BY_EXT = /* @__PURE__ */ new Map([
   [".png", "image/png"],
@@ -5378,10 +5744,10 @@ function bufferToDataUrl(buffer, mimeType) {
   return `data:${mimeType};base64,${buffer.toString("base64")}`;
 }
 function isImageFilePath(value) {
-  return IMAGE_MIME_BY_EXT.has(path10.extname(value.trim()).toLowerCase());
+  return IMAGE_MIME_BY_EXT.has(path11.extname(value.trim()).toLowerCase());
 }
 function mimeTypeForPath(value) {
-  return IMAGE_MIME_BY_EXT.get(path10.extname(value.trim()).toLowerCase()) ?? PNG_MIME;
+  return IMAGE_MIME_BY_EXT.get(path11.extname(value.trim()).toLowerCase()) ?? PNG_MIME;
 }
 function tryRun(command, args2) {
   try {
@@ -5457,10 +5823,10 @@ function readMacClipboardImage() {
   return null;
 }
 function convertTiffToPng(tiffBuffer) {
-  const tempDir = fs11.mkdtempSync(path10.join(os7.tmpdir(), "deepcode-tiff-"));
+  const tempDir = fs11.mkdtempSync(path11.join(os8.tmpdir(), "deepcode-tiff-"));
   try {
-    const tiffPath = path10.join(tempDir, "clipboard.tiff");
-    const pngPath = path10.join(tempDir, "clipboard.png");
+    const tiffPath = path11.join(tempDir, "clipboard.tiff");
+    const pngPath = path11.join(tempDir, "clipboard.png");
     fs11.writeFileSync(tiffPath, tiffBuffer);
     try {
       execSync2(`sips -s format png "${tiffPath}" --out "${pngPath}"`, {
@@ -5542,7 +5908,7 @@ var BACKSPACE_BYTES = /* @__PURE__ */ new Set(["\x7F", "\b"]);
 var FORWARD_DELETE_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[3~", "\x1B[P"]);
 var HOME_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[H", "\x1B[1~", "\x1B[7~", "\x1BOH"]);
 var END_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[F", "\x1B[4~", "\x1B[8~", "\x1BOF"]);
-var SHIFT_RETURN_SEQUENCES = /* @__PURE__ */ new Set(["\x1B\r", "\x1B[13;2u"]);
+var SHIFT_RETURN_SEQUENCES = /* @__PURE__ */ new Set(["\x1B\r", "\x1B[13;2u", "\x1B[13;2~", "\x1B[27;2;13~"]);
 var META_RETURN_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[13;3u", "\x1B[13;4u"]);
 var CTRL_LEFT_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[1;5D", "\x1B[5D"]);
 var CTRL_RIGHT_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[1;5C", "\x1B[5C"]);
@@ -7177,8 +7543,8 @@ function findExpandedThinkingId(messages) {
 // src/ui/WelcomeScreen.tsx
 import { useMemo as useMemo2, useState as useState5 } from "react";
 import { Box as Box5, Text as Text6 } from "ink";
-import * as os8 from "node:os";
-import path11 from "node:path";
+import * as os9 from "node:os";
+import path12 from "node:path";
 
 // src/ui/ThemedGradient.tsx
 import { Text as Text5 } from "ink";
@@ -7272,15 +7638,15 @@ function SettingRow({ label, value }) {
     /* @__PURE__ */ jsx6(Box5, { flexGrow: 1, justifyContent: "flex-end", children: /* @__PURE__ */ jsx6(Text6, { children: value }) })
   ] });
 }
-function formatHomeRelativePath(value, home = os8.homedir()) {
-  const normalizedValue = path11.resolve(value);
-  const normalizedHome = path11.resolve(home);
-  const relative2 = path11.relative(normalizedHome, normalizedValue);
+function formatHomeRelativePath(value, home = os9.homedir()) {
+  const normalizedValue = path12.resolve(value);
+  const normalizedHome = path12.resolve(home);
+  const relative2 = path12.relative(normalizedHome, normalizedValue);
   if (relative2 === "") {
     return "~";
   }
-  if (!relative2.startsWith("..") && !path11.isAbsolute(relative2)) {
-    return `~${path11.sep}${relative2}`;
+  if (!relative2.startsWith("..") && !path12.isAbsolute(relative2)) {
+    return `~${path12.sep}${relative2}`;
   }
   return normalizedValue;
 }
@@ -8052,7 +8418,7 @@ function readSettings2() {
 }
 function writeSettings(settings) {
   const settingsPath = getSettingsPath();
-  fs12.mkdirSync(path12.dirname(settingsPath), { recursive: true });
+  fs12.mkdirSync(path13.dirname(settingsPath), { recursive: true });
   fs12.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}
 `, "utf8");
 }
@@ -8103,15 +8469,15 @@ function createOpenAIClient2() {
 }
 function getMachineId2() {
   try {
-    const idPath = path12.join(os9.homedir(), ".deepcode", "machine-id");
+    const idPath = path13.join(os10.homedir(), ".deepcode", "machine-id");
     if (fs12.existsSync(idPath)) {
       const raw = fs12.readFileSync(idPath, "utf8").trim();
       if (raw) {
         return raw;
       }
     }
-    const generated = `${os9.hostname()}-${Math.random().toString(36).slice(2)}-${Date.now()}`;
-    fs12.mkdirSync(path12.dirname(idPath), { recursive: true });
+    const generated = `${os10.hostname()}-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+    fs12.mkdirSync(path13.dirname(idPath), { recursive: true });
     fs12.writeFileSync(idPath, generated, "utf8");
     return generated;
   } catch {
@@ -8119,7 +8485,7 @@ function getMachineId2() {
   }
 }
 function getSettingsPath() {
-  return path12.join(os9.homedir(), ".deepcode", "settings.json");
+  return path13.join(os10.homedir(), ".deepcode", "settings.json");
 }
 function formatThinkingMode(settings) {
   if (!settings.thinkingEnabled) {
@@ -8197,11 +8563,11 @@ function UpdatePrompt({ currentVersion, latestVersion, installCommand, onSelect 
 }
 
 // src/updateCheck.ts
-import { spawn as spawn4 } from "child_process";
+import { spawn as spawn5 } from "child_process";
 import React8 from "react";
 import * as fs13 from "fs";
-import * as os10 from "os";
-import * as path13 from "path";
+import * as os11 from "os";
+import * as path14 from "path";
 import { render } from "ink";
 import chalk5 from "chalk";
 var UPDATE_STATE_FILE = "update-check.json";
@@ -8294,7 +8660,7 @@ function compareVersions(a, b) {
   return 0;
 }
 function getUpdateStatePath() {
-  return path13.join(os10.homedir(), ".deepcode", UPDATE_STATE_FILE);
+  return path14.join(os11.homedir(), ".deepcode", UPDATE_STATE_FILE);
 }
 async function promptUpdateChoice({
   currentVersion,
@@ -8325,7 +8691,7 @@ async function promptUpdateChoice({
 }
 async function runNpmInstallGlobal(installSpec) {
   return new Promise((resolve6) => {
-    const child = spawn4("npm", ["install", "-g", installSpec], {
+    const child = spawn5("npm", ["install", "-g", installSpec], {
       stdio: "inherit",
       shell: process.platform === "win32"
     });
@@ -8362,7 +8728,7 @@ function runNpmViewLatestVersion(packageName, registry, timeoutMs) {
     if (registry) {
       args2.push("--registry", registry);
     }
-    const child = spawn4("npm", args2, {
+    const child = spawn5("npm", args2, {
       stdio: ["ignore", "pipe", "pipe"],
       shell: process.platform === "win32"
     });
@@ -8424,7 +8790,7 @@ function readUpdateState() {
 }
 function writeUpdateState(state) {
   const statePath = getUpdateStatePath();
-  fs13.mkdirSync(path13.dirname(statePath), { recursive: true });
+  fs13.mkdirSync(path14.dirname(statePath), { recursive: true });
   fs13.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}
 `, "utf8");
 }
@@ -8724,17 +9090,20 @@ async function main() {
   const updatePromptResult = await promptForPendingUpdate(packageInfo);
   const restartRef = { current: null };
   function startApp() {
+    let restarting = false;
     const inkInstance = render2(
       /* @__PURE__ */ jsx10(App, { projectRoot: process.cwd(), version: packageInfo.version, onRestart: () => restartRef.current?.() }),
       { exitOnCtrlC: false }
     );
     restartRef.current = () => {
+      restarting = true;
       process.stdout.write("\x1B[2J\x1B[3J\x1B[H");
       inkInstance.unmount();
       startApp();
     };
     inkInstance.waitUntilExit().then(() => {
-      if (!restartRef.current) {
+      if (!restarting) {
+        restartRef.current = null;
         process.exit(0);
       }
     });

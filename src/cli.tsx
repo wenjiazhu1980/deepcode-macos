@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { render } from "ink";
 import { App } from "./ui";
-import { setShellIfWindows } from "./tools/shell-utils";
+import { setShellIfWindows } from "./common/shell-utils";
 import { checkForNpmUpdate, promptForPendingUpdate, type PackageInfo } from "./updateCheck";
 import { runHeadless } from "./headless";
 
@@ -83,19 +83,22 @@ async function main(): Promise<void> {
   const restartRef: { current: (() => void) | null } = { current: null };
 
   function startApp(): void {
+    let restarting = false;
     const inkInstance = render(
       <App projectRoot={process.cwd()} version={packageInfo.version} onRestart={() => restartRef.current?.()} />,
       { exitOnCtrlC: false }
     );
 
     restartRef.current = () => {
+      restarting = true;
       process.stdout.write("\u001B[2J\u001B[3J\u001B[H");
       inkInstance.unmount();
       startApp();
     };
 
     inkInstance.waitUntilExit().then(() => {
-      if (!restartRef.current) {
+      if (!restarting) {
+        restartRef.current = null;
         process.exit(0);
       }
     });

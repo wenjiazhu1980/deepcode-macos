@@ -6,6 +6,7 @@ import { handleEditTool } from "./edit-handler";
 import { handleReadTool } from "./read-handler";
 import { handleWebSearchTool } from "./web-search-handler";
 import { handleWriteTool } from "./write-handler";
+import type { McpManager } from "../mcp/mcp-manager";
 
 export type CreateOpenAIClient = () => {
   client: OpenAI | null;
@@ -73,11 +74,13 @@ export type ToolCallExecution = {
 export class ToolExecutor {
   private projectRoot: string;
   private readonly createOpenAIClient?: CreateOpenAIClient;
+  private readonly mcpManager?: McpManager;
   private readonly toolHandlers = new Map<string, ToolHandler>();
 
-  constructor(projectRoot: string, createOpenAIClient?: CreateOpenAIClient) {
+  constructor(projectRoot: string, createOpenAIClient?: CreateOpenAIClient, mcpManager?: McpManager) {
     this.projectRoot = projectRoot;
     this.createOpenAIClient = createOpenAIClient;
+    this.mcpManager = mcpManager;
     this.registerToolHandlers();
   }
 
@@ -165,6 +168,12 @@ export class ToolExecutor {
     const toolName = toolCall.function.name;
     const handler = this.toolHandlers.get(toolName);
     if (!handler) {
+      // Try MCP tools
+      if (this.mcpManager?.isMcpTool(toolName)) {
+        const parsedArgs = this.parseToolArguments(toolCall.function.arguments);
+        const args = parsedArgs.ok ? parsedArgs.args : {};
+        return this.mcpManager.executeMcpTool(toolName, args);
+      }
       return {
         ok: false,
         name: toolName,

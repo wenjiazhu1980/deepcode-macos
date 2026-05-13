@@ -324,6 +324,12 @@ npm link   # 本地测试
 
 ---
 
+## 🔌 MCP 支持
+
+DeepCode CLI 支持 MCP（Model Context Protocol），可连接 GitHub、浏览器、文件系统等外部服务扩展 AI 能力。配置方法请查看：[docs/mcp.md](docs/mcp.md)
+
+---
+
 ## 🏷️ 相关标签 | Related Topics
 
 `ai` `cli` `coding-assistant` `deepseek` `terminal` `developer-tools` `code-generation` `vibe-coding` `openai-compatible` `agent-skills` `typescript` `nodejs` `bug-fixing` `web-search` `macos-app`

@@ -859,6 +859,16 @@ export function isClearImageAttachmentsShortcut(input: string, key: Pick<InputKe
   return key.ctrl && (input === "x" || input === "X");
 }
 
+export function getPromptReturnKeyAction(key: Pick<InputKey, "shift" | "meta" | "return">): "submit" | "newline" | undefined {
+  if (!key.return) {
+    return undefined;
+  }
+  if (key.shift || key.meta) {
+    return "newline";
+  }
+  return "submit";
+}
+
 export function renderBufferWithCursor(state: PromptBufferState, isFocused: boolean, placeholder?: string): string {
   const text = state.text || "";
   const cursor = Math.max(0, Math.min(state.cursor, text.length));

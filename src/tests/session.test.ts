@@ -322,7 +322,161 @@ test("SessionManager lists project skills from .agents with legacy .deepcode com
   assert.equal(sharedSkill?.description, "Project .agents skill");
 });
 
-test("createSession expands /init with the active .deepcode project AGENTS path", async () => {
+test("SessionManager dispose disconnects MCP servers", async () => {
+  const workspace = createTempDir("deepcode-mcp-dispose-workspace-");
+  const serverPath = path.join(workspace, "mcp-server.cjs");
+  fs.writeFileSync(
+    serverPath,
+    `
+const readline = require("readline");
+const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+rl.on("line", (line) => {
+  const request = JSON.parse(line);
+  if (!("id" in request)) {
+    return;
+  }
+  if (request.method === "initialize") {
+    send({ jsonrpc: "2.0", id: request.id, result: { protocolVersion: "2024-11-05", capabilities: { tools: {} } } });
+    return;
+  }
+  if (request.method === "tools/list") {
+    if (request.params && request.params.cursor === "page-2") {
+      send({ jsonrpc: "2.0", id: request.id, result: { tools: [
+        { name: "count", inputSchema: { type: "object", properties: {} } }
+      ] } });
+      return;
+    }
+    send({ jsonrpc: "2.0", id: request.id, result: { tools: [
+      { name: "echo", inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } }
+    ], nextCursor: "page-2" } });
+    return;
+  }
+  if (request.method === "tools/call") {
+    send({ jsonrpc: "2.0", id: request.id, result: { content: [{ type: "text", text: request.params.name + ":" + (request.params.arguments.text || "") }] } });
+    return;
+  }
+  send({ jsonrpc: "2.0", id: request.id, result: { content: [] } });
+});
+`,
+    "utf8"
+  );
+
+  const manager = createSessionManager(workspace, "machine-id-mcp-dispose");
+  const initPromise = manager.initMcpServers({ smoke: { command: process.execPath, args: [serverPath] } });
+
+  assert.deepEqual(manager.getMcpStatus(), [
+    { name: "smoke", status: "starting", connected: false, toolCount: 0, tools: [] },
+  ]);
+
+  await initPromise;
+
+  assert.deepEqual(manager.getMcpStatus(), [
+    {
+      name: "smoke",
+      status: "ready",
+      connected: true,
+      toolCount: 2,
+      tools: ["mcp__smoke__echo", "mcp__smoke__count"],
+    },
+  ]);
+  const mcpManager = (manager as any).mcpManager;
+  assert.equal(mcpManager.getMcpToolDefinitions()[0].function.name, "mcp__smoke__echo");
+  assert.deepEqual(await mcpManager.executeMcpTool("mcp__smoke__echo", { text: "ok" }), {
+    ok: true,
+    name: "mcp__smoke__echo",
+    output: "echo:ok",
+  });
+
+  manager.dispose();
+
+  assert.deepEqual(manager.getMcpStatus(), []);
+});
+
+test("SessionManager reports configured MCP servers as starting before initialization", () => {
+  const workspace = createTempDir("deepcode-mcp-configured-workspace-");
+  const manager = new SessionManager({
+    projectRoot: workspace,
+    createOpenAIClient: () => ({
+      client: null,
+      model: "test-model",
+      thinkingEnabled: false,
+    }),
+    getResolvedSettings: () => ({
+      mcpServers: {
+        playwright: { command: "npx", args: ["@playwright/mcp@latest"] },
+      },
+    }),
+    renderMarkdown: (text) => text,
+    onAssistantMessage: () => {},
+  });
+
+  assert.deepEqual(manager.getMcpStatus(), [
+    { name: "playwright", status: "starting", connected: false, toolCount: 0, tools: [] },
+  ]);
+});
+
+test("SessionManager reports MCP startup stderr on failure", async () => {
+  const workspace = createTempDir("deepcode-mcp-failure-workspace-");
+  const serverPath = path.join(workspace, "mcp-server-fail.cjs");
+  fs.writeFileSync(serverPath, 'process.stderr.write("mcp startup boom"); process.exit(7);', "utf8");
+
+  const manager = createSessionManager(workspace, "machine-id-mcp-failure");
+  await manager.initMcpServers({ broken: { command: process.execPath, args: [serverPath] } });
+
+  const [status] = manager.getMcpStatus();
+  assert.equal(status?.name, "broken");
+  assert.equal(status?.status, "failed");
+  assert.equal(status?.connected, false);
+  assert.match(status?.error ?? "", /mcp startup boom/);
+});
+
+test("SessionManager adds -y when launching MCP servers through npx", async () => {
+  const workspace = createTempDir("deepcode-mcp-npx-workspace-");
+  const argsPath = path.join(workspace, "args.json");
+  const fakeNpxPath = path.join(workspace, "npx");
+  fs.writeFileSync(
+    fakeNpxPath,
+    `#!/usr/bin/env node
+const fs = require("fs");
+const readline = require("readline");
+fs.writeFileSync(process.env.ARGS_PATH, JSON.stringify(process.argv.slice(2)));
+const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+rl.on("line", (line) => {
+  const request = JSON.parse(line);
+  if (!("id" in request)) {
+    return;
+  }
+  if (request.method === "initialize") {
+    send({ jsonrpc: "2.0", id: request.id, result: { protocolVersion: "2024-11-05", capabilities: { tools: {} } } });
+    return;
+  }
+  if (request.method === "tools/list") {
+    send({ jsonrpc: "2.0", id: request.id, result: { tools: [] } });
+    return;
+  }
+  send({ jsonrpc: "2.0", id: request.id, result: { content: [] } });
+});
+`,
+    "utf8"
+  );
+  fs.chmodSync(fakeNpxPath, 0o755);
+
+  const manager = createSessionManager(workspace, "machine-id-mcp-npx");
+  await manager.initMcpServers({
+    npxed: { command: fakeNpxPath, args: ["@playwright/mcp@latest"], env: { ARGS_PATH: argsPath } },
+  });
+
+  assert.deepEqual(JSON.parse(fs.readFileSync(argsPath, "utf8")) as string[], ["-y", "@playwright/mcp@latest"]);
+  manager.dispose();
+});
+
+test("createSession stores /init and sends the active .deepcode project AGENTS path to the LLM", async () => {
   const workspace = createTempDir("deepcode-init-deepcode-workspace-");
   const home = createTempDir("deepcode-init-deepcode-home-");
   process.env.HOME = home;
@@ -338,17 +492,23 @@ test("createSession expands /init with the active .deepcode project AGENTS path"
   const sessionId = await manager.createSession({ text: "/init" });
   const messages = manager.listSessionMessages(sessionId);
   const userMessage = messages.find((message) => message.role === "user");
+  const openAIMessages = (manager as any).buildOpenAIMessages(messages, false) as Array<{
+    role: string;
+    content: string;
+  }>;
+  const openAIUserMessage = openAIMessages.find((message) => message.role === "user");
   const systemContents = messages
     .filter((message) => message.role === "system")
     .map((message) => message.content ?? "");
 
-  assert.match(userMessage?.content ?? "", /Update \.\/\.deepcode\/AGENTS\.md/);
-  assert.doesNotMatch(userMessage?.content ?? "", /Update \.\/AGENTS\.md/);
+  assert.equal(userMessage?.content, "/init");
+  assert.match(openAIUserMessage?.content ?? "", /Update \.\/\.deepcode\/AGENTS\.md/);
+  assert.doesNotMatch(openAIUserMessage?.content ?? "", /Update \.\/AGENTS\.md/);
   assert.ok(systemContents.includes("deepcode project instructions"));
   assert.ok(!systemContents.includes("root project instructions"));
 });
 
-test("replySession expands /init with the active root project AGENTS path", async () => {
+test("replySession stores /init and sends the active root project AGENTS path to the LLM", async () => {
   const workspace = createTempDir("deepcode-init-root-workspace-");
   const home = createTempDir("deepcode-init-root-home-");
   process.env.HOME = home;
@@ -361,13 +521,21 @@ test("replySession expands /init with the active root project AGENTS path", asyn
 
   const sessionId = await manager.createSession({ text: "first prompt" });
   await manager.replySession(sessionId, { text: "/init" });
-  const userMessages = manager.listSessionMessages(sessionId).filter((message) => message.role === "user");
+  const messages = manager.listSessionMessages(sessionId);
+  const userMessages = messages.filter((message) => message.role === "user");
   const replyMessage = userMessages[userMessages.length - 1];
+  const openAIMessages = (manager as any).buildOpenAIMessages(messages, false) as Array<{
+    role: string;
+    content: string;
+  }>;
+  const openAIUserMessages = openAIMessages.filter((message) => message.role === "user");
+  const openAIReplyMessage = openAIUserMessages[openAIUserMessages.length - 1];
 
-  assert.match(replyMessage?.content ?? "", /Update \.\/AGENTS\.md/);
+  assert.equal(replyMessage?.content, "/init");
+  assert.match(openAIReplyMessage?.content ?? "", /Update \.\/AGENTS\.md/);
 });
 
-test("createSession expands /init as generate when no project AGENTS file is effective", async () => {
+test("createSession stores /init and sends generate prompt when no project AGENTS file is effective", async () => {
   const workspace = createTempDir("deepcode-init-generate-workspace-");
   const home = createTempDir("deepcode-init-generate-home-");
   process.env.HOME = home;
@@ -380,10 +548,17 @@ test("createSession expands /init as generate when no project AGENTS file is eff
   (manager as any).activateSession = async () => {};
 
   const sessionId = await manager.createSession({ text: "/init" });
-  const userMessage = manager.listSessionMessages(sessionId).find((message) => message.role === "user");
+  const messages = manager.listSessionMessages(sessionId);
+  const userMessage = messages.find((message) => message.role === "user");
+  const openAIMessages = (manager as any).buildOpenAIMessages(messages, false) as Array<{
+    role: string;
+    content: string;
+  }>;
+  const openAIUserMessage = openAIMessages.find((message) => message.role === "user");
 
-  assert.match(userMessage?.content ?? "", /Generate a file named \.\/AGENTS\.md/);
-  assert.doesNotMatch(userMessage?.content ?? "", /Update \.\/AGENTS\.md/);
+  assert.equal(userMessage?.content, "/init");
+  assert.match(openAIUserMessage?.content ?? "", /Generate a file named \.\/AGENTS\.md/);
+  assert.doesNotMatch(openAIUserMessage?.content ?? "", /Update \.\/AGENTS\.md/);
 });
 
 test("createSession reports a new prompt with the machineId token", async () => {

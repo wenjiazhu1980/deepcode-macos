@@ -9,8 +9,10 @@ import type { ChatCompletionMessageParam, ChatCompletionContentPart } from "open
 import { launchNotifyScript } from "./notify";
 import { buildThinkingRequestOptions } from "./openai-thinking";
 import { DEEPSEEK_V4_MODELS } from "./model-capabilities";
-import { getCompactPrompt, getSystemPrompt, getTools, AGENT_DRIFT_GUARD_SKILL } from "./prompt";
+import { getCompactPrompt, getSystemPrompt, getTools, AGENT_DRIFT_GUARD_SKILL, type ToolDefinition } from "./prompt";
 import { ToolExecutor, type CreateOpenAIClient } from "./tools/executor";
+import { McpManager } from "./mcp/mcp-manager";
+import type { McpServerConfig } from "./settings";
 import { logApiError } from "./error-logger";
 import { logOpenAIChatCompletionDebug, normalizeDebugError } from "./debug-logger";
 
@@ -153,7 +155,7 @@ export type SkillInfo = {
 type SessionManagerOptions = {
   projectRoot: string;
   createOpenAIClient: CreateOpenAIClient;
-  getResolvedSettings: () => { webSearchTool?: string };
+  getResolvedSettings: () => { webSearchTool?: string; mcpServers?: Record<string, McpServerConfig> };
   renderMarkdown: (text: string) => string;
   onAssistantMessage: (message: SessionMessage, shouldConnect: boolean) => void;
   onSessionEntryUpdated?: (entry: SessionEntry) => void;
@@ -172,7 +174,7 @@ export type LlmStreamProgress = {
 export class SessionManager {
   private readonly projectRoot: string;
   private readonly createOpenAIClient: CreateOpenAIClient;
-  private readonly getResolvedSettings: () => { webSearchTool?: string };
+  private readonly getResolvedSettings: () => { webSearchTool?: string; mcpServers?: Record<string, McpServerConfig> };
   private readonly onAssistantMessage: (message: SessionMessage, shouldConnect: boolean) => void;
   private readonly onSessionEntryUpdated?: (entry: SessionEntry) => void;
   private readonly onLlmStreamProgress?: (progress: LlmStreamProgress) => void;
@@ -180,6 +182,8 @@ export class SessionManager {
   private activePromptController: AbortController | null = null;
   private readonly sessionControllers = new Map<string, AbortController>();
   private readonly toolExecutor: ToolExecutor;
+  private readonly mcpManager = new McpManager();
+  private mcpToolDefinitions: ToolDefinition[] = [];
 
   constructor(options: SessionManagerOptions) {
     this.projectRoot = options.projectRoot;
@@ -188,7 +192,21 @@ export class SessionManager {
     this.onAssistantMessage = options.onAssistantMessage;
     this.onSessionEntryUpdated = options.onSessionEntryUpdated;
     this.onLlmStreamProgress = options.onLlmStreamProgress;
-    this.toolExecutor = new ToolExecutor(this.projectRoot, this.createOpenAIClient);
+    this.toolExecutor = new ToolExecutor(this.projectRoot, this.createOpenAIClient, this.mcpManager);
+    this.mcpManager.prepare(this.getResolvedSettings().mcpServers);
+  }
+
+  async initMcpServers(servers?: Record<string, McpServerConfig>): Promise<void> {
+    await this.mcpManager.initialize(servers);
+    this.mcpToolDefinitions = this.mcpManager.getMcpToolDefinitions();
+  }
+
+  getMcpStatus() {
+    return this.mcpManager.getStatus();
+  }
+
+  dispose(): void {
+    this.mcpManager.disconnect();
   }
 
   changeProjectRoot(newRoot: string): void {
@@ -792,7 +810,6 @@ The candidate skills are as follows:\n\n`;
     this.reportNewPrompt();
     const signal = controller?.signal;
     this.throwIfAborted(signal);
-    this.applyInitCommandPrompt(userPrompt);
 
     if (userPrompt.text) {
       const skills = await this.listSkills();
@@ -883,7 +900,6 @@ ${skillMd}
   async replySession(sessionId: string, userPrompt: UserPromptContent, controller?: AbortController): Promise<void> {
     const signal = controller?.signal;
     this.throwIfAborted(signal);
-    this.applyInitCommandPrompt(userPrompt);
     const now = new Date().toISOString();
     const updated = this.updateSessionEntry(sessionId, (entry) => ({
       ...entry,
@@ -1014,7 +1030,7 @@ ${skillMd}
           {
             model,
             messages,
-            tools: getTools(this.getPromptToolOptions()),
+            tools: getTools(this.getPromptToolOptions(), this.mcpToolDefinitions),
             ...thinkingOptions,
           },
           { signal: sessionController.signal },
@@ -1474,13 +1490,6 @@ ${skillMd}
     };
   }
 
-  private applyInitCommandPrompt(userPrompt: UserPromptContent): void {
-    if (userPrompt.text !== "/init") {
-      return;
-    }
-    userPrompt.text = this.renderInitCommandPrompt();
-  }
-
   private renderInitCommandPrompt(): string {
     const templatePath = path.join(getExtensionRoot(), "docs", "prompts", "init_command.md.ejs");
     const template = fs.readFileSync(templatePath, "utf8");
@@ -1706,9 +1715,10 @@ ${skillMd}
   }
 
   private sessionMessageToOpenAIMessage(message: SessionMessage, thinkingEnabled: boolean): ChatCompletionMessageParam {
+    const content = this.renderOpenAIMessageContent(message);
     const base: ChatCompletionMessageParam = {
       role: message.role,
-      content: message.content ?? "",
+      content,
     } as ChatCompletionMessageParam;
 
     const messageParams = message.messageParams as
@@ -1731,8 +1741,8 @@ ${skillMd}
 
     if ((message.role === "user" || message.role === "system") && message.contentParams) {
       const contentParts: ChatCompletionContentPart[] = [];
-      if (message.content) {
-        contentParts.push({ type: "text", text: message.content });
+      if (content) {
+        contentParts.push({ type: "text", text: content });
       }
       const params = Array.isArray(message.contentParams) ? message.contentParams : [message.contentParams];
       for (const param of params) {
@@ -1740,12 +1750,18 @@ ${skillMd}
           contentParts.push(param as ChatCompletionContentPart);
         }
       }
-      const contentValue: string | ChatCompletionContentPart[] =
-        contentParts.length > 0 ? contentParts : (message.content ?? "");
+      const contentValue: string | ChatCompletionContentPart[] = contentParts.length > 0 ? contentParts : content;
       (base as { content: string | ChatCompletionContentPart[] }).content = contentValue;
     }
 
     return base;
+  }
+
+  private renderOpenAIMessageContent(message: SessionMessage): string {
+    if (message.role === "user" && message.content === "/init") {
+      return this.renderInitCommandPrompt();
+    }
+    return message.content ?? "";
   }
 
   private pairToolMessages(messages: SessionMessage[]): Map<string, number> {

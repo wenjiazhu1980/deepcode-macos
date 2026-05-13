@@ -40,6 +40,14 @@ function disableTerminalFocusReporting(): string {
   return "\u001B[?1004l";
 }
 
+export function enableTerminalExtendedKeys(): string {
+  return "\u001B[>4;1m";
+}
+
+export function disableTerminalExtendedKeys(): string {
+  return "\u001B[>4;0m";
+}
+
 export function getPromptCursorPlacement(
   state: PromptBufferState,
   screenWidth: number,
@@ -324,4 +332,17 @@ export function useTerminalCursor(
   }, [isActive, placement?.column, placement?.rowsUp, stdout]);
 
   return { hasFocus, handleFocusEvent, resetFocus };
+}
+
+export function useTerminalExtendedKeys(stdout: NodeJS.WriteStream | undefined, isActive: boolean): void {
+  useLayoutEffect(() => {
+    if (!isActive || !stdout?.isTTY) {
+      return;
+    }
+
+    stdout.write(enableTerminalExtendedKeys());
+    return () => {
+      stdout.write(disableTerminalExtendedKeys());
+    };
+  }, [isActive, stdout]);
 }
