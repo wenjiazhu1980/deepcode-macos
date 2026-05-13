@@ -5596,7 +5596,7 @@ function parseTerminalInput(data) {
   return { input, key };
 }
 function useTerminalInput(inputHandler, options = {}) {
-  const { stdin, setRawMode } = useStdin();
+  const { setRawMode, internal_eventEmitter } = useStdin();
   const isActive = options.isActive ?? true;
   const handlerRef = useRef(inputHandler);
   handlerRef.current = inputHandler;
@@ -5617,11 +5617,11 @@ function useTerminalInput(inputHandler, options = {}) {
       const { input, key } = parseTerminalInput(data);
       handlerRef.current(input, key);
     };
-    stdin?.on("data", handleData);
+    internal_eventEmitter?.on("input", handleData);
     return () => {
-      stdin?.off("data", handleData);
+      internal_eventEmitter?.removeListener("input", handleData);
     };
-  }, [isActive, stdin]);
+  }, [isActive, internal_eventEmitter]);
 }
 
 // src/ui/prompt/cursor.ts

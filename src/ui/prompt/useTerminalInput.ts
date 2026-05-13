@@ -127,7 +127,7 @@ export function useTerminalInput(
   inputHandler: (input: string, key: InputKey) => void,
   options: { isActive?: boolean } = {}
 ): void {
-  const { stdin, setRawMode } = useStdin();
+  const { setRawMode, internal_eventEmitter } = useStdin();
   const isActive = options.isActive ?? true;
   const handlerRef = useRef(inputHandler);
   handlerRef.current = inputHandler;
@@ -153,9 +153,16 @@ export function useTerminalInput(
       handlerRef.current(input, key);
     };
 
-    stdin?.on("data", handleData);
+    // IMPORTANT: Use Ink's internal event emitter instead of listening on
+    // stdin.on("data", ...). Ink 5 reads stdin via the 'readable' event
+    // and re-emits chunks through internal_eventEmitter. Adding a 'data'
+    // listener on stdin conflicts with Ink's 'readable' listener because
+    // Node.js Readable stream's flowing mode ('data') and paused mode
+    // ('readable') are mutually exclusive patterns — using both causes
+    // unreliable input delivery.
+    internal_eventEmitter?.on("input", handleData);
     return () => {
-      stdin?.off("data", handleData);
+      internal_eventEmitter?.removeListener("input", handleData);
     };
-  }, [isActive, stdin]);
+  }, [isActive, internal_eventEmitter]);
 }

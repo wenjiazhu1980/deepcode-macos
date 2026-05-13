@@ -41,6 +41,7 @@ final class ChatViewModel: ObservableObject {
     private var pumpTask: Task<Void, Never>?
     private var didStart = false
     private var isUserTerminated = false
+    private var savedVersion: String = ""
 
     // MARK: - Lifecycle
 
@@ -282,6 +283,7 @@ final class ChatViewModel: ObservableObject {
         switch event {
         case let .ready(version, _, projectRoot):
             self.projectRoot = projectRoot
+            savedVersion = version
             statusText = "ready · v\(version)"
             refreshSlashCommands()
             refreshSessions()
@@ -332,7 +334,7 @@ final class ChatViewModel: ObservableObject {
             appendSystem("Error: \(message)")
         case let .done(_, status):
             isStreaming = false
-            statusText = "done · \(status)"
+            statusText = "ready · v\(savedVersion)"
             pendingSubmitId = nil
         case .ack:
             break
