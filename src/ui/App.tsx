@@ -157,6 +157,7 @@ export function App({ projectRoot, version = "", onRestart }: AppProps): React.R
           process.stdout.write("\n\n");
           process.stdout.write(summary);
           process.stdout.write("\n\n");
+          sessionManager.dispose();
           exit();
         }, 0);
         return;
@@ -184,6 +185,39 @@ export function App({ projectRoot, version = "", onRestart }: AppProps): React.R
         setShowWelcome(false);
         refreshSessionsList();
         setView("session-list");
+        return;
+      }
+      if (submission.command === "mcp") {
+        process.stdout.write("\n");
+        process.stdout.write(chalk.bold.cyan("MCP Server Status\n"));
+        process.stdout.write(chalk.dim("─────────────────\n"));
+        const statuses = sessionManager.getMcpStatus();
+        if (statuses.length === 0) {
+          process.stdout.write(chalk.dim("  No MCP servers configured.\n"));
+        } else {
+          for (const s of statuses) {
+            if (s.status === "starting") {
+              process.stdout.write(`${chalk.yellow("●")} ${chalk.bold(s.name)} - Starting...`);
+            } else if (s.status === "failed") {
+              process.stdout.write(`${chalk.red("✖")} ${chalk.bold(s.name)} - Failed (${s.error ?? "unknown error"})`);
+            } else {
+              process.stdout.write(`${chalk.green("✔")} ${chalk.bold(s.name)} - Ready (${s.toolCount} tools)`);
+            }
+            process.stdout.write("\n");
+            if (s.status === "ready" && s.tools.length > 0) {
+              for (const tool of s.tools) {
+                process.stdout.write(chalk.dim(`  - ${tool}\n`));
+              }
+            }
+          }
+        }
+        process.stdout.write(chalk.dim("─────────────────\n"));
+        process.stdout.write(
+          chalk.dim(`  Total: ${statuses.filter((s) => s.status === "ready").length} ready, `) +
+            chalk.dim(`${statuses.filter((s) => s.status === "starting").length} starting, `) +
+            chalk.dim(`${statuses.filter((s) => s.status === "failed").length} failed\n`)
+        );
+        process.stdout.write("\n");
         return;
       }
 
@@ -242,16 +276,11 @@ export function App({ projectRoot, version = "", onRestart }: AppProps): React.R
       const activeSessionId = sessionManager.getActiveSessionId();
       const meta: MessageMeta = {
         isModelChange: true,
-        modelConfig: {
-          model: selection.model,
-          thinkingEnabled: selection.thinkingEnabled,
-          reasoningEffort: selection.reasoningEffort,
-        },
       };
-      const content = `/model\n└ Set model to ${selection.model}`;
+      const content = `/model\n└ Set model to ${selection.model} (${selection?.thinkingEnabled ? selection?.reasoningEffort : "no thinking"})`;
 
       if (activeSessionId) {
-        sessionManager.addSessionSystemMessage(activeSessionId, content, meta);
+        sessionManager.addSessionSystemMessage(activeSessionId, content, true, meta);
       } else {
         const now = new Date().toISOString();
         setMessages((prev) => [

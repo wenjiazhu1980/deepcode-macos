@@ -65,13 +65,8 @@ test("SessionManager preserves structured system content when building OpenAI me
 
   assert.equal(openAIMessages.length, 1);
   assert.equal(openAIMessages[0]?.role, "system");
-  assert.deepEqual(openAIMessages[0]?.content, [
-    { type: "text", text: "The read tool has loaded `pixel.png`." },
-    {
-      type: "image_url",
-      image_url: { url: "data:image/png;base64,abc123" },
-    },
-  ]);
+  // image_url content is filtered out for DeepSeek API compatibility
+  assert.deepEqual(openAIMessages[0]?.content, [{ type: "text", text: "The read tool has loaded `pixel.png`." }]);
 });
 
 test("SessionManager preserves empty reasoning content on assistant tool calls", () => {
