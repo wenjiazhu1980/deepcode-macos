@@ -140,6 +140,8 @@ deepcode
 
 **reasoningEffort** — control AI "thinking depth": set `low` for simple tasks, `max` for complex ones. Don't waste tokens.
 
+For complete configuration details (multi-level priority, environment variables, etc.), see [docs/configuration.md](docs/configuration.md).
+
 ---
 
 ## 🛠️ Full Feature List
@@ -156,21 +158,33 @@ deepcode
 | 🖥️ **Native Mac App** | macOS menu bar app, click to chat, shares config/sessions with CLI/VSCode |
 | 🤖 **OpenAI Compatible** | Also supports Volcano Ark Coding Plan, Ollama, self-hosted models |
 
+### **Optimized for DeepSeek**
+- Specifically tuned for DeepSeek model performance.
+- Reduce costs by using [Context Caching](https://api-docs.deepseek.com/guides/kv_cache).
+- Natively supports [Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode) and Effort Control.
+
 ---
 
-## ⌨️ Keyboard Shortcuts
+## Slash Commands & Keyboard Shortcuts
 
-| Key | Action |
-|-----|--------|
-| `Enter` | Send message |
-| `Shift+Enter` / `Ctrl+J` | Insert newline |
-| `Ctrl+V` | Paste clipboard image |
-| `Esc` | Interrupt current response |
-| `/` | Open Skills / commands menu |
-| `/new` | New conversation |
-| `/resume` | Resume history |
-| `/skills` | List available Skills |
-| `/exit` | Exit |
+| Slash Command    | Action                                                   |
+|------------------|----------------------------------------------------------|
+| `/`              | Open the skills / commands menu                          |
+| `/new`           | Start a fresh conversation                               |
+| `/resume`        | Choose a previous conversation to continue               |
+| `/model`         | Switch model, thinking mode, and reasoning effort        |
+| `/init`          | Initialize an AGENTS.md file (LLM project instructions)  |
+| `/skills`        | List available skills                                    |
+| `/mcp`           | View MCP server status and available tools               |
+| `/exit`          | Quit (also `Ctrl+D` twice)                               |
+
+| Key              | Action                                                   |
+|------------------|----------------------------------------------------------|
+| `Enter`          | Send the prompt                                          |
+| `Shift+Enter`    | Insert a newline (also `Ctrl+J`)                         |
+| `Ctrl+V`         | Paste an image from the clipboard                        |
+| `Esc`            | Interrupt the current model turn                         |
+| `Ctrl+D` twice   | Quit Deep Code                                           |
 
 ---
 
@@ -232,7 +246,36 @@ npm run build
 npm link   # Local testing
 ```
 
-PRs welcome! Please read [Contributing Guide](CONTRIBUTING.md) first.
+### How do I configure MCP?
+
+Deep Code supports MCP (Model Context Protocol) to connect external services such as GitHub, browsers, databases, and more. Configure the `mcpServers` field in `settings.json` to enable it, then use the `/mcp` command to view MCP server status and available tools.
+
+For detailed setup instructions, see: [docs/mcp.md](docs/mcp.md)
+
+## Contributing
+
+Contributions are welcome! Here's how to get started:
+
+```bash
+# Clone the repository
+git clone https://github.com/lessweb/deepcode-cli.git
+cd deepcode-cli
+
+# Install dependencies
+npm install
+
+# Local development (typecheck + lint + format check + bundle)
+npm run build
+
+# Run tests
+npm test
+
+# Link globally (local global install)
+npm link
+```
+
+- Make sure `npm run check` passes before submitting a PR (typecheck + lint + format check)
+- We recommend running `npm run format` before building to avoid errors
 
 ---
 

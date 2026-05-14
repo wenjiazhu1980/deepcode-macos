@@ -121,6 +121,12 @@ export type MessageMeta = {
   resultMd?: string;
   asThinking?: boolean;
   isSummary?: boolean;
+  isModelChange?: boolean;
+  modelConfig?: {
+    model: string;
+    thinkingEnabled: boolean;
+    reasoningEffort?: string;
+  };
   skill?: SkillInfo;
 };
 
@@ -611,7 +617,7 @@ The candidate skills are as follows:\n\n`;
       if (!fs.existsSync(root)) {
         return [];
       }
-      let entries: fs.Dirent[] = [];
+      let entries: fs.Dirent[];
       try {
         entries = fs.readdirSync(root, { withFileTypes: true });
       } catch {
@@ -954,7 +960,7 @@ ${skillMd}
 
   async activateSession(sessionId: string, controller?: AbortController): Promise<void> {
     const startedAt = Date.now();
-    const { client, model, baseURL, thinkingEnabled, reasoningEffort, debugLogEnabled, notify } =
+    const { client, model, baseURL, thinkingEnabled, reasoningEffort, debugLogEnabled, notify, env } =
       this.createOpenAIClient();
     const now = new Date().toISOString();
 
@@ -968,12 +974,12 @@ ${skillMd}
       this.onAssistantMessage(
         this.buildAssistantMessage(
           sessionId,
-          "OpenAI API key not found. Please configure ~/.deepcode/settings.json.",
+          "OpenAI API key not found. Please configure ~/.deepcode/settings.json or ./.deepcode/settings.json.",
           null
         ),
         false
       );
-      this.maybeNotifyTaskCompletion(sessionId, notify, startedAt);
+      this.maybeNotifyTaskCompletion(sessionId, notify, startedAt, env);
       return;
     }
 
@@ -985,7 +991,7 @@ ${skillMd}
         failReason: "interrupted",
         updateTime: now,
       }));
-      this.maybeNotifyTaskCompletion(sessionId, notify, startedAt);
+      this.maybeNotifyTaskCompletion(sessionId, notify, startedAt, env);
       return;
     }
 
@@ -1127,7 +1133,7 @@ ${skillMd}
       if (this.sessionControllers.get(sessionId) === sessionController) {
         this.sessionControllers.delete(sessionId);
       }
-      this.maybeNotifyTaskCompletion(sessionId, notify, startedAt);
+      this.maybeNotifyTaskCompletion(sessionId, notify, startedAt, env);
     }
   }
 
@@ -1337,6 +1343,25 @@ ${skillMd}
       }
     }
     return messages;
+  }
+
+  addSessionSystemMessage(sessionId: string, content: string, meta?: MessageMeta): void {
+    const now = new Date().toISOString();
+    const message: SessionMessage = {
+      id: crypto.randomUUID(),
+      sessionId,
+      role: "system",
+      content,
+      contentParams: null,
+      messageParams: null,
+      compacted: false,
+      visible: true,
+      createTime: now,
+      updateTime: now,
+      meta,
+    };
+    this.appendSessionMessage(sessionId, message);
+    this.onAssistantMessage(message, false);
   }
 
   private normalizeSessionMessage(message: SessionMessage): SessionMessage {
@@ -1979,7 +2004,12 @@ ${skillMd}
     }
   }
 
-  private maybeNotifyTaskCompletion(sessionId: string, notifyCommand: string | undefined, startedAt: number): void {
+  private maybeNotifyTaskCompletion(
+    sessionId: string,
+    notifyCommand: string | undefined,
+    startedAt: number,
+    configuredEnv: Record<string, string> = {}
+  ): void {
     if (!notifyCommand) {
       return;
     }
@@ -1989,7 +2019,7 @@ ${skillMd}
       return;
     }
 
-    launchNotifyScript(notifyCommand, Date.now() - startedAt, this.projectRoot);
+    launchNotifyScript(notifyCommand, Date.now() - startedAt, this.projectRoot, undefined, configuredEnv);
   }
 
   private addSessionProcess(sessionId: string, processId: string | number, command: string): void {
