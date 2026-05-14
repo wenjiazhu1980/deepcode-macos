@@ -81,6 +81,70 @@ No window switching — code in VSCode, chat with AI in terminal.
 
 Beyond terminal and VSCode, DeepCode offers a **native macOS menu bar app**. Click the ✨ icon to summon the AI chat window — no terminal needed.
 
+```
+[ Menu Bar ✨ icon ]  ←click→  [ ChatPopover window ]  ←pipe→  [ deepcode CLI (sidecar) ]
+                                                              │
+                                                              ↓
+                                                     [ SessionManager / AI engine ]
+```
+
+### ✨ Mac App Capabilities
+
+#### 💬 AI Chat
+
+- Real-time conversation with DeepSeek models, with streaming output and token count display
+- Displays AI's **Thinking process** (chain-of-thought reasoning) — see how the AI thinks
+- Tool call visualization — shows which tool the AI is executing, its parameters and results
+- Interrupt a response in progress (click the stop button)
+
+#### 🖼️ Image Understanding
+
+- `⌘V` to paste clipboard images, supports PNG / JPEG / GIF / WebP formats
+- Thumbnail preview after pasting, remove individually or clear all
+- Images sent as base64 to AI — Volcano Ark `Doubao-Seed-2.0-pro` recommended for best results
+
+#### 📂 Project Directory Switching
+
+- Switch project root via folder picker (NSOpenPanel)
+- AI automatically adapts to the new project's context and Skills after switching
+- Auto-remembers the last used project directory on next launch
+
+#### 📋 Session Management
+
+- Graphical session list showing summary, status, and update time
+- Create, switch, and resume multiple conversations
+- Sessions shared across Mac App / CLI / VSCode — a session created in the Mac App is visible via terminal `/resume`, and vice versa
+
+#### ⌨️ Slash Command Panel
+
+- Type `/` to open the command panel showing all available commands and loaded Skills
+- Real-time filtering, keyboard selection, and click-to-execute
+- Built-in commands: `/new` (new session), `/resume` (resume session), `/skills` (list Skills)
+
+#### 🧠 Full AI Toolchain
+
+The Mac App connects to the CLI engine via headless protocol, with the same capabilities as the terminal:
+
+| Tool | Capability |
+|------|-----------|
+| `bash` | Execute any shell command in the project directory |
+| `read` | Read files, images, PDFs, Jupyter Notebooks |
+| `write` / `edit` | Create or precisely edit project files |
+| `WebSearch` | Search the web for up-to-date information, filling DeepSeek's internet gap |
+| `AskUserQuestion` | AI pauses to ask for clarification when facing ambiguity |
+
+#### 🔗 Three-way Shared
+
+- Config file `~/.deepcode/settings.json` shared with CLI and VSCode extension
+- Agent Skills (`~/.agents/skills/`) auto-loaded, user-level + project-level dual system
+- Session data shared across all three platforms for seamless environment switching
+
+#### 📦 Zero-dependency Package
+
+- Built-in Node.js runtime + deepcode CLI — **no need to install Node.js**
+- Native SwiftUI build, lightweight and fluid, macOS 13+ native experience
+- Menu bar resident — click the sparkles icon to summon a 480×640 popover chat window
+
 ### Download
 
 Get the latest DMG from [GitHub Releases](https://github.com/lessweb/deepcode-cli/releases):
@@ -90,6 +154,8 @@ Get the latest DMG from [GitHub Releases](https://github.com/lessweb/deepcode-cl
 # 2. Double-click to mount, drag to Applications
 # 3. First launch: Right-click → "Open" (unsigned version)
 ```
+
+> 💡 On first launch, the Mac App automatically detects `~/.deepcode/settings.json`. If not yet configured, it will prompt you to run `deepcode --setup` first.
 
 ---
 
