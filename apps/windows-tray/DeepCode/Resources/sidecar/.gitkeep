@@ -1,0 +1,5 @@
+Placeholder for the staged sidecar bundle.
+
+Run `pwsh apps/windows-tray/scripts/stage-sidecar.ps1` (or the CI workflow `release-windows.yml`)
+to populate this directory with `cli.mjs`, `node.exe`, `package.json`, `node_modules/` and
+`docs/tools/` before launching the app.

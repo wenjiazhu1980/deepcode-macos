@@ -198,6 +198,37 @@ open DeepCode.xcodeproj        # Cmd+R 运行
 
 > 源码位于 `apps/macos-menubar/`，MIT 开源，欢迎贡献。
 
+## 🪟 DeepCode 原生 Windows App — 系统托盘里的 AI 编程助手
+
+Mac 上有菜单栏 App，Windows 上也有对称的体验。基于 **WPF + .NET 8**，与 macOS 版共享同一套 headless 协议、settings、sessions、skills。
+
+### 📥 安装 Windows App
+
+到 [GitHub Releases](https://github.com/lessweb/deepcode-cli/releases) 下载 `DeepCode-windows-vX.Y.Z-win-x64.zip`，解压后双击 `DeepCode.exe`：
+
+- 系统托盘出现 ✨ 图标，左键弹出聊天窗
+- 配置文件复用 `%USERPROFILE%\.deepcode\settings.json`（与 CLI / VSCode 三端互通）
+- 首次启动 SmartScreen 会拦截（未签名）：点「更多信息 → 仍要运行」即可
+
+### ✨ 主要特性
+
+- 系统托盘常驻，左键即开即用
+- 项目目录可在 UI 内切换；最近项目自动持久化
+- `/new` / `/resume` / `/skills` 等所有终端 slash 命令在 UI 内一键可达
+- 支持图片粘贴（Ctrl+V）发送给多模态模型
+- 与 CLI 共享所有会话历史
+
+> 需要先安装 [Git for Windows](https://git-scm.com/download/win)（bash 工具依赖 Git Bash）。源码位于 `apps/windows-tray/`，MIT 开源。
+
+### 🛠️ 本地构建 Windows App
+
+```pwsh
+# 需要 .NET 8 SDK + Node 18.17+ + Git for Windows
+npm ci
+pwsh apps/windows-tray/scripts/stage-sidecar.ps1   # 构建 CLI + 复制到 sidecar
+dotnet run --project apps/windows-tray/DeepCode/DeepCode.csproj
+```
+
 ---
 
 ## 🚀 快速开始 | Quick Start

@@ -65,6 +65,16 @@ git push origin macos-vX.Y.Z
 ```
 The DMG is auto-attached to a release named `macos-vX.Y.Z`.
 
+### 5. Trigger Windows native app build (optional)
+Windows `.exe` portable ZIP is built by `.github/workflows/release-windows.yml`, triggered by `windows-v*` tags:
+```bash
+git tag windows-vX.Y.Z
+git push origin windows-vX.Y.Z
+```
+The ZIP (containing `DeepCode.exe` + `sidecar/`) is auto-attached to a release named `windows-vX.Y.Z`.
+
+The macOS and Windows app sources live side-by-side in `apps/macos-menubar/` and `apps/windows-tray/`. Both speak the same NDJSON headless protocol (see `src/headless.ts`); the Swift and C# protocol types must stay in sync.
+
 ### Rollback
 If a release is bad, delete the tag and re-tag the previous commit:
 ```bash

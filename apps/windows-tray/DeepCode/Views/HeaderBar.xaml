@@ -1,0 +1,55 @@
+<UserControl x:Class="DeepCode.Views.HeaderBar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="clr-namespace:DeepCode.Models"
+             xmlns:converters="clr-namespace:DeepCode.Views.Converters"
+             d:DataContext="{d:DesignInstance Type=models:ChatViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d">
+    <UserControl.Resources>
+        <converters:CollapsePathConverter x:Key="CollapsePathConverter" />
+        <converters:StringEmptyToVisibilityConverter x:Key="StringEmptyToVis" />
+    </UserControl.Resources>
+
+    <Border Background="{DynamicResource HeaderBg}">
+        <StackPanel>
+            <Grid Margin="12,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="✨" VerticalAlignment="Center" Margin="0,0,4,0" />
+                <TextBlock Grid.Column="1" Text="DeepCode" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="3" Text="{Binding ModelLabel}" FontSize="11"
+                           Foreground="{DynamicResource Secondary}" VerticalAlignment="Center"
+                           Visibility="{Binding ModelLabel, Converter={StaticResource StringEmptyToVis}}"
+                           Margin="0,0,4,0" />
+                <TextBlock Grid.Column="4" Text="·" Foreground="{DynamicResource Secondary}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                <TextBlock Grid.Column="5" Text="{Binding StatusText}" FontSize="11"
+                           Foreground="{DynamicResource Secondary}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <Menu Grid.Column="6" Background="Transparent" VerticalAlignment="Center">
+                    <MenuItem Header="⋯" Padding="6,0">
+                        <MenuItem Header="会话列表" Command="{Binding ToggleSessionListCommand}" />
+                        <MenuItem Header="切换项目目录…" Command="{Binding SelectProjectRootCommand}" />
+                        <Separator />
+                        <MenuItem Header="退出 DeepCode" Click="OnQuitClicked" />
+                    </MenuItem>
+                </Menu>
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" Margin="12,0,12,4"
+                        Visibility="{Binding ProjectRoot, Converter={StaticResource StringEmptyToVis}}">
+                <TextBlock Text="📁" FontSize="11" Foreground="{DynamicResource Tertiary}" Margin="0,0,4,0" />
+                <TextBlock Text="{Binding ProjectRoot, Converter={StaticResource CollapsePathConverter}}"
+                           FontSize="11" Foreground="{DynamicResource Tertiary}"
+                           TextTrimming="CharacterEllipsis" MaxWidth="420" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

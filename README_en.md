@@ -157,6 +157,29 @@ Get the latest DMG from [GitHub Releases](https://github.com/lessweb/deepcode-cl
 
 > 💡 On first launch, the Mac App automatically detects `~/.deepcode/settings.json`. If not yet configured, it will prompt you to run `deepcode --setup` first.
 
+## 🪟 Native Windows App — AI Assistant in Your System Tray
+
+A symmetric tray companion for Windows users. Built on **WPF + .NET 8**, sharing the exact same headless protocol, settings, sessions, and skills with the macOS app and the CLI.
+
+### 📥 Install
+
+Download `DeepCode-windows-vX.Y.Z-win-x64.zip` from [GitHub Releases](https://github.com/lessweb/deepcode-cli/releases), extract, and double-click `DeepCode.exe`:
+
+- A ✨ icon appears in the system tray; left-click toggles the chat popup
+- Reuses `%USERPROFILE%\.deepcode\settings.json` (shared with CLI / VSCode)
+- First launch: SmartScreen will warn — click "More info → Run anyway"
+
+Requires [Git for Windows](https://git-scm.com/download/win) (the bash tool depends on Git Bash). Source under `apps/windows-tray/`.
+
+### 🛠️ Build locally
+
+```pwsh
+# Needs .NET 8 SDK + Node 18.17+ + Git for Windows
+npm ci
+pwsh apps/windows-tray/scripts/stage-sidecar.ps1
+dotnet run --project apps/windows-tray/DeepCode/DeepCode.csproj
+```
+
 ---
 
 ## 🚀 Quick Start

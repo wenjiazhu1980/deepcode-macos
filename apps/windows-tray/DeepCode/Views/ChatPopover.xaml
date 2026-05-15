@@ -1,0 +1,45 @@
+<UserControl x:Class="DeepCode.Views.ChatPopover"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:DeepCode.Views"
+             xmlns:models="clr-namespace:DeepCode.Models"
+             xmlns:sidecar="clr-namespace:DeepCode.Sidecar"
+             d:DataContext="{d:DesignInstance Type=models:ChatViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             Width="480" Height="640"
+             Background="{DynamicResource MaterialBg}">
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="MaterialBg" Color="#F6F6F8" />
+        <SolidColorBrush x:Key="HeaderBg" Color="#EFEFF2" />
+        <SolidColorBrush x:Key="UserBubbleBg" Color="#D6E4FF" />
+        <SolidColorBrush x:Key="ToolBubbleBg" Color="#EFEFEF" />
+        <SolidColorBrush x:Key="Tertiary" Color="#888888" />
+        <SolidColorBrush x:Key="Secondary" Color="#5A5A5A" />
+        <SolidColorBrush x:Key="Primary" Color="#1C1C1E" />
+        <SolidColorBrush x:Key="Accent" Color="#2D6CDF" />
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <local:HeaderBar Grid.Row="0" DataContext="{Binding}" />
+
+        <!-- Body: error / settings hint / session list / messages -->
+        <Grid Grid.Row="1">
+            <local:MessageList DataContext="{Binding}"
+                               Visibility="{Binding ShowSessionList, Converter={StaticResource InverseBoolToVis}}" />
+            <local:SessionListView DataContext="{Binding}"
+                                   Visibility="{Binding ShowSessionList, Converter={StaticResource BoolToVis}}" />
+        </Grid>
+
+        <!-- Input -->
+        <local:InputBar Grid.Row="2" DataContext="{Binding}" />
+    </Grid>
+</UserControl>
