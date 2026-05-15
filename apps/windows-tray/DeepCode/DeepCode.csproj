@@ -10,7 +10,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>DeepCode</AssemblyName>
     <RootNamespace>DeepCode</RootNamespace>
-    <ApplicationIcon>Resources\DeepCode.ico</ApplicationIcon>
+    <ApplicationIcon Condition="Exists('Resources\DeepCode.ico')">Resources\DeepCode.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <Version>0.0.0</Version>

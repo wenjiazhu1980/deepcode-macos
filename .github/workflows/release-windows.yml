@@ -76,6 +76,30 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Generate placeholder app icon
+        shell: pwsh
+        # Convert the macOS app's 256x256 PNG into a .ico so the WPF
+        # ApplicationIcon / NotifyIcon have a real image. Falls back to a 1x1
+        # transparent ICO if the PNG isn't present, so the build never blocks
+        # on icon assets.
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          $dst = "apps/windows-tray/DeepCode/Resources/DeepCode.ico"
+          $src = "apps/macos-menubar/DeepCode/Resources/Assets.xcassets/AppIcon.appiconset/icon_256x256.png"
+          if (Test-Path $src) {
+            $bmp = [System.Drawing.Bitmap]::FromFile((Resolve-Path $src))
+            $icon = [System.Drawing.Icon]::FromHandle($bmp.GetHicon())
+            $fs = [System.IO.File]::OpenWrite((Join-Path (Get-Location) $dst))
+            $icon.Save($fs)
+            $fs.Close()
+            $bmp.Dispose()
+          } else {
+            # 16-byte minimal ICO header for a 1x1 transparent icon
+            [byte[]]$bytes = 0,0,1,0,1,0,1,1,0,0,1,0,32,0,0x68,0,0,0,0x16,0,0,0,0x28,0,0,0,1,0,0,0,2,0,0,0,1,0,32,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+            [System.IO.File]::WriteAllBytes((Join-Path (Get-Location) $dst), $bytes)
+          }
+          Write-Host "Wrote $dst ($((Get-Item $dst).Length) bytes)"
+
       - name: Stage sidecar resources
         shell: pwsh
         run: |
