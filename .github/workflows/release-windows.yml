@@ -46,7 +46,21 @@ jobs:
 
       - name: Build CLI bundle
         shell: bash
-        run: npm run build
+        # We cannot use `npm run build` here: on Windows, npm spawns lifecycle
+        # scripts via cmd.exe regardless of the outer shell, and cmd.exe does
+        # not honor the POSIX single-quotes around the esbuild --banner:js arg,
+        # turning `node'` into a phantom second input file. Call the binaries
+        # directly so this bash invocation does the quoting.
+        run: |
+          npx tsc -p ./ --noEmit
+          ./node_modules/.bin/esbuild ./src/cli.tsx \
+            --bundle --platform=node --format=esm --target=node18 \
+            --outfile=dist/cli.mjs \
+            --banner:js='#!/usr/bin/env node' \
+            --jsx=automatic --jsx-import-source=react \
+            --packages=external \
+            --log-override:empty-import-meta=silent
+          chmod +x dist/cli.mjs || true
 
       - name: Run tests
         shell: bash
