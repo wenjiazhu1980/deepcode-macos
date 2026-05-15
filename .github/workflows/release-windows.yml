@@ -41,12 +41,15 @@ jobs:
           cache: "npm"
 
       - name: Install JS deps
+        shell: bash
         run: npm ci
 
       - name: Build CLI bundle
+        shell: bash
         run: npm run build
 
       - name: Run tests
+        shell: bash
         run: npm test
 
       - uses: actions/setup-dotnet@v4
