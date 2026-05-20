@@ -3,6 +3,7 @@ import { render } from "ink";
 import { setShellIfWindows } from "./common/shell-utils";
 import { checkForNpmUpdate, promptForPendingUpdate, type PackageInfo } from "./updateCheck";
 import { AppContainer } from "./ui";
+import { runHeadless } from "./headless";
 
 const args = process.argv.slice(2);
 const packageInfo = readPackageInfo();
@@ -19,10 +20,14 @@ if (args.includes("--help") || args.includes("-h")) {
       "",
       "Usage:",
       "  deepcode                              Launch the interactive TUI in the current directory",
+      "  deepcode headless                     Run a headless NDJSON server over stdio (for native frontends)",
       "  deepcode -p <prompt>                  Launch with a pre-filled prompt",
       "  deepcode --prompt <prompt>            Same as -p",
       "  deepcode --version                    Print the version",
       "  deepcode --help                       Show this help",
+      "",
+      "Headless options:",
+      "  --project-root <path>                 Use the given directory as the project root (default: cwd)",
       "",
       "Configuration:",
       "  ~/.deepcode/settings.json    User-level API key, model, base URL",
@@ -64,12 +69,23 @@ let initialPrompt = extractInitialPrompt(args);
 const projectRoot = process.cwd();
 configureWindowsShell();
 
-if (!process.stdin.isTTY) {
-  process.stderr.write("deepcode requires an interactive terminal (TTY). " + "Re-run from a real terminal session.\n");
-  process.exit(1);
-}
+// Headless mode: bypass TTY check and run a programmatic NDJSON bridge
+if (args[0] === "headless") {
+  void runHeadless(args.slice(1), packageInfo.version || "unknown").catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`deepcode headless: ${message}\n`);
+    process.exit(1);
+  });
+} else {
+  if (!process.stdin.isTTY) {
+    process.stderr.write(
+      "deepcode requires an interactive terminal (TTY). Re-run from a real terminal session, or use `deepcode headless` for a programmatic interface.\n"
+    );
+    process.exit(1);
+  }
 
-void main();
+  void main();
+}
 
 async function main(): Promise<void> {
   const updatePromptResult = await promptForPendingUpdate(packageInfo);

@@ -1,106 +1,98 @@
 #!/usr/bin/env node
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __commonJS = (cb, mod) =>
+  function __require() {
+    return (mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports);
+  };
+
+// package.json
+var require_package = __commonJS({
+  "package.json"(exports, module) {
+    module.exports = {
+      name: "@vegamo/deepcode-cli",
+      version: "0.2.13",
+      description: "Deep Code CLI - Vibe coding for the deepseek-v4 model in your terminal",
+      license: "MIT",
+      type: "module",
+      repository: {
+        type: "git",
+        url: "https://github.com/lessweb/deepcode-cli.git",
+      },
+      homepage: "https://deepcode.vegamo.cn",
+      bin: {
+        deepcode: "./dist/cli.js",
+      },
+      main: "./dist/cli.js",
+      files: [
+        "dist/cli.js",
+        "templates/tools/**",
+        "templates/prompts/**",
+        "templates/skills/**",
+        "README.md",
+        "LICENSE",
+      ],
+      engines: {
+        node: ">=22",
+      },
+      scripts: {
+        typecheck: "tsc -p ./ --noEmit",
+        bundle:
+          'esbuild ./src/cli.tsx --bundle --platform=node --format=esm --target=node18 --outfile=dist/cli.js --banner:js="#!/usr/bin/env node" --jsx=automatic --jsx-import-source=react --packages=external --log-override:empty-import-meta=silent',
+        lint: "eslint src/",
+        "lint:fix": "eslint src/ --fix",
+        format: "prettier --write 'src/**/*.{ts,tsx}'",
+        "format:check": "prettier --check 'src/**/*.{ts,tsx}'",
+        check: "npm run typecheck && npm run lint && npm run format:check",
+        build: `npm run check && npm run bundle && node -e "require('fs').chmodSync('dist/cli.js', 0o755)"`,
+        test: "node src/tests/run-tests.mjs",
+        "test:single": "tsx --test",
+        prepack: "npm run build",
+        prepare: "husky",
+      },
+      dependencies: {
+        chalk: "^5.6.2",
+        ejs: "^5.0.2",
+        "gradient-string": "^3.0.0",
+        "gray-matter": "^4.0.3",
+        ignore: "^7.0.5",
+        ink: "^7.0.1",
+        "ink-gradient": "^4.0.0",
+        openai: "^6.35.0",
+        react: "^19.2.5",
+        zod: "^4.4.3",
+      },
+      devDependencies: {
+        "@eslint/js": "^9.39.4",
+        "@types/ejs": "^3.1.5",
+        "@types/node": "^25.6.0",
+        "@types/react": "^19.2.14",
+        esbuild: "^0.28.0",
+        eslint: "^9.39.4",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-react-hooks": "^7.1.1",
+        glob: "^13.0.6",
+        husky: "^9.1.7",
+        "lint-staged": "^17.0.4",
+        prettier: "^3.8.3",
+        tsx: "^4.21.0",
+        typescript: "^6.0.3",
+        "typescript-eslint": "^8.59.2",
+      },
+    };
+  },
+});
 
 // src/cli.tsx
-import { readFileSync as readFileSync10 } from "node:fs";
-import { dirname as dirname9, resolve as resolve5 } from "node:path";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
 import { render as render2 } from "ink";
 
-// src/ui/App.tsx
-import {
-  useCallback as useCallback2,
-  useEffect as useEffect6,
-  useMemo as useMemo4,
-  useRef as useRef3,
-  useState as useState7,
-} from "react";
-import { Box as Box7, Static, Text as Text8, useApp as useApp2, useStdout as useStdout3 } from "ink";
-import chalk4 from "chalk";
-import * as fs12 from "fs";
-import * as os9 from "os";
-import * as path12 from "path";
-import OpenAI2 from "openai";
-
-// src/session.ts
-import * as fs9 from "fs";
-import * as path8 from "path";
-import * as os5 from "os";
-import * as crypto from "crypto";
-import { fileURLToPath as fileURLToPath2 } from "url";
-import matter from "gray-matter";
-import ejs from "ejs";
-
-// src/notify.ts
-import { spawn } from "child_process";
-function formatDurationSeconds(durationMs) {
-  const safeMs = Number.isFinite(durationMs) ? Math.max(0, durationMs) : 0;
-  return String(Math.floor(safeMs / 1e3));
-}
-function buildNotifyEnv(durationMs, baseEnv = process.env) {
-  return {
-    ...baseEnv,
-    DURATION: formatDurationSeconds(durationMs),
-  };
-}
-function launchNotifyScript(notifyPath, durationMs, workingDirectory, spawnProcess = spawn) {
-  const commandPath = notifyPath?.trim();
-  if (!commandPath) {
-    return;
-  }
-  const options = {
-    cwd: workingDirectory,
-    detached: process.platform !== "win32",
-    env: buildNotifyEnv(durationMs),
-    stdio: "ignore",
-  };
-  try {
-    const child = spawnProcess(commandPath, [], options);
-    child.once("error", (error) => {
-      if (process.platform === "win32") {
-        return;
-      }
-      if (error.code !== "EACCES" && error.code !== "ENOEXEC") {
-        return;
-      }
-      try {
-        const fallbackChild = spawnProcess("/bin/sh", [commandPath], options);
-        fallbackChild.once("error", () => void 0);
-        fallbackChild.unref();
-      } catch {}
-    });
-    child.unref();
-  } catch {}
-}
-
-// src/openai-thinking.ts
-function buildThinkingRequestOptions(thinkingEnabled, reasoningEffort = "max") {
-  const thinking = { type: thinkingEnabled ? "enabled" : "disabled" };
-  return {
-    thinking,
-    ...(thinkingEnabled ? { extra_body: { reasoning_effort: reasoningEffort } } : {}),
-  };
-}
-
-// src/model-capabilities.ts
-var DEEPSEEK_V4_MODELS = /* @__PURE__ */ new Set(["deepseek-v4-flash", "deepseek-v4-pro"]);
-function defaultsToThinkingMode(model) {
-  return DEEPSEEK_V4_MODELS.has(model);
-}
-
-// src/prompt.ts
-import { execFileSync as execFileSync2, execSync } from "child_process";
-import * as fs2 from "fs";
-import * as os2 from "os";
-import * as path2 from "path";
-import { fileURLToPath } from "url";
-
-// src/tools/shell-utils.ts
+// src/common/shell-utils.ts
 import { execFileSync } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as pathWin32 from "path/win32";
 var WINDOWS_GIT_LOCATIONS = ["C:\\Program Files\\Git\\cmd\\git.exe", "C:\\Program Files (x86)\\Git\\cmd\\git.exe"];
+var WINDOWS_BASH_LOCATIONS = ["C:\\Program Files\\Git\\bin\\bash.exe", "C:\\Program Files (x86)\\Git\\bin\\bash.exe"];
 var NUL_REDIRECT_REGEX = /(\d?&?>+\s*)[Nn][Uu][Ll](?=\s|$|[|&;)\n])/g;
 var cachedGitBashPath = null;
 function setShellIfWindows() {
@@ -113,15 +105,28 @@ function findGitBashPath() {
   if (cachedGitBashPath) {
     return cachedGitBashPath;
   }
-  for (const gitPath of findAllWindowsExecutableCandidates("git")) {
-    const bashPath = pathWin32.join(gitPath, "..", "..", "bin", "bash.exe");
-    if (fs.existsSync(bashPath)) {
-      cachedGitBashPath = bashPath;
-      return bashPath;
-    }
+  const bashPath = resolveWindowsGitBashPath({
+    findExecutableCandidates: findAllWindowsExecutableCandidates,
+    findGitExecPath,
+    existsSync: fs.existsSync,
+  });
+  if (bashPath) {
+    cachedGitBashPath = bashPath;
+    return bashPath;
   }
   throw new Error(
-    "Deep Code on Windows requires Git Bash. Install Git Bash for Windows and ensure bash.exe is available in PATH."
+    "Deep Code on Windows requires Git Bash. Install Git for Windows, or ensure Git's bash.exe is available in PATH."
+  );
+}
+function resolveWindowsGitBashPath(lookup) {
+  return firstExistingWindowsPath(
+    [
+      ...lookup.findExecutableCandidates("bash"),
+      ...WINDOWS_BASH_LOCATIONS,
+      ...gitExecPathToBashCandidates(lookup.findGitExecPath()),
+      ...lookup.findExecutableCandidates("git").flatMap(gitExecutableToBashCandidates),
+    ],
+    lookup.existsSync
   );
 }
 function resolveShellPath() {
@@ -202,9 +207,10 @@ function toNativeCwd(shellCwd) {
   }
   return posixPathToWindowsPath(shellCwd);
 }
-function buildShellEnv(shellPath) {
+function buildShellEnv(shellPath, extraEnv = {}) {
   const env = {
     ...process.env,
+    ...extraEnv,
     SHELL: shellPath,
     GIT_EDITOR: "true",
   };
@@ -216,23 +222,65 @@ function buildShellEnv(shellPath) {
   return env;
 }
 function findAllWindowsExecutableCandidates(executable) {
-  const extraCandidates = executable === "git" ? WINDOWS_GIT_LOCATIONS : [];
+  const extraCandidates =
+    executable === "git" ? WINDOWS_GIT_LOCATIONS : executable === "bash" ? WINDOWS_BASH_LOCATIONS : [];
   try {
     const output = execFileSync("where.exe", [executable], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
       windowsHide: true,
     });
-    return filterWindowsExecutableCandidates([
-      ...output
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean),
-      ...extraCandidates,
-    ]);
+    let whereResults = output
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (executable === "bash") {
+      whereResults = whereResults.filter((candidate) => !/system32[\\/]bash\.exe$/i.test(candidate));
+    }
+    return filterWindowsExecutableCandidates([...whereResults, ...extraCandidates]);
   } catch {
     return filterWindowsExecutableCandidates(extraCandidates);
   }
+}
+function findGitExecPath() {
+  try {
+    const output = execFileSync("git", ["--exec-path"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
+    }).trim();
+    return output || null;
+  } catch {
+    return null;
+  }
+}
+function gitExecPathToBashCandidates(execPath) {
+  if (!execPath) {
+    return [];
+  }
+  const normalized = execPath.replace(/\//g, "\\");
+  return [
+    pathWin32.join(normalized, "..", "..", "..", "bin", "bash.exe"),
+    pathWin32.join(normalized, "..", "..", "bin", "bash.exe"),
+  ];
+}
+function gitExecutableToBashCandidates(gitPath) {
+  return [pathWin32.join(gitPath, "..", "..", "bin", "bash.exe"), pathWin32.join(gitPath, "..", "bin", "bash.exe")];
+}
+function firstExistingWindowsPath(candidates, existsSync11) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const candidate of candidates) {
+    const normalized = pathWin32.resolve(candidate);
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    if (getShellKind(normalized) === "bash" && existsSync11(normalized)) {
+      return normalized;
+    }
+  }
+  return null;
 }
 function filterWindowsExecutableCandidates(candidates) {
   const cwd = process.cwd().toLowerCase();
@@ -252,161 +300,144 @@ function filterWindowsExecutableCandidates(candidates) {
   return results;
 }
 
+// src/updateCheck.ts
+import { spawn as spawn5 } from "child_process";
+import React13 from "react";
+import * as fs13 from "fs";
+import * as os10 from "os";
+import * as path14 from "path";
+import { render } from "ink";
+import chalk6 from "chalk";
+
+// src/ui/App.tsx
+import {
+  useCallback as useCallback3,
+  useEffect as useEffect5,
+  useLayoutEffect as useLayoutEffect2,
+  useMemo as useMemo8,
+  useRef as useRef6,
+  useState as useState9,
+} from "react";
+import {
+  Box as Box10,
+  Static,
+  Text as Text11,
+  useApp as useApp2,
+  useStdout as useStdout2,
+  useWindowSize as useWindowSize3,
+} from "ink";
+import chalk5 from "chalk";
+import * as fs12 from "fs";
+import * as os9 from "os";
+import * as path13 from "path";
+import OpenAI from "openai";
+
+// src/session.ts
+import * as fs9 from "fs";
+import * as path9 from "path";
+import * as os6 from "os";
+import * as crypto2 from "crypto";
+import { fileURLToPath as fileURLToPath2 } from "url";
+import matter from "gray-matter";
+import ejs2 from "ejs";
+
+// src/common/notify.ts
+import { spawn } from "child_process";
+function formatDurationSeconds(durationMs) {
+  const safeMs = Number.isFinite(durationMs) ? Math.max(0, durationMs) : 0;
+  return String(Math.floor(safeMs / 1e3));
+}
+function buildNotifyEnv(durationMs, baseEnv = process.env, context = {}) {
+  const env = {
+    ...baseEnv,
+    DURATION: formatDurationSeconds(durationMs),
+  };
+  delete env.STATUS;
+  delete env.FAIL_REASON;
+  delete env.BODY;
+  delete env.TITLE;
+  if (context.status) {
+    env.STATUS = context.status;
+  }
+  if (context.failReason) {
+    env.FAIL_REASON = context.failReason;
+  }
+  if (context.body) {
+    env.BODY = context.body;
+  }
+  if (context.title) {
+    env.TITLE = context.title;
+  }
+  return env;
+}
+function launchNotifyScript(
+  notifyPath,
+  durationMs,
+  workingDirectory,
+  spawnProcess = spawn,
+  configuredEnv = {},
+  context = {}
+) {
+  const commandPath = notifyPath?.trim();
+  if (!commandPath) {
+    return;
+  }
+  const options = {
+    cwd: workingDirectory,
+    detached: process.platform !== "win32",
+    env: buildNotifyEnv(durationMs, { ...process.env, ...configuredEnv }, context),
+    stdio: "ignore",
+  };
+  try {
+    const child = spawnProcess(commandPath, [], options);
+    child.once("error", (error) => {
+      if (process.platform === "win32") {
+        return;
+      }
+      if (error.code !== "EACCES" && error.code !== "ENOEXEC") {
+        return;
+      }
+      try {
+        const fallbackChild = spawnProcess("/bin/sh", [commandPath], options);
+        fallbackChild.once("error", () => void 0);
+        fallbackChild.unref();
+      } catch {}
+    });
+    child.unref();
+  } catch {}
+}
+
+// src/common/openai-thinking.ts
+function buildThinkingRequestOptions(thinkingEnabled, _baseURL, reasoningEffort = "max") {
+  const thinking = { type: thinkingEnabled ? "enabled" : "disabled" };
+  return {
+    thinking,
+    ...(thinkingEnabled ? { extra_body: { reasoning_effort: reasoningEffort } } : {}),
+  };
+}
+
+// src/common/model-capabilities.ts
+var DEEPSEEK_V4_MODELS = /* @__PURE__ */ new Set(["deepseek-v4-flash", "deepseek-v4-pro"]);
+var NON_MULTIMODAL_MODELS = /* @__PURE__ */ new Set([
+  "deepseek-v4-pro",
+  "deepseek-v4-flash",
+  "deepseek-chat",
+  "deepseek-reasoner",
+]);
+function defaultsToThinkingMode(model) {
+  return DEEPSEEK_V4_MODELS.has(model);
+}
+function supportsMultimodal(model) {
+  return !NON_MULTIMODAL_MODELS.has(model.trim());
+}
+
 // src/prompt.ts
-var AGENT_DRIFT_GUARD_SKILL = `
----
-name: agent-drift-guard
-description: Detect and correct execution drift while working on user requests. Use when you are actively implementing, debugging, reviewing, or investigating and there is a risk of wandering beyond the user's goal, adding unrequested work, touching live systems, over-exploring, or ignoring repeated user boundary corrections. Especially useful during multi-step coding tasks, production-adjacent requests, ambiguous scopes, and anytime you should self-check whether it is still solving the requested problem.
----
-
-# Agent Drift Guard
-
-Keep execution tightly aligned with the user's actual request.
-
-## Quick Start
-
-Run this mental check before substantial work and again whenever the plan expands:
-
-1. State the user's requested outcome in one sentence.
-2. List explicit non-goals or boundaries the user has set.
-3. Ask whether the next action directly advances the requested outcome.
-4. If not, either cut it or pause to confirm.
-
-## Drift Signals
-
-Treat these as warning signs that execution may be drifting:
-
-- Exploring broadly before opening the most relevant file, command, or artifact.
-- Solving adjacent operational issues when the user asked only for code changes.
-- Adding extra safeguards, scripts, docs, refactors, or cleanup that the user did not ask for.
-- Reframing the task around what seems "better" instead of what was requested.
-- Continuing with a broader plan after the user narrows the scope.
-- Repeating searches or tool calls without increasing certainty.
-- Mixing diagnosis, remediation, and feature work when the user asked for only one of them.
-- Touching production-like state, external systems, or live data without explicit permission.
-
-## Severity Levels
-
-### Level 1: Mild Drift
-
-Examples:
-- One or two extra exploratory commands.
-- Considering a broader solution but not acting on it yet.
-- Briefly over-explaining instead of moving the task forward.
-
-Response:
-- Auto-correct silently.
-- Narrow to the smallest next action.
-- Do not interrupt the user.
-
-### Level 2: Material Drift
-
-Examples:
-- Planning additional deliverables not requested.
-- Writing helper scripts, migrations, docs, or tests outside the asked scope.
-- Expanding from code changes into operational fixes.
-- Continuing after the user has already corrected the scope once.
-
-Response:
-- Stop and realign internally first.
-- If the broader action is avoidable, drop it and continue on scope.
-- If the broader action has non-obvious tradeoffs, ask a brief confirmation question.
-
-### Level 3: Boundary or Risk Violation
-
-Examples:
-- Modifying live systems, production data, external services, or user-owned state without being asked.
-- Taking destructive or hard-to-reverse actions outside the requested scope.
-- Ignoring repeated user instructions about what not to do.
-
-Response:
-- Pause before acting.
-- Surface the exact boundary and ask for confirmation.
-- Offer the smallest on-scope option first.
-
-## Self-Check Loop
-
-Use this loop during execution:
-
-### Before the first meaningful action
-
-Write down mentally:
-- Requested outcome
-- Allowed scope
-- Forbidden scope
-- Smallest useful next step
-
-### After each non-trivial step
-
-Ask:
-- Did this step directly help deliver the requested outcome?
-- Did I learn something that changes scope, or only implementation?
-- Am I about to do more than the user asked?
-
-### After a user correction
-
-Treat the correction as a hard boundary update.
-
-Then:
-- Remove the old broader plan.
-- Do not defend the discarded work.
-- Continue from the narrowed scope.
-- If needed, acknowledge briefly and move on.
-
-## Decision Rules
-
-Use these rules in order:
-
-1. Prefer the most direct artifact first.
-   - Open the relevant file before scanning the whole repo.
-   - Inspect the specific failing path before designing a general framework.
-
-2. Prefer the smallest complete fix.
-   - Solve the asked problem before improving related systems.
-   - Avoid bonus work unless it is required for correctness.
-
-3. Prefer internal correction over user interruption.
-   - If you can shrink back to scope confidently, do it.
-   - Ask only when the next step changes deliverables, risk, or ownership.
-
-4. Treat repeated user constraints as priority signals.
-   - A repeated instruction means your execution style is currently misaligned.
-   - Tighten scope immediately.
-
-5. Separate categories of work.
-   - Code change, investigation, production remediation, cleanup, and documentation are distinct tasks unless the user explicitly combines them.
-
-## Good Intervention Style
-
-When you must pause, keep it short and specific:
-
-- State the potential drift in one sentence.
-- Name the tradeoff or boundary.
-- Offer the smallest on-scope option first.
-
-Example:
-
-"Quick alignment check: I can keep this to the code fix only, or also add an ops cleanup step. I'll stick to the code fix unless you want both."
-
-## Anti-Patterns
-
-Do not:
-
-- Create cleanup scripts, docs, or side tools just because they seem useful.
-- Broaden the task after discovering a neighboring problem.
-- Continue with a plan the user has already rejected.
-- Justify drift with "best practice" when the user asked for a narrower deliverable.
-- Hide extra work inside a larger patch.
-
-## Final Check Before Responding
-
-Before sending the final answer, verify:
-
-- The delivered work matches the requested outcome.
-- No extra deliverables were added without confirmation.
-- Any assumptions are stated briefly.
-- Suggested next steps are optional, not bundled into the completed work.
-`;
+import { execFileSync as execFileSync2, execSync } from "child_process";
+import * as fs2 from "fs";
+import * as os2 from "os";
+import * as path2 from "path";
+import { fileURLToPath } from "url";
+import ejs from "ejs";
 var COMPACT_PROMPT_BASE = `Your task is to create a detailed summary of the conversation so far, paying close attention to the user's explicit requests and your previous actions.
 This summary should be thorough in capturing technical details, code patterns, and architectural decisions that would be essential for continuing development work without losing context.
 
@@ -488,22 +519,27 @@ Here's an example of how your output should be structured:
    [Optional Next step to take]
 
 </summary>`;
-var SYSTEM_PROMPT_BASE = `You are an interactive CLI tool that helps users with software engineering tasks. Use the instructions below and the tools available to you to assist the user.
+var SYSTEM_PROMPT_BASE = `\u4F60\u662F\u540D\u53EBDeep Code\u7684\u4EA4\u4E92\u5F0FCLI\u5DE5\u5177\uFF0C\u5E2E\u52A9\u7528\u6237\u5B8C\u6210\u8F6F\u4EF6\u5DE5\u7A0B\u4EFB\u52A1\u3002 Use the instructions below and the tools available to you to assist the user.
 
-IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.`;
-function readToolDocs(extensionRoot, _options = {}) {
-  const toolsDir = path2.join(extensionRoot, "docs", "tools");
+\u91CD\u8981\uFF1A\u4E25\u7981\u7F16\u9020\u4EFB\u4F55\u975E\u7F16\u7A0B\u76F8\u5173\u7684 URL\u3002\u5BF9\u4E8E\u7F16\u7A0B\u94FE\u63A5\uFF0C\u4EC5\u9650\u4F7F\u7528\uFF1A1) \u7528\u6237\u63D0\u4F9B\u7684\u4E0A\u4E0B\u6587\uFF1B2) \u4F60\u786E\u5B9A\u7684\u5B98\u65B9\u6587\u6863\u4E3B\u57DF\u540D\u3002\u5728\u8F93\u51FA\u524D\uFF0C\u5FC5\u987B\u81EA\u67E5\u8BE5\u94FE\u63A5\u662F\u5426\u5B58\u5728\u4E8E\u4F60\u7684\u4E0A\u4E0B\u6587\u8BB0\u5FC6\u4E2D\uFF1B\u82E5\u4E0D\u5B58\u5728\uFF0C\u8BF7\u660E\u786E\u8BF4\u660E\u65E0\u6CD5\u63D0\u4F9B\u3002`;
+var DEFAULT_SKILL_TEMPLATES = ["agent-drift-guard.md", "plan-and-execute.md"];
+function readToolDocs(extensionRoot, options = {}) {
+  const toolsDir = path2.join(extensionRoot, "templates", "tools");
   if (!fs2.existsSync(toolsDir)) {
     return "";
   }
   const entries = fs2.readdirSync(toolsDir);
   const docs = entries
-    .filter((entry) => entry.endsWith(".md"))
+    .filter((entry) => entry.endsWith(".md") || entry.endsWith(".md.ejs"))
     .sort()
     .map((entry) => {
       const fullPath = path2.join(toolsDir, entry);
       try {
-        return fs2.readFileSync(fullPath, "utf8").trim();
+        const template = fs2.readFileSync(fullPath, "utf8");
+        const content = entry.endsWith(".ejs")
+          ? ejs.render(template, { supportsMultimodal: supportsMultimodal(options.model ?? "") })
+          : template;
+        return content.trim();
       } catch {
         return "";
       }
@@ -511,7 +547,43 @@ function readToolDocs(extensionRoot, _options = {}) {
     .filter((content) => content.length > 0);
   return docs.join("\n\n");
 }
-function getSystemPrompt(projectRoot, options = {}) {
+function readDefaultSkillDocs(extensionRoot) {
+  const skillsDir = path2.join(extensionRoot, "templates", "skills");
+  return DEFAULT_SKILL_TEMPLATES.map((entry) => {
+    const fullPath = path2.join(skillsDir, entry);
+    try {
+      return {
+        name: path2.basename(entry, ".md"),
+        content: fs2.readFileSync(fullPath, "utf8").trim(),
+      };
+    } catch {
+      return null;
+    }
+  }).filter((skill) => Boolean(skill?.content));
+}
+function getDefaultSkillPrompt() {
+  const skillDocs = readDefaultSkillDocs(getExtensionRoot());
+  if (skillDocs.length === 0) {
+    return "";
+  }
+  const blocks = skillDocs.map(
+    (skill) => `<${skill.name}-skill>
+${skill.content}
+</${skill.name}-skill>`
+  );
+  return `Use the skill documents below to assist the user:
+${blocks.join("\n\n")}`;
+}
+function getCurrentDateAndModelPrompt(model) {
+  const date = /* @__PURE__ */ new Date();
+  let prompt = `\u4ECA\u5929\u662F${date.getFullYear()}\u5E74${date.getMonth() + 1}\u6708${date.getDate()}\u65E5\u3002\u968F\u7740\u5BF9\u8BDD\u7684\u8FDB\u884C\uFF0C\u65F6\u95F4\u5728\u6D41\u901D\u3002`;
+  prompt += model
+    ? `
+\u5F53\u524DLLM\u6A21\u578B\u4E3A${model}\uFF0C\u5BF9\u8BDD\u4E2D\u53EF\u901A\u8FC7/model\u547D\u4EE4\u5207\u6362\u6A21\u578B\u3002`
+    : "";
+  return prompt;
+}
+function getSystemPrompt(_projectRoot, options = {}) {
   const toolDocs = readToolDocs(getExtensionRoot(), options);
   const basePrompt = toolDocs
     ? `${SYSTEM_PROMPT_BASE}
@@ -520,9 +592,7 @@ function getSystemPrompt(projectRoot, options = {}) {
 
 ${toolDocs}`
     : SYSTEM_PROMPT_BASE;
-  return `${basePrompt}
-
-${getRuntimeContext(projectRoot)}`;
+  return basePrompt;
 }
 function getCompactPrompt(sessionMessages) {
   const jsonl = sessionMessages
@@ -545,26 +615,27 @@ conversation below:
 ${jsonl}
 \`\`\``;
 }
-function getRuntimeContext(projectRoot) {
+function getRuntimeContext(projectRoot2, model) {
   const uname = getUnameInfo();
   const shellPath = getShellPathInfo();
   const shellModeOpts = process.platform === "win32" ? { "shell mode": "git-bash" } : {};
   const runtimeVersions = getRuntimeVersionInfo();
   const env = {
-    "root path": projectRoot,
-    pwd: projectRoot,
+    "root path": projectRoot2,
+    pwd: projectRoot2,
     homedir: os2.homedir(),
     "system info": uname,
     "shell path": shellPath,
     ...shellModeOpts,
     ...runtimeVersions,
     "command installed": {
-      "ast-grep": checkToolInstalled("ast-grep"),
       ripgrep: checkToolInstalled("rg"),
       jq: checkToolInstalled("jq"),
     },
   };
-  return `# Local Workspace Environment
+  return `${getCurrentDateAndModelPrompt(model)}
+
+# Local Workspace Environment
 
 \`\`\`json
 ${JSON.stringify(env, null, 2)}
@@ -637,21 +708,13 @@ function getUnameInfo() {
   }
 }
 function getExtensionRoot() {
-  const candidates = [];
   if (typeof __dirname !== "undefined") {
-    candidates.push(path2.resolve(__dirname, ".."), __dirname);
+    return path2.resolve(__dirname, "..");
   }
   const currentFilePath = fileURLToPath(import.meta.url);
-  const currentDir = path2.dirname(currentFilePath);
-  candidates.push(path2.resolve(currentDir, ".."), currentDir);
-  for (const candidate of candidates) {
-    if (fs2.existsSync(path2.join(candidate, "docs", "tools"))) {
-      return candidate;
-    }
-  }
-  return candidates[0] ?? process.cwd();
+  return path2.resolve(path2.dirname(currentFilePath), "..");
 }
-function getTools(_options = {}) {
+function getTools(_options = {}, externalTools = []) {
   const tools = [
     {
       type: "function",
@@ -724,6 +787,30 @@ function getTools(_options = {}) {
             },
           },
           required: ["questions"],
+          additionalProperties: false,
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "UpdatePlan",
+        description:
+          "Update the current task plan. The plan argument must be the complete markdown task list to show as the latest progress state.",
+        parameters: {
+          type: "object",
+          properties: {
+            plan: {
+              type: "string",
+              description:
+                "The complete markdown task list, including task status markers such as [ ], [>], [x], and optional notes.",
+            },
+            explanation: {
+              type: "string",
+              description: "Optional short reason for changing the plan.",
+            },
+          },
+          required: ["plan"],
           additionalProperties: false,
         },
       },
@@ -840,6 +927,9 @@ function getTools(_options = {}) {
       },
     },
   });
+  for (const tool of externalTools) {
+    tools.push(tool);
+  }
   return tools;
 }
 
@@ -948,6 +1038,57 @@ function buildQuestionSummary(questions) {
 
 // src/tools/bash-handler.ts
 import { spawn as spawn2 } from "child_process";
+
+// src/common/bash-timeout.ts
+var DEFAULT_BASH_TIMEOUT_MS = 10 * 60 * 1e3;
+var MIN_BASH_TIMEOUT_MS = 60 * 1e3;
+var BASH_TIMEOUT_INCREMENT_MS = 5 * 60 * 1e3;
+var BASH_TIMEOUT_DECREMENT_MS = 60 * 1e3;
+function clampBashTimeoutMs(timeoutMs, minTimeoutMs = MIN_BASH_TIMEOUT_MS) {
+  if (!Number.isFinite(timeoutMs)) {
+    return DEFAULT_BASH_TIMEOUT_MS;
+  }
+  const minimum = Number.isFinite(minTimeoutMs) ? Math.max(1, Math.round(minTimeoutMs)) : MIN_BASH_TIMEOUT_MS;
+  return Math.max(minimum, Math.round(timeoutMs));
+}
+
+// src/common/process-tree.ts
+import { spawnSync } from "child_process";
+function killProcessTree(pid, signal = "SIGKILL", deps = {}) {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+  const platform2 = deps.platform ?? process.platform;
+  const killPid = deps.killPid ?? ((targetPid, targetSignal) => process.kill(targetPid, targetSignal));
+  if (platform2 === "win32") {
+    const runTaskkill = deps.runTaskkill ?? runWindowsTaskkill;
+    if (runTaskkill(pid)) {
+      return true;
+    }
+    return killDirectProcess(pid, signal, killPid);
+  }
+  if (deps.killGroupOnNonWindows !== false && killDirectProcess(-pid, signal, killPid)) {
+    return true;
+  }
+  return killDirectProcess(pid, signal, killPid);
+}
+function runWindowsTaskkill(pid, spawnSyncImpl = spawnSync) {
+  const result = spawnSyncImpl("taskkill", ["/PID", String(pid), "/T", "/F"], {
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  return !result.error && result.status === 0;
+}
+function killDirectProcess(pid, signal, killPid) {
+  try {
+    killPid(pid, signal);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// src/tools/bash-handler.ts
 var MAX_OUTPUT_CHARS = 3e4;
 var MAX_CAPTURE_CHARS = 10 * 1024 * 1024;
 var sessionWorkingDirs = /* @__PURE__ */ new Map();
@@ -970,11 +1111,14 @@ async function handleBashTool(args2, context) {
     execution.exitCode,
     execution.signal,
     shellPath,
-    startCwd
+    startCwd,
+    execution.timedOut,
+    execution.timeoutMs,
+    execution.deadlineAtMs
   );
   updateSessionCwd(context.sessionId, startCwd, result.cwd);
   if (execution.error || result.exitCode !== 0 || result.signal !== null) {
-    const errorMessage = buildErrorMessage(result.exitCode, result.signal, execution.error);
+    const errorMessage = buildErrorMessage(result.exitCode, result.signal, execution.error, execution.timedOut);
     return formatResult({ ...result, ok: false }, "bash", errorMessage);
   }
   return formatResult(result, "bash");
@@ -1009,41 +1153,103 @@ function buildShellCommand(command) {
   return { shellPath, shellArgs: ["-c", wrappedCommand], marker };
 }
 async function executeShellCommand(shellPath, shellArgs, cwd, command, context) {
-  return new Promise((resolve6) => {
+  return new Promise((resolve7) => {
     const detached = process.platform !== "win32";
+    const configuredEnv = context.createOpenAIClient?.().env ?? {};
+    const minTimeoutMs = context.bashMinTimeoutMs;
+    const initialTimeoutMs = clampBashTimeoutMs(context.bashTimeoutMs ?? DEFAULT_BASH_TIMEOUT_MS, minTimeoutMs);
+    const startedAtMs = Date.now();
+    let timeoutMs = initialTimeoutMs;
+    let deadlineAtMs = startedAtMs + timeoutMs;
+    let timedOut = false;
+    let settled = false;
+    let timeoutTimer = null;
     const child = spawn2(shellPath, shellArgs, {
       cwd,
-      env: buildShellEnv(shellPath),
+      env: buildShellEnv(shellPath, configuredEnv),
       detached,
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
     const pid = child.pid;
+    const getTimeoutInfo = () => ({
+      timeoutMs,
+      startedAtMs,
+      deadlineAtMs,
+      timedOut,
+    });
+    const stopTimeoutTimer = () => {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+      }
+    };
+    const triggerTimeout = () => {
+      if (settled || timedOut || typeof pid !== "number") {
+        return;
+      }
+      timedOut = true;
+      stopTimeoutTimer();
+      killProcessTree(pid, "SIGKILL");
+    };
+    const scheduleTimeout = () => {
+      stopTimeoutTimer();
+      if (settled) {
+        return;
+      }
+      const remainingMs = Math.max(0, deadlineAtMs - Date.now());
+      timeoutTimer = setTimeout(triggerTimeout, remainingMs);
+    };
+    const timeoutControl = {
+      getInfo: getTimeoutInfo,
+      setTimeoutMs: (nextTimeoutMs) => {
+        timeoutMs = clampBashTimeoutMs(nextTimeoutMs, minTimeoutMs);
+        deadlineAtMs = startedAtMs + timeoutMs;
+        if (deadlineAtMs <= Date.now()) {
+          triggerTimeout();
+        } else {
+          scheduleTimeout();
+        }
+        return getTimeoutInfo();
+      },
+    };
     if (typeof pid === "number") {
       context.onProcessStart?.(pid, command);
+      context.onProcessTimeoutControl?.(pid, timeoutControl);
+      scheduleTimeout();
     }
     let stdout = "";
     let stderr = "";
     let error;
     child.stdout?.on("data", (chunk) => {
       stdout = appendChunk(stdout, chunk);
+      const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+      context.onProcessStdout?.(pid, text);
     });
     child.stderr?.on("data", (chunk) => {
       stderr = appendChunk(stderr, chunk);
+      const text = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+      context.onProcessStdout?.(pid, text);
     });
     child.on("error", (spawnError) => {
       error = spawnError.message;
     });
     child.on("close", (code, signal) => {
+      settled = true;
+      stopTimeoutTimer();
       if (typeof pid === "number") {
+        context.onProcessTimeoutControl?.(pid, null);
         context.onProcessExit?.(pid);
       }
-      resolve6({
+      resolve7({
         stdout,
         stderr,
         exitCode: typeof code === "number" ? code : null,
         signal: signal ?? null,
         error,
+        timedOut,
+        timeoutMs,
+        deadlineAtMs,
       });
     });
   });
@@ -1060,7 +1266,18 @@ function buildMarker() {
   const token = Math.random().toString(36).slice(2);
   return `__DEEPCODE_PWD__${token}__`;
 }
-function buildToolCommandResult(stdout, stderr, marker, exitCode, signal, shellPath, startCwd) {
+function buildToolCommandResult(
+  stdout,
+  stderr,
+  marker,
+  exitCode,
+  signal,
+  shellPath,
+  startCwd,
+  timedOut = false,
+  timeoutMs,
+  deadlineAtMs
+) {
   const { output: cleanedStdout, cwd } = stripMarker(stdout, marker);
   const combined = joinOutput(cleanedStdout, stderr);
   const { text, truncated } = truncateOutput(combined);
@@ -1073,6 +1290,9 @@ function buildToolCommandResult(stdout, stderr, marker, exitCode, signal, shellP
     truncated,
     shellPath,
     startCwd,
+    timedOut,
+    timeoutMs,
+    deadlineAt: typeof deadlineAtMs === "number" ? new Date(deadlineAtMs).toISOString() : void 0,
   };
 }
 function stripMarker(stdout, marker) {
@@ -1111,9 +1331,12 @@ function truncateOutput(output) {
   }
   return { text: output.slice(0, MAX_OUTPUT_CHARS), truncated: true };
 }
-function buildErrorMessage(exitCode, signal, error) {
+function buildErrorMessage(exitCode, signal, error, timedOut = false) {
   if (error) {
     return error;
+  }
+  if (timedOut) {
+    return "Command timed out.";
   }
   if (signal) {
     return `Command terminated by signal ${signal}.`;
@@ -1132,6 +1355,15 @@ function formatResult(result, name, errorMessage) {
     shellPath: result.shellPath,
     startCwd: result.startCwd,
   };
+  if (typeof result.timedOut === "boolean") {
+    metadata.timedOut = result.timedOut;
+  }
+  if (typeof result.timeoutMs === "number") {
+    metadata.timeoutMs = result.timeoutMs;
+  }
+  if (result.deadlineAt) {
+    metadata.deadlineAt = result.deadlineAt;
+  }
   const outputValue = result.output ? result.output : void 0;
   return {
     ok: result.ok,
@@ -1146,7 +1378,7 @@ function formatResult(result, name, errorMessage) {
 import * as fs4 from "fs";
 import { z as z2 } from "zod";
 
-// src/tools/file-utils.ts
+// src/common/file-utils.ts
 import * as fs3 from "fs";
 import * as path3 from "path";
 function normalizeContent(value) {
@@ -1248,7 +1480,7 @@ function toDiffLines(content) {
   return lines;
 }
 
-// src/tools/runtime.ts
+// src/common/runtime.ts
 import { z } from "zod";
 function semanticBoolean(defaultValue = false) {
   return z.preprocess((value) => {
@@ -1285,21 +1517,22 @@ function formatZodError(error) {
   if (!issue) {
     return "Invalid tool input.";
   }
-  const path14 = issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
-  return `${path14}${issue.message}`;
+  const path15 = issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
+  return `${path15}${issue.message}`;
 }
 
-// src/tools/state.ts
+// src/common/state.ts
 import * as path4 from "path";
 var fileStatesBySession = /* @__PURE__ */ new Map();
 var snippetsBySession = /* @__PURE__ */ new Map();
 var snippetCountersBySession = /* @__PURE__ */ new Map();
-function normalizeFilePath(filePath, platform = process.platform) {
-  const nativePath = normalizeNativeFilePath(filePath, platform);
-  return platform === "win32" ? path4.win32.normalize(nativePath) : path4.normalize(nativePath);
+var fileVersionsBySession = /* @__PURE__ */ new Map();
+function normalizeFilePath(filePath, platform2 = process.platform) {
+  const nativePath = normalizeNativeFilePath(filePath, platform2);
+  return platform2 === "win32" ? path4.win32.normalize(nativePath) : path4.normalize(nativePath);
 }
-function normalizeNativeFilePath(filePath, platform = process.platform) {
-  if (platform !== "win32") {
+function normalizeNativeFilePath(filePath, platform2 = process.platform) {
+  if (platform2 !== "win32") {
     return filePath;
   }
   if (isGitBashAbsolutePath(filePath)) {
@@ -1307,9 +1540,9 @@ function normalizeNativeFilePath(filePath, platform = process.platform) {
   }
   return filePath;
 }
-function isAbsoluteFilePath(filePath, platform = process.platform) {
-  const nativePath = normalizeNativeFilePath(filePath, platform);
-  if (platform !== "win32") {
+function isAbsoluteFilePath(filePath, platform2 = process.platform) {
+  const nativePath = normalizeNativeFilePath(filePath, platform2);
+  if (platform2 !== "win32") {
     return path4.isAbsolute(nativePath);
   }
   const normalized = path4.win32.normalize(nativePath);
@@ -1318,7 +1551,7 @@ function isAbsoluteFilePath(filePath, platform = process.platform) {
 function isGitBashAbsolutePath(filePath) {
   return /^\/[A-Za-z](?:\/|$)/.test(filePath) || /^\/cygdrive\/[A-Za-z](?:\/|$)/.test(filePath);
 }
-function recordFileState(sessionId, state) {
+function recordFileState(sessionId, state, options = {}) {
   if (!sessionId || !state.filePath) {
     return;
   }
@@ -1328,9 +1561,13 @@ function recordFileState(sessionId, state) {
     fileStatesBySession.set(sessionId, sessionState);
   }
   const normalizedPath = normalizeFilePath(state.filePath);
+  const currentVersion = getFileVersion(sessionId, normalizedPath);
+  const nextVersion = options.incrementVersion ? currentVersion + 1 : currentVersion;
+  setFileVersion(sessionId, normalizedPath, nextVersion);
   sessionState.set(normalizedPath, {
     ...state,
     filePath: normalizedPath,
+    version: nextVersion,
   });
 }
 function markFileRead(sessionId, filePath, state = null) {
@@ -1354,6 +1591,20 @@ function getFileState(sessionId, filePath) {
   }
   return fileStatesBySession.get(sessionId)?.get(normalizeFilePath(filePath)) ?? null;
 }
+function getFileVersion(sessionId, filePath) {
+  if (!sessionId || !filePath) {
+    return 0;
+  }
+  return fileVersionsBySession.get(sessionId)?.get(normalizeFilePath(filePath)) ?? 0;
+}
+function setFileVersion(sessionId, filePath, version) {
+  let sessionVersions = fileVersionsBySession.get(sessionId);
+  if (!sessionVersions) {
+    sessionVersions = /* @__PURE__ */ new Map();
+    fileVersionsBySession.set(sessionId, sessionVersions);
+  }
+  sessionVersions.set(normalizeFilePath(filePath), version);
+}
 function isFullFileView(state) {
   return Boolean(
     state && !state.isPartialView && typeof state.offset === "undefined" && typeof state.limit === "undefined"
@@ -1371,6 +1622,7 @@ function createSnippet(sessionId, filePath, startLine, endLine, preview) {
     startLine,
     endLine,
     preview,
+    fileVersion: getFileVersion(sessionId, filePath),
   };
   let snippets = snippetsBySession.get(sessionId);
   if (!snippets) {
@@ -1386,12 +1638,18 @@ function getSnippet(sessionId, snippetId) {
   }
   return snippetsBySession.get(sessionId)?.get(snippetId) ?? null;
 }
+function hasSnippetOutdatedFileVersion(sessionId, snippet) {
+  return getFileVersion(sessionId, snippet.filePath) > snippet.fileVersion;
+}
 
 // src/tools/edit-handler.ts
 var MAX_CANDIDATE_COUNT = 5;
 var REPLACE_ALL_MATCH_THRESHOLD = 5;
 var SHORT_REPLACE_ALL_LENGTH = 40;
-var MIN_FUZZY_SCORE = 0.45;
+var MIN_FUZZY_SCORE = 0.8;
+var CLOSEST_MATCH_CONTEXT_LINES = 2;
+var OUTDATED_SNIPPET_NOT_FOUND_ERROR =
+  "old_string was not found in this snippet scope. The file has changed since this snippet was created. Read the file again before editing.";
 var editSchema = z2.strictObject({
   file_path: z2.string().optional(),
   snippet_id: z2.string().optional(),
@@ -1524,6 +1782,18 @@ async function handleEditTool(args2, context) {
         let replacementOldString = oldString;
         let replacementNewString = newString;
         if (matches.length === 0) {
+          const tabStrippedOldString = stripReadResultLineTabs(oldString);
+          if (tabStrippedOldString !== oldString) {
+            const tabStrippedMatches = findOccurrences(raw, tabStrippedOldString, scope);
+            if (tabStrippedMatches.length === 1) {
+              matches = tabStrippedMatches;
+              matchedVia = "line_leading_tab_correction";
+              replacementOldString = tabStrippedOldString;
+              replacementNewString = stripReadResultLineTabs(newString);
+            }
+          }
+        }
+        if (matches.length === 0) {
           const looseEscapeMatches = findLooseEscapeMatches(raw, oldString, scope);
           if (looseEscapeMatches.length === 1 && looseEscapeMatches[0]?.score === 1) {
             const correctedStrings = await correctEscapedStringsWithLLM(
@@ -1549,6 +1819,16 @@ async function handleEditTool(args2, context) {
           }
         }
         if (matches.length === 0) {
+          if (snippet && hasSnippetOutdatedFileVersion(context.sessionId, snippet)) {
+            return {
+              ok: false,
+              name: "edit",
+              error: OUTDATED_SNIPPET_NOT_FOUND_ERROR,
+              metadata: {
+                scope: formatScopeMetadata(scope),
+              },
+            };
+          }
           const closestMatch = findClosestMatch(raw, oldString, scope, lineIndex);
           return {
             ok: false,
@@ -1599,13 +1879,17 @@ async function handleEditTool(args2, context) {
         const diffPreview = buildDiffPreview(filePath, raw, updated);
         writeTextFile(filePath, updated, metadata.encoding, metadata.lineEndings);
         const freshMetadata = readTextFileWithMetadata(filePath);
-        recordFileState(context.sessionId, {
-          filePath,
-          content: freshMetadata.content,
-          timestamp: freshMetadata.timestamp,
-          encoding: freshMetadata.encoding,
-          lineEndings: freshMetadata.lineEndings,
-        });
+        recordFileState(
+          context.sessionId,
+          {
+            filePath,
+            content: freshMetadata.content,
+            timestamp: freshMetadata.timestamp,
+            encoding: freshMetadata.encoding,
+            lineEndings: freshMetadata.lineEndings,
+          },
+          { incrementVersion: true }
+        );
         const replacedCount = replaceAll ? matches.length : 1;
         return {
           ok: true,
@@ -1787,6 +2071,9 @@ function applyReplacement(raw, oldString, newString, matches, replaceAll) {
   result += raw.slice(cursor);
   return result;
 }
+function stripReadResultLineTabs(value) {
+  return value.replaceAll("\n	", "\n");
+}
 function buildCandidateMetadata(sessionId, filePath, raw, matches) {
   return matches.slice(0, MAX_CANDIDATE_COUNT).map((match) => {
     const preview = buildPreview(raw, match.startLine, match.endLine);
@@ -1843,8 +2130,8 @@ function findClosestMatch(raw, oldString, scope, lineIndex) {
         bestLooseMatch = candidate;
       }
     }
-    if (bestLooseMatch) {
-      return bestLooseMatch;
+    if (bestLooseMatch && bestLooseMatch.score >= MIN_FUZZY_SCORE) {
+      return expandClosestMatch(raw, lineIndex, scope, bestLooseMatch);
     }
   }
   const targetLineCount = Math.max(1, oldString.split(/\r?\n/).length);
@@ -1876,7 +2163,17 @@ function findClosestMatch(raw, oldString, scope, lineIndex) {
       }
     }
   }
-  return bestMatch;
+  return bestMatch ? expandClosestMatch(raw, lineIndex, scope, bestMatch) : null;
+}
+function expandClosestMatch(raw, lineIndex, scope, closestMatch) {
+  const startLine = clamp(closestMatch.startLine - CLOSEST_MATCH_CONTEXT_LINES, scope.startLine, scope.endLine);
+  const endLine = clamp(closestMatch.endLine + CLOSEST_MATCH_CONTEXT_LINES, startLine, scope.endLine);
+  return {
+    ...closestMatch,
+    text: sliceLines(raw, lineIndex, startLine, endLine),
+    startLine,
+    endLine,
+  };
 }
 function buildLooseEscapeRegex(source) {
   if (!source) {
@@ -1889,7 +2186,7 @@ function buildLooseEscapeRegex(source) {
       while (slashEnd < source.length && source[slashEnd] === "\\") {
         slashEnd += 1;
       }
-      if (slashEnd < source.length && isEscapeSensitiveChar(source[slashEnd])) {
+      if (slashEnd < source.length) {
         pattern += "\\\\*";
         pattern += escapeRegExp(source[slashEnd]);
         index = slashEnd;
@@ -1937,7 +2234,7 @@ async function correctEscapedStringsWithLLM(snippetText, oldString, newString, m
 </output_format>`,
         },
       ],
-      ...buildThinkingRequestOptions(thinkingEnabled, reasoningEffort),
+      ...buildThinkingRequestOptions(thinkingEnabled, baseURL, reasoningEffort),
     });
     const content = response.choices?.[0]?.message?.content ?? "";
     const parsed = parseCorrectedEditStrings(content);
@@ -1981,9 +2278,6 @@ function parseCorrectedEditStrings(content) {
     };
   }
   return null;
-}
-function isEscapeSensitiveChar(value) {
-  return value === '"' || value === "'" || value === "`" || value === "\\";
 }
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -2317,8 +2611,8 @@ function findSuffixMatches(root, suffix, isIgnored) {
   }
   return matches;
 }
-function loadGitignoreMatcher(projectRoot) {
-  const gitignorePath = path5.join(projectRoot, ".gitignore");
+function loadGitignoreMatcher(projectRoot2) {
+  const gitignorePath = path5.join(projectRoot2, ".gitignore");
   if (!fs5.existsSync(gitignorePath)) {
     const ig2 = ignore();
     ig2.add(DEFAULT_GITIGNORE);
@@ -2598,6 +2892,24 @@ function formatNotebookOutput(output) {
   return lines;
 }
 
+// src/tools/update-plan-handler.ts
+import { z as z3 } from "zod";
+var updatePlanSchema = z3.strictObject({
+  plan: z3.string().trim().min(1, "plan must not be empty."),
+  explanation: z3.string().trim().optional(),
+});
+async function handleUpdatePlanTool(args2, _context) {
+  return executeValidatedTool("UpdatePlan", updatePlanSchema, args2, _context, async (input) => ({
+    ok: true,
+    name: "UpdatePlan",
+    output: "Plan updated.",
+    metadata: {
+      plan: input.plan,
+      ...(input.explanation ? { explanation: input.explanation } : {}),
+    },
+  }));
+}
+
 // src/tools/web-search-handler.ts
 import { randomUUID } from "crypto";
 import { spawn as spawn3 } from "child_process";
@@ -2617,13 +2929,14 @@ async function handleWebSearchTool(args2, context) {
   const llmContext = context.createOpenAIClient?.();
   const scriptPath = llmContext?.webSearchTool?.trim();
   if (scriptPath) {
-    return executeConfiguredWebSearch(query, scriptPath, context);
+    return executeConfiguredWebSearch(query, scriptPath, context, llmContext?.env ?? {});
   }
   if (!hasUsableClient(llmContext)) {
     return {
       ok: false,
       name: "WebSearch",
-      error: "WebSearch default mode requires a valid LLM configuration in ~/.deepcode/settings.json.",
+      error:
+        "WebSearch default mode requires a valid LLM configuration in ~/.deepcode/settings.json or ./.deepcode/settings.json.",
     };
   }
   return executeDefaultWebSearch(query, llmContext, context);
@@ -2631,8 +2944,8 @@ async function handleWebSearchTool(args2, context) {
 function hasUsableClient(value) {
   return Boolean(value?.client);
 }
-async function executeConfiguredWebSearch(query, scriptPath, context) {
-  const execution = await runWebSearchScript(scriptPath, query, context);
+async function executeConfiguredWebSearch(query, scriptPath, context, configuredEnv) {
+  const execution = await runWebSearchScript(scriptPath, query, context, configuredEnv);
   const output = execution.stdout.slice(0, MAX_OUTPUT_CHARS2);
   const truncated = execution.stdout.length > MAX_OUTPUT_CHARS2;
   if (execution.error) {
@@ -2700,11 +3013,11 @@ async function executeDefaultWebSearch(query, llmContext, context) {
     };
   }
 }
-async function runWebSearchScript(scriptPath, query, context) {
-  return new Promise((resolve6) => {
+async function runWebSearchScript(scriptPath, query, context, configuredEnv) {
+  return new Promise((resolve7) => {
     const child = spawn3(scriptPath, [query], {
       cwd: context.projectRoot,
-      env: process.env,
+      env: { ...process.env, ...configuredEnv },
       stdio: ["ignore", "pipe", "pipe"],
     });
     const pid = child.pid;
@@ -2727,7 +3040,7 @@ async function runWebSearchScript(scriptPath, query, context) {
       if (typeof pid === "number") {
         context.onProcessExit?.(pid);
       }
-      resolve6({
+      resolve7({
         stdout,
         stderr,
         exitCode: typeof code === "number" ? code : null,
@@ -2895,10 +3208,10 @@ function buildCommandError(exitCode, signal) {
 
 // src/tools/write-handler.ts
 import * as fs6 from "fs";
-import { z as z3 } from "zod";
-var writeSchema = z3.strictObject({
-  file_path: z3.string().min(1, "file_path is required."),
-  content: z3.string({
+import { z as z4 } from "zod";
+var writeSchema = z4.strictObject({
+  file_path: z4.string().min(1, "file_path is required."),
+  content: z4.string({
     error:
       "content must be a string. If you are writing JSON, serialize the full document to text before calling write.",
   }),
@@ -2966,13 +3279,17 @@ async function handleWriteTool(args2, context) {
         const diffPreview = buildDiffPreview(filePath, existingMetadata?.content ?? null, normalizedContent);
         const bytes = writeTextFile(filePath, normalizedContent, encoding, lineEndings);
         const freshMetadata = readTextFileWithMetadata(filePath);
-        recordFileState(context.sessionId, {
-          filePath,
-          content: freshMetadata.content,
-          timestamp: freshMetadata.timestamp,
-          encoding: freshMetadata.encoding,
-          lineEndings: freshMetadata.lineEndings,
-        });
+        recordFileState(
+          context.sessionId,
+          {
+            filePath,
+            content: freshMetadata.content,
+            timestamp: freshMetadata.timestamp,
+            encoding: freshMetadata.encoding,
+            lineEndings: freshMetadata.lineEndings,
+          },
+          { incrementVersion: true }
+        );
         return {
           ok: true,
           name: "write",
@@ -3034,14 +3351,13 @@ async function handleWriteTool(args2, context) {
 var ToolExecutor = class {
   projectRoot;
   createOpenAIClient;
+  mcpManager;
   toolHandlers = /* @__PURE__ */ new Map();
-  constructor(projectRoot, createOpenAIClient3) {
-    this.projectRoot = projectRoot;
-    this.createOpenAIClient = createOpenAIClient3;
+  constructor(projectRoot2, createOpenAIClient2, mcpManager) {
+    this.projectRoot = projectRoot2;
+    this.createOpenAIClient = createOpenAIClient2;
+    this.mcpManager = mcpManager;
     this.registerToolHandlers();
-  }
-  setProjectRoot(projectRoot) {
-    this.projectRoot = projectRoot;
   }
   async executeToolCalls(sessionId, toolCalls, hooks) {
     const parsedCalls = toolCalls
@@ -3070,6 +3386,7 @@ var ToolExecutor = class {
     this.toolHandlers.set("write", handleWriteTool);
     this.toolHandlers.set("edit", handleEditTool);
     this.toolHandlers.set("AskUserQuestion", handleAskUserQuestionTool);
+    this.toolHandlers.set("UpdatePlan", handleUpdatePlanTool);
     this.toolHandlers.set("WebSearch", handleWebSearchTool);
   }
   parseToolCall(toolCall) {
@@ -3101,6 +3418,11 @@ var ToolExecutor = class {
     const toolName = toolCall.function.name;
     const handler = this.toolHandlers.get(toolName);
     if (!handler) {
+      if (this.mcpManager?.isMcpTool(toolName)) {
+        const parsedArgs2 = this.parseToolArguments(toolCall.function.arguments);
+        const args2 = parsedArgs2.ok ? parsedArgs2.args : {};
+        return this.mcpManager.executeMcpTool(toolName, args2);
+      }
       return {
         ok: false,
         name: toolName,
@@ -3123,6 +3445,8 @@ var ToolExecutor = class {
         createOpenAIClient: this.createOpenAIClient,
         onProcessStart: hooks?.onProcessStart,
         onProcessExit: hooks?.onProcessExit,
+        onProcessStdout: hooks?.onProcessStdout,
+        onProcessTimeoutControl: hooks?.onProcessTimeoutControl,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -3172,12 +3496,563 @@ var ToolExecutor = class {
   }
 };
 
-// src/error-logger.ts
-import * as fs7 from "fs";
-import * as path6 from "path";
+// src/mcp/mcp-client.ts
+import { spawn as spawn4 } from "child_process";
+import { createInterface } from "readline";
 import * as os3 from "os";
-var LOG_DIR = path6.join(os3.homedir(), ".deepcode", "logs");
-var ERROR_LOG_PATH = path6.join(LOG_DIR, "error.log");
+import * as path6 from "path";
+var McpClient = class {
+  constructor(serverName, command, args2 = [], env, onNotification) {
+    this.serverName = serverName;
+    this.command = command;
+    this.args = args2;
+    this.env = env;
+    this.notificationHandler = onNotification ?? null;
+  }
+  serverName;
+  command;
+  args;
+  env;
+  process = null;
+  reader = null;
+  nextId = 1;
+  pendingRequests = /* @__PURE__ */ new Map();
+  stderrBuffer = "";
+  notificationHandler = null;
+  async connect(timeoutMs) {
+    return new Promise((resolve7, reject) => {
+      const childEnv = {
+        ...process.env,
+        ...this.env,
+      };
+      const args2 = this.withNpxYesArg(this.command, this.args);
+      const isWindows = os3.platform() === "win32";
+      if (isWindows) {
+        this.process = spawn4(this.command, args2, {
+          stdio: ["pipe", "pipe", "pipe"],
+          env: childEnv,
+          shell: true,
+          windowsHide: true,
+        });
+      } else {
+        this.process = spawn4(this.command, args2, {
+          stdio: ["pipe", "pipe", "pipe"],
+          env: childEnv,
+        });
+      }
+      this.process.on("error", (err) => {
+        reject(this.withStderr(`Failed to start MCP server "${this.serverName}" (${this.command}): ${err.message}`));
+      });
+      this.process.on("close", (code) => {
+        const error = this.withStderr(`MCP server "${this.serverName}" exited with code ${code}`);
+        for (const [, pending] of this.pendingRequests) {
+          clearTimeout(pending.timer);
+          pending.reject(error);
+        }
+        this.pendingRequests.clear();
+      });
+      if (this.process.stderr) {
+        this.process.stderr.on("data", (data) => {
+          this.appendStderr(data.toString("utf8"));
+        });
+      }
+      this.reader = createInterface({ input: this.process.stdout });
+      this.reader.on("line", (line) => {
+        this.handleLine(line);
+      });
+      this.sendRequest(
+        "initialize",
+        {
+          protocolVersion: "2025-03-26",
+          capabilities: {},
+          clientInfo: { name: "deepcode-cli", version: "0.1.0" },
+        },
+        timeoutMs
+      )
+        .then((result) => {
+          const initResult = result;
+          const serverVersion = initResult?.protocolVersion;
+          if (serverVersion && serverVersion !== "2025-03-26" && serverVersion !== "2024-11-05") {
+            reject(
+              new Error(
+                `Unsupported MCP protocol version "${serverVersion}" from server "${this.serverName}". Client supports 2025-03-26 and 2024-11-05.`
+              )
+            );
+            return;
+          }
+          this.sendNotification("notifications/initialized");
+          resolve7();
+        })
+        .catch(reject);
+    });
+  }
+  async listTools(timeoutMs) {
+    const tools = [];
+    let cursor;
+    for (let page = 0; page < 100; page++) {
+      const params = cursor ? { cursor } : {};
+      const result = await this.sendRequest("tools/list", params, timeoutMs);
+      tools.push(...(result.tools ?? []));
+      cursor = typeof result.nextCursor === "string" && result.nextCursor ? result.nextCursor : void 0;
+      if (!cursor) {
+        return tools;
+      }
+    }
+    throw this.withStderr(`MCP server "${this.serverName}" returned too many tools/list pages`);
+  }
+  async callTool(name, args2, timeoutMs = 6e4) {
+    return await this.sendRequest("tools/call", { name, arguments: args2 }, timeoutMs);
+  }
+  async listPrompts(timeoutMs) {
+    const prompts = [];
+    let cursor;
+    for (let page = 0; page < 100; page++) {
+      const params = cursor ? { cursor } : {};
+      const result = await this.sendRequest("prompts/list", params, timeoutMs);
+      prompts.push(...(result.prompts ?? []));
+      cursor = typeof result.nextCursor === "string" && result.nextCursor ? result.nextCursor : void 0;
+      if (!cursor) {
+        return prompts;
+      }
+    }
+    throw this.withStderr(`MCP server "${this.serverName}" returned too many prompts/list pages`);
+  }
+  async getPrompt(name, args2, timeoutMs = 3e4) {
+    return await this.sendRequest("prompts/get", { name, arguments: args2 }, timeoutMs);
+  }
+  async listResources(timeoutMs) {
+    const resources = [];
+    let cursor;
+    for (let page = 0; page < 100; page++) {
+      const params = cursor ? { cursor } : {};
+      const result = await this.sendRequest("resources/list", params, timeoutMs);
+      resources.push(...(result.resources ?? []));
+      cursor = typeof result.nextCursor === "string" && result.nextCursor ? result.nextCursor : void 0;
+      if (!cursor) {
+        return resources;
+      }
+    }
+    throw this.withStderr(`MCP server "${this.serverName}" returned too many resources/list pages`);
+  }
+  async readResource(uri, timeoutMs = 3e4) {
+    return await this.sendRequest("resources/read", { uri }, timeoutMs);
+  }
+  disconnect() {
+    if (this.reader) {
+      this.reader.close();
+      this.reader = null;
+    }
+    if (this.process) {
+      if (typeof this.process.pid === "number") {
+        killProcessTree(this.process.pid, "SIGTERM", { killGroupOnNonWindows: false });
+      } else {
+        this.process.kill();
+      }
+      this.process = null;
+    }
+  }
+  sendRequest(method, params, timeoutMs = 3e4) {
+    return new Promise((resolve7, reject) => {
+      const id = this.nextId++;
+      const request = {
+        jsonrpc: "2.0",
+        id,
+        method,
+        params,
+      };
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(
+          this.withStderr(
+            `Timed out after ${timeoutMs}ms waiting for MCP server "${this.serverName}" to respond to ${method}`
+          )
+        );
+      }, timeoutMs);
+      this.pendingRequests.set(id, { resolve: resolve7, reject, timer });
+      this.writeLine(JSON.stringify(request));
+    });
+  }
+  sendNotification(method, params) {
+    const notification = {
+      jsonrpc: "2.0",
+      method,
+      params,
+    };
+    this.writeLine(JSON.stringify(notification));
+  }
+  writeLine(data) {
+    if (this.process?.stdin) {
+      this.process.stdin.write(data + "\n");
+    }
+  }
+  handleLine(line) {
+    try {
+      const parsed = JSON.parse(line);
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (item && typeof item === "object") {
+            this.handleSingleMessage(item);
+          }
+        }
+        return;
+      }
+      if (parsed && typeof parsed === "object") {
+        this.handleSingleMessage(parsed);
+      }
+    } catch {}
+  }
+  handleSingleMessage(msg) {
+    if (!("id" in msg)) {
+      const notification = msg;
+      if (this.notificationHandler && typeof notification.method === "string") {
+        try {
+          this.notificationHandler(notification.method, notification.params);
+        } catch {}
+      }
+      return;
+    }
+    const message = msg;
+    if (message.id !== void 0 && this.pendingRequests.has(message.id)) {
+      const pending = this.pendingRequests.get(message.id);
+      this.pendingRequests.delete(message.id);
+      clearTimeout(pending.timer);
+      if (message.error) {
+        pending.reject(this.withStderr(`MCP error: ${message.error.message}`));
+      } else {
+        pending.resolve(message.result);
+      }
+    }
+  }
+  withNpxYesArg(command, args2) {
+    const executable = path6
+      .basename(command)
+      .toLowerCase()
+      .replace(/\.cmd$/, "");
+    if (executable !== "npx") {
+      return args2;
+    }
+    if (args2.includes("-y") || args2.includes("--yes")) {
+      return args2;
+    }
+    return ["-y", ...args2];
+  }
+  appendStderr(text) {
+    this.stderrBuffer = `${this.stderrBuffer}${text}`;
+    if (this.stderrBuffer.length > 4e3) {
+      this.stderrBuffer = this.stderrBuffer.slice(-4e3);
+    }
+  }
+  withStderr(message) {
+    const stderr = this.stderrBuffer.trim();
+    return new Error(stderr ? `${message}. stderr: ${stderr}` : message);
+  }
+};
+
+// src/mcp/mcp-manager.ts
+var MCP_STARTUP_TIMEOUT_MS = 3e4;
+var MCP_CALL_TOOL_TIMEOUT_MS = 6e4;
+var McpManager = class {
+  clients = [];
+  tools = [];
+  prompts = [];
+  resources = [];
+  initialized = false;
+  disposed = false;
+  configuredServerNames = [];
+  serverStatuses = [];
+  onToolsListChanged = null;
+  onStatusChanged = null;
+  prepare(servers) {
+    if (!servers || Object.keys(servers).length === 0) return;
+    this.disposed = false;
+    for (const name of Object.keys(servers)) {
+      if (!this.configuredServerNames.includes(name)) {
+        this.configuredServerNames.push(name);
+      }
+      if (this.serverStatuses.some((status) => status.name === name)) {
+        continue;
+      }
+      this.setStatus({
+        name,
+        status: "starting",
+        connected: false,
+        toolCount: 0,
+        tools: [],
+        promptCount: 0,
+        prompts: [],
+        resourceCount: 0,
+        resources: [],
+      });
+    }
+  }
+  async initialize(servers) {
+    if (this.initialized || this.disposed) return;
+    this.initialized = true;
+    if (!servers || Object.keys(servers).length === 0) return;
+    const entries = Object.entries(servers);
+    this.prepare(servers);
+    for (const [name, config] of entries) {
+      if (this.disposed) break;
+      let client = null;
+      try {
+        client = new McpClient(name, config.command, config.args ?? [], config.env, (method) => {
+          if (method === "notifications/tools/list_changed") {
+            this.refreshServerTools(name, client).catch(() => {});
+          }
+        });
+        await client.connect(MCP_STARTUP_TIMEOUT_MS);
+        if (this.disposed) {
+          client.disconnect();
+          break;
+        }
+        this.clients.push(client);
+        const serverTools = await client.listTools(MCP_STARTUP_TIMEOUT_MS);
+        if (this.disposed) break;
+        const toolNamespacedNames = [];
+        for (const tool of serverTools) {
+          const namespacedName = `mcp__${name}__${tool.name}`;
+          this.tools.push({
+            serverName: name,
+            originalName: tool.name,
+            namespacedName,
+            definition: tool,
+            client,
+          });
+          toolNamespacedNames.push(namespacedName);
+        }
+        let serverPrompts = [];
+        try {
+          serverPrompts = await client.listPrompts(MCP_STARTUP_TIMEOUT_MS);
+        } catch {}
+        if (this.disposed) break;
+        const promptNamespacedNames = [];
+        for (const prompt of serverPrompts) {
+          const namespacedName = `mcp__${name}__${prompt.name}`;
+          this.prompts.push({
+            serverName: name,
+            namespacedName,
+            definition: prompt,
+            client,
+          });
+          promptNamespacedNames.push(namespacedName);
+        }
+        let serverResources = [];
+        try {
+          serverResources = await client.listResources(MCP_STARTUP_TIMEOUT_MS);
+        } catch {}
+        if (this.disposed) break;
+        const resourceNamespacedNames = [];
+        for (const resource of serverResources) {
+          const namespacedName = `mcp__${name}__${resource.name}`;
+          this.resources.push({
+            serverName: name,
+            namespacedName,
+            definition: resource,
+            client,
+          });
+          resourceNamespacedNames.push(namespacedName);
+        }
+        this.setStatus({
+          name,
+          status: "ready",
+          connected: true,
+          toolCount: serverTools.length,
+          tools: toolNamespacedNames,
+          promptCount: serverPrompts.length,
+          prompts: promptNamespacedNames,
+          resourceCount: serverResources.length,
+          resources: resourceNamespacedNames,
+        });
+      } catch (err) {
+        if (this.disposed) break;
+        client?.disconnect();
+        const message = err instanceof Error ? err.message : String(err);
+        this.setStatus({
+          name,
+          status: "failed",
+          connected: false,
+          error: message,
+          toolCount: 0,
+          tools: [],
+          promptCount: 0,
+          prompts: [],
+          resourceCount: 0,
+          resources: [],
+        });
+      }
+    }
+  }
+  getStatus() {
+    const result = [...this.serverStatuses];
+    const knownNames = new Set(result.map((s) => s.name));
+    for (const name of this.configuredServerNames) {
+      if (!knownNames.has(name)) {
+        result.push({
+          name,
+          status: "starting",
+          connected: false,
+          toolCount: 0,
+          tools: [],
+          promptCount: 0,
+          prompts: [],
+          resourceCount: 0,
+          resources: [],
+        });
+      }
+    }
+    return result;
+  }
+  getMcpToolDefinitions() {
+    return this.tools.map((t) => ({
+      type: "function",
+      function: {
+        name: t.namespacedName,
+        description: t.definition.description ?? `${t.serverName}: ${t.originalName}`,
+        parameters: {
+          type: "object",
+          properties: t.definition.inputSchema.properties,
+          required: t.definition.inputSchema.required,
+          ...(t.definition.inputSchema.additionalProperties !== void 0
+            ? { additionalProperties: t.definition.inputSchema.additionalProperties }
+            : {}),
+        },
+      },
+    }));
+  }
+  isMcpTool(name) {
+    return name.startsWith("mcp__");
+  }
+  async executeMcpTool(name, args2, timeoutMs = MCP_CALL_TOOL_TIMEOUT_MS) {
+    const tool = this.tools.find((t) => t.namespacedName === name);
+    if (!tool) {
+      return { ok: false, name, error: `Unknown MCP tool: ${name}` };
+    }
+    try {
+      const result = await tool.client.callTool(tool.originalName, args2, timeoutMs);
+      const text = result.content
+        .filter((c) => c.type === "text" && c.text)
+        .map((c) => c.text)
+        .join("\n");
+      return {
+        ok: !result.isError,
+        name,
+        output: text || JSON.stringify(result.content),
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        name,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+  async getMcpPrompt(name, args2) {
+    const prompt = this.prompts.find((p) => p.namespacedName === name);
+    if (!prompt) {
+      return { ok: false, name, error: `Unknown MCP prompt: ${name}` };
+    }
+    try {
+      const result = await prompt.client.getPrompt(prompt.definition.name, args2);
+      const text = result.messages
+        .filter((m) => m.content.type === "text" && m.content.text)
+        .map((m) => `[${m.role}] ${m.content.text}`)
+        .join("\n");
+      return {
+        ok: true,
+        name,
+        output: text || JSON.stringify(result),
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        name,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+  async readMcpResource(name, uri) {
+    const resource = this.resources.find((r) => r.namespacedName === name);
+    if (!resource) {
+      return { ok: false, name, error: `Unknown MCP resource: ${name}` };
+    }
+    try {
+      const result = await resource.client.readResource(uri);
+      const text = result.contents
+        .filter((c) => c.text)
+        .map((c) => c.text)
+        .join("\n");
+      return {
+        ok: true,
+        name,
+        output: text || JSON.stringify(result.contents),
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        name,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+  disconnect() {
+    this.disposed = true;
+    for (const client of this.clients) {
+      client.disconnect();
+    }
+    this.clients = [];
+    this.tools = [];
+    this.prompts = [];
+    this.resources = [];
+    this.serverStatuses = [];
+    this.configuredServerNames = [];
+    this.initialized = false;
+  }
+  async refreshServerTools(serverName, client) {
+    const serverTools = await client.listTools(MCP_STARTUP_TIMEOUT_MS);
+    this.tools = this.tools.filter((t) => t.serverName !== serverName);
+    const toolNamespacedNames = [];
+    for (const tool of serverTools) {
+      const namespacedName = `mcp__${serverName}__${tool.name}`;
+      this.tools.push({
+        serverName,
+        originalName: tool.name,
+        namespacedName,
+        definition: tool,
+        client,
+      });
+      toolNamespacedNames.push(namespacedName);
+    }
+    const existing = this.serverStatuses.find((s) => s.name === serverName);
+    if (existing) {
+      existing.toolCount = serverTools.length;
+      existing.tools = toolNamespacedNames;
+    }
+    this.onToolsListChanged?.();
+  }
+  setOnToolsListChanged(handler) {
+    this.onToolsListChanged = handler;
+  }
+  setOnStatusChanged(handler) {
+    this.onStatusChanged = handler;
+  }
+  setStatus(status) {
+    if (this.disposed) return;
+    const index = this.serverStatuses.findIndex((s) => s.name === status.name);
+    if (index === -1) {
+      this.serverStatuses.push(status);
+    } else {
+      this.serverStatuses[index] = status;
+    }
+    this.onStatusChanged?.();
+  }
+};
+
+// src/common/error-logger.ts
+import * as fs7 from "fs";
+import * as path7 from "path";
+import * as os4 from "os";
+var LOG_DIR = path7.join(os4.homedir(), ".deepcode", "logs");
+var ERROR_LOG_PATH = path7.join(LOG_DIR, "error.log");
 function ensureLogDir() {
   if (!fs7.existsSync(LOG_DIR)) {
     fs7.mkdirSync(LOG_DIR, { recursive: true });
@@ -3247,17 +4122,15 @@ function logApiError(entry) {
   } catch {}
 }
 
-// src/debug-logger.ts
+// src/common/debug-logger.ts
 import * as fs8 from "fs";
-import * as os4 from "os";
-import * as path7 from "path";
+import * as os5 from "os";
+import * as path8 from "path";
 var DEBUG_LOG_FILE = "debug.log";
-var MAX_LOG_SIZE_BYTES = 10 * 1024 * 1024;
 function logOpenAIChatCompletionDebug(entry) {
   try {
     const logPath = getDebugLogPath();
-    fs8.mkdirSync(path7.dirname(logPath), { recursive: true });
-    rotateIfNeeded(logPath);
+    fs8.mkdirSync(path8.dirname(logPath), { recursive: true });
     fs8.appendFileSync(
       logPath,
       `${JSON.stringify(toSerializable(entry))}
@@ -3266,17 +4139,8 @@ function logOpenAIChatCompletionDebug(entry) {
     );
   } catch {}
 }
-function rotateIfNeeded(logPath) {
-  try {
-    const stat = fs8.statSync(logPath);
-    if (stat.size >= MAX_LOG_SIZE_BYTES) {
-      const rotatedPath = `${logPath}.1`;
-      fs8.renameSync(logPath, rotatedPath);
-    }
-  } catch {}
-}
 function getDebugLogPath() {
-  return path7.join(os4.homedir(), ".deepcode", "logs", DEBUG_LOG_FILE);
+  return path8.join(os5.homedir(), ".deepcode", "logs", DEBUG_LOG_FILE);
 }
 function normalizeDebugError(error) {
   if (error instanceof Error) {
@@ -3322,6 +4186,7 @@ function toSerializable(value) {
 // src/session.ts
 var MAX_SESSION_ENTRIES = 50;
 var DEFAULT_NEW_PROMPT_API_URL = "https://deepcode.vegamo.cn/api/plugin/new";
+var NEW_PROMPT_REPORT_TIMEOUT_MS = 3e3;
 var DEFAULT_COMPACT_PROMPT_TOKEN_THRESHOLD = 128 * 1024;
 var DEEPSEEK_V4_COMPACT_PROMPT_TOKEN_THRESHOLD = 512 * 1024;
 function getCompactPromptTokenThreshold(model) {
@@ -3361,12 +4226,28 @@ function accumulateUsage(current, next) {
   }
   return addUsageValue(current, next);
 }
+function usageWithRequestCount(usage) {
+  const totalReqs = typeof usage.total_reqs === "number" ? usage.total_reqs + 1 : 1;
+  return {
+    ...usage,
+    total_reqs: totalReqs,
+  };
+}
+function accumulateUsagePerModel(current, model, next) {
+  if (next == null) {
+    return current ?? null;
+  }
+  const usagePerModel = { ...(current ?? {}) };
+  const modelName = model.trim() || "unknown";
+  usagePerModel[modelName] = accumulateUsage(usagePerModel[modelName] ?? null, usageWithRequestCount(next));
+  return usagePerModel;
+}
 function getExtensionRoot2() {
   if (typeof __dirname !== "undefined") {
-    return path8.resolve(__dirname, "..");
+    return path9.resolve(__dirname, "..");
   }
   const currentFilePath = fileURLToPath2(import.meta.url);
-  return path8.resolve(path8.dirname(currentFilePath), "..");
+  return path9.resolve(path9.dirname(currentFilePath), "..");
 }
 function getTotalTokens(usage) {
   if (!isUsageRecord(usage)) {
@@ -3382,10 +4263,15 @@ var SessionManager = class {
   onAssistantMessage;
   onSessionEntryUpdated;
   onLlmStreamProgress;
+  onMcpStatusChanged;
+  onProcessStdout;
   activeSessionId = null;
   activePromptController = null;
   sessionControllers = /* @__PURE__ */ new Map();
+  processTimeoutControls = /* @__PURE__ */ new Map();
   toolExecutor;
+  mcpManager = new McpManager();
+  mcpToolDefinitions = [];
   constructor(options) {
     this.projectRoot = options.projectRoot;
     this.createOpenAIClient = options.createOpenAIClient;
@@ -3393,11 +4279,26 @@ var SessionManager = class {
     this.onAssistantMessage = options.onAssistantMessage;
     this.onSessionEntryUpdated = options.onSessionEntryUpdated;
     this.onLlmStreamProgress = options.onLlmStreamProgress;
-    this.toolExecutor = new ToolExecutor(this.projectRoot, this.createOpenAIClient);
+    this.onMcpStatusChanged = options.onMcpStatusChanged;
+    this.onProcessStdout = options.onProcessStdout;
+    this.toolExecutor = new ToolExecutor(this.projectRoot, this.createOpenAIClient, this.mcpManager);
+    this.mcpManager.prepare(this.getResolvedSettings().mcpServers);
   }
-  changeProjectRoot(newRoot) {
-    this.projectRoot = newRoot;
-    this.toolExecutor.setProjectRoot(newRoot);
+  async initMcpServers(servers) {
+    this.mcpManager.setOnToolsListChanged(() => {
+      this.mcpToolDefinitions = this.mcpManager.getMcpToolDefinitions();
+    });
+    this.mcpManager.setOnStatusChanged(() => {
+      this.onMcpStatusChanged?.();
+    });
+    await this.mcpManager.initialize(servers);
+    this.mcpToolDefinitions = this.mcpManager.getMcpToolDefinitions();
+  }
+  getMcpStatus() {
+    return this.mcpManager.getStatus();
+  }
+  dispose() {
+    this.mcpManager.disconnect();
   }
   estimateStreamTokens(text) {
     let tokens = 0;
@@ -3447,7 +4348,7 @@ var SessionManager = class {
     throw error;
   }
   async createChatCompletionStream(client, request, options, sessionId, debug) {
-    const requestId = crypto.randomUUID();
+    const requestId = crypto2.randomUUID();
     const startedAt = /* @__PURE__ */ new Date().toISOString();
     const startedAtMs = Date.now();
     let estimatedTokens = 0;
@@ -3514,7 +4415,6 @@ var SessionManager = class {
     let usage = null;
     const responseChunks = [];
     const toolCallsByIndex = /* @__PURE__ */ new Map();
-    const signal = options?.signal instanceof AbortSignal ? options.signal : null;
     const trackText = (value) => {
       if (typeof value !== "string" || value.length === 0) {
         return;
@@ -3524,11 +4424,6 @@ var SessionManager = class {
     };
     try {
       for await (const chunk of response) {
-        if (signal?.aborted) {
-          const abortError = new Error("Request was aborted.");
-          abortError.name = "AbortError";
-          throw abortError;
-        }
         if (debug?.enabled) {
           responseChunks.push(chunk);
         }
@@ -3723,16 +4618,16 @@ The candidate skills are as follows:
     }
   }
   async listSkills(sessionId) {
-    const homeDir = os5.homedir();
-    const agentsRoot = path8.join(homeDir, ".agents", "skills");
-    const legacyProjectSkillsRoot = path8.join(this.projectRoot, ".deepcode", "skills");
-    const projectAgentsSkillsRoot = path8.join(this.projectRoot, ".agents", "skills");
+    const homeDir = os6.homedir();
+    const agentsRoot = path9.join(homeDir, ".agents", "skills");
+    const legacyProjectSkillsRoot = path9.join(this.projectRoot, ".deepcode", "skills");
+    const projectAgentsSkillsRoot = path9.join(this.projectRoot, ".agents", "skills");
     const skillsByName = /* @__PURE__ */ new Map();
     const collectSkills = (root, displayRoot) => {
       if (!fs9.existsSync(root)) {
         return [];
       }
-      let entries = [];
+      let entries;
       try {
         entries = fs9.readdirSync(root, { withFileTypes: true });
       } catch {
@@ -3744,7 +4639,7 @@ The candidate skills are as follows:
           continue;
         }
         const skillName = entry.name;
-        const skillPath = path8.join(root, skillName, "SKILL.md");
+        const skillPath = path9.join(root, skillName, "SKILL.md");
         try {
           if (!fs9.existsSync(skillPath)) {
             continue;
@@ -3781,21 +4676,21 @@ The candidate skills are as follows:
   }
   resolveSkillPath(skillPath) {
     if (skillPath.startsWith("~/")) {
-      return path8.join(os5.homedir(), skillPath.slice(2));
+      return path9.join(os6.homedir(), skillPath.slice(2));
     }
     if (skillPath.startsWith("~\\")) {
-      return path8.join(os5.homedir(), skillPath.slice(2));
+      return path9.join(os6.homedir(), skillPath.slice(2));
     }
     if (skillPath.startsWith("./")) {
-      return path8.join(this.projectRoot, skillPath.slice(2));
+      return path9.join(this.projectRoot, skillPath.slice(2));
     }
     if (skillPath.startsWith(".\\")) {
-      return path8.join(this.projectRoot, skillPath.slice(2));
+      return path9.join(this.projectRoot, skillPath.slice(2));
     }
-    if (path8.isAbsolute(skillPath)) {
+    if (path9.isAbsolute(skillPath)) {
       return skillPath;
     }
-    return path8.join(os5.homedir(), skillPath);
+    return path9.join(os6.homedir(), skillPath);
   }
   readSkillInfo(skillPath, displayPath, fallbackName) {
     const fallbackSkill = {
@@ -3887,6 +4782,11 @@ The candidate skills are as follows:
   setActiveSessionId(sessionId) {
     this.activeSessionId = sessionId;
   }
+  addSessionSystemMessage(sessionId, content, visible, meta) {
+    const message = this.buildSystemMessage(sessionId, content, null, visible, meta);
+    if (sessionId) this.appendSessionMessage(sessionId, message);
+    this.onAssistantMessage(message, false);
+  }
   async handleUserPrompt(userPrompt) {
     const controller = new AbortController();
     this.activePromptController = controller;
@@ -3910,7 +4810,6 @@ The candidate skills are as follows:
     this.reportNewPrompt();
     const signal = controller?.signal;
     this.throwIfAborted(signal);
-    this.applyInitCommandPrompt(userPrompt);
     if (userPrompt.text) {
       const skills = await this.listSkills();
       const skillNames = await this.identifyMatchingSkillNames(skills, userPrompt.text, { signal });
@@ -3925,12 +4824,12 @@ The candidate skills are as follows:
     }
     userPrompt.skills = await this.normalizeSkills(userPrompt.skills);
     this.throwIfAborted(signal);
-    const sessionId = crypto.randomUUID();
+    const sessionId = crypto2.randomUUID();
     const now = /* @__PURE__ */ new Date().toISOString();
     const index = this.loadSessionsIndex();
     const entry = {
       id: sessionId,
-      summary: userPrompt.text ? userPrompt.text.slice(0, 100) : "\u{1F5BC} Image Prompt",
+      summary: userPrompt.text ? userPrompt.text.slice(0, 100) : "[Image Prompt]",
       assistantReply: null,
       assistantThinking: null,
       assistantRefusal: null,
@@ -3938,6 +4837,7 @@ The candidate skills are as follows:
       status: "pending",
       failReason: null,
       usage: null,
+      usagePerModel: null,
       activeTokens: 0,
       createTime: now,
       updateTime: now,
@@ -3958,18 +4858,25 @@ The candidate skills are as follows:
     index.entries = keptEntries;
     this.saveSessionsIndex(index);
     this.removeSessionMessages(droppedEntries.map((item) => item.id));
-    const systemPrompt = getSystemPrompt(this.projectRoot, this.getPromptToolOptions());
+    const promptToolOptions = this.getPromptToolOptions();
+    const systemPrompt = getSystemPrompt(this.projectRoot, promptToolOptions);
     const systemMessage = this.buildSystemMessage(sessionId, systemPrompt);
     this.appendSessionMessage(sessionId, systemMessage);
+    const defaultSkillPrompt = getDefaultSkillPrompt();
+    if (defaultSkillPrompt) {
+      const defaultSkillMessage = this.buildSystemMessage(sessionId, defaultSkillPrompt);
+      this.appendSessionMessage(sessionId, defaultSkillMessage);
+    }
+    const runtimeContextMessage = this.buildSystemMessage(
+      sessionId,
+      getRuntimeContext(this.projectRoot, promptToolOptions.model)
+    );
+    this.appendSessionMessage(sessionId, runtimeContextMessage);
     const agentInstructions = this.loadAgentInstructions();
     if (agentInstructions) {
       const instructionsMessage = this.buildSystemMessage(sessionId, agentInstructions);
       this.appendSessionMessage(sessionId, instructionsMessage);
     }
-    const defaultSkillPrompt = `Use the skill document below to assist the user:
-<agent-drift-guard-skill>${AGENT_DRIFT_GUARD_SKILL}</agent-drift-guard-skill>`;
-    const defaultSkillMessage = this.buildSystemMessage(sessionId, defaultSkillPrompt);
-    this.appendSessionMessage(sessionId, defaultSkillMessage);
     const userMessage = this.buildUserMessage(sessionId, userPrompt);
     this.appendSessionMessage(sessionId, userMessage);
     if (userPrompt.skills && userPrompt.skills.length > 0) {
@@ -3995,7 +4902,6 @@ ${skillMd}
   async replySession(sessionId, userPrompt, controller) {
     const signal = controller?.signal;
     this.throwIfAborted(signal);
-    this.applyInitCommandPrompt(userPrompt);
     const now = /* @__PURE__ */ new Date().toISOString();
     const updated = this.updateSessionEntry(sessionId, (entry) => ({
       ...entry,
@@ -4005,6 +4911,11 @@ ${skillMd}
     }));
     if (!updated) {
       await this.createSession(userPrompt, controller);
+      return;
+    }
+    if (this.isContinuePrompt(userPrompt)) {
+      this.activeSessionId = sessionId;
+      await this.activateSession(sessionId, controller);
       return;
     }
     this.reportNewPrompt();
@@ -4043,9 +4954,17 @@ ${skillMd}
     this.activeSessionId = sessionId;
     await this.activateSession(sessionId, controller);
   }
+  isContinuePrompt(userPrompt) {
+    return (
+      typeof userPrompt.text === "string" &&
+      userPrompt.text.trim() === "/continue" &&
+      (!userPrompt.imageUrls || userPrompt.imageUrls.length === 0) &&
+      (!userPrompt.skills || userPrompt.skills.length === 0)
+    );
+  }
   async activateSession(sessionId, controller) {
     const startedAt = Date.now();
-    const { client, model, baseURL, thinkingEnabled, reasoningEffort, debugLogEnabled, notify } =
+    const { client, model, baseURL, thinkingEnabled, reasoningEffort, debugLogEnabled, notify, env } =
       this.createOpenAIClient();
     const now = /* @__PURE__ */ new Date().toISOString();
     if (!client) {
@@ -4058,12 +4977,12 @@ ${skillMd}
       this.onAssistantMessage(
         this.buildAssistantMessage(
           sessionId,
-          "OpenAI API key not found. Please configure ~/.deepcode/settings.json.",
+          "OpenAI API key not found. Please configure ~/.deepcode/settings.json or ./.deepcode/settings.json.",
           null
         ),
         false
       );
-      this.maybeNotifyTaskCompletion(sessionId, notify, startedAt);
+      this.maybeNotifyTaskCompletion(sessionId, notify, startedAt, env);
       return;
     }
     const sessionController = controller ?? new AbortController();
@@ -4074,7 +4993,7 @@ ${skillMd}
         failReason: "interrupted",
         updateTime: now,
       }));
-      this.maybeNotifyTaskCompletion(sessionId, notify, startedAt);
+      this.maybeNotifyTaskCompletion(sessionId, notify, startedAt, env);
       return;
     }
     this.updateSessionEntry(sessionId, (entry) => ({
@@ -4094,6 +5013,22 @@ ${skillMd}
         if (session == null || session.status === "interrupted" || session.status === "failed") {
           return;
         }
+        const pendingToolCalls = this.getTrailingPendingToolCalls(this.listSessionMessages(sessionId));
+        if (pendingToolCalls.length > 0) {
+          const toolAppendResult = await this.appendToolMessages(sessionId, pendingToolCalls);
+          if (this.isInterrupted(sessionId)) {
+            return;
+          }
+          if (toolAppendResult.waitingForUser) {
+            this.updateSessionEntry(sessionId, (entry) => ({
+              ...entry,
+              toolCalls: pendingToolCalls,
+              status: "waiting_for_user",
+              updateTime: /* @__PURE__ */ new Date().toISOString(),
+            }));
+            return;
+          }
+        }
         const compactPromptTokenThreshold = getCompactPromptTokenThreshold(model);
         if (session.activeTokens > compactPromptTokenThreshold) {
           const message2 = this.buildAssistantMessage(
@@ -4105,14 +5040,14 @@ ${skillMd}
           this.onAssistantMessage(message2, false);
           await this.compactSession(sessionId, sessionController.signal);
         }
-        const messages = this.buildOpenAIMessages(this.listSessionMessages(sessionId), thinkingEnabled);
-        const thinkingOptions = buildThinkingRequestOptions(thinkingEnabled, reasoningEffort);
+        const messages = this.buildOpenAIMessages(this.listSessionMessages(sessionId), thinkingEnabled, model);
+        const thinkingOptions = buildThinkingRequestOptions(thinkingEnabled, baseURL, reasoningEffort);
         const response = await this.createChatCompletionStream(
           client,
           {
             model,
             messages,
-            tools: getTools(this.getPromptToolOptions()),
+            tools: getTools(this.getPromptToolOptions(), this.mcpToolDefinitions),
             ...thinkingOptions,
           },
           { signal: sessionController.signal },
@@ -4154,6 +5089,7 @@ ${skillMd}
           assistantRefusal: refusal,
           toolCalls,
           usage: accumulateUsage(entry.usage, responseUsage),
+          usagePerModel: accumulateUsagePerModel(entry.usagePerModel, model, responseUsage),
           activeTokens: getTotalTokens(responseUsage),
           status: refusal ? "failed" : waitingForUser ? "waiting_for_user" : toolCalls ? "processing" : "completed",
           failReason: refusal ? refusal : entry.failReason,
@@ -4198,7 +5134,7 @@ ${skillMd}
       if (this.sessionControllers.get(sessionId) === sessionController) {
         this.sessionControllers.delete(sessionId);
       }
-      this.maybeNotifyTaskCompletion(sessionId, notify, startedAt);
+      this.maybeNotifyTaskCompletion(sessionId, notify, startedAt, env);
     }
   }
   async compactSession(sessionId, signal) {
@@ -4227,7 +5163,7 @@ ${skillMd}
       return;
     }
     const compactPrompt = getCompactPrompt(sessionMessages.slice(startIndex, endIndex));
-    const thinkingOptions = buildThinkingRequestOptions(thinkingEnabled, reasoningEffort);
+    const thinkingOptions = buildThinkingRequestOptions(thinkingEnabled, baseURL, reasoningEffort);
     const response = await this.createChatCompletionStream(
       client,
       {
@@ -4253,6 +5189,7 @@ ${skillMd}
     this.updateSessionEntry(sessionId, (entry) => ({
       ...entry,
       usage: accumulateUsage(entry.usage, responseUsage),
+      usagePerModel: accumulateUsagePerModel(entry.usagePerModel, model, responseUsage),
       activeTokens: getTotalTokens(responseUsage),
       updateTime: now,
     }));
@@ -4260,7 +5197,7 @@ ${skillMd}
       sessionMessages[i] = { ...sessionMessages[i], compacted: true, updateTime: now };
     }
     const summaryMessage = {
-      id: crypto.randomUUID(),
+      id: crypto2.randomUUID(),
       sessionId,
       role: "system",
       content: `There are earlier parts of the conversation. Here is a summary: 
@@ -4281,6 +5218,7 @@ ${compactedSummary}`,
   }
   getPromptToolOptions() {
     return {
+      model: this.getResolvedSettings().model,
       webSearchEnabled: true,
     };
   }
@@ -4289,6 +5227,8 @@ ${compactedSummary}`,
     if (!machineId) {
       return;
     }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), NEW_PROMPT_REPORT_TIMEOUT_MS);
     void fetch(DEFAULT_NEW_PROMPT_API_URL, {
       method: "POST",
       headers: {
@@ -4296,18 +5236,10 @@ ${compactedSummary}`,
         Token: machineId,
       },
       body: JSON.stringify({}),
+      signal: controller.signal,
     })
-      .then(async (response) => {
-        if (response.ok) {
-          return;
-        }
-        const body = await response.text().catch(() => "");
-        throw new Error(`New prompt API request failed with status ${response.status}${body ? `: ${body}` : ""}`);
-      })
-      .catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        console.warn(`Failed to report new prompt: ${message}`);
-      });
+      .catch(() => {})
+      .finally(() => clearTimeout(timeout));
   }
   interruptActiveSession() {
     const controller = this.activePromptController;
@@ -4325,17 +5257,12 @@ ${compactedSummary}`,
     const killedPids = [];
     const failedPids = [];
     for (const pid of processIds) {
-      const killedGroup = this.killProcessGroup(pid);
-      if (killedGroup) {
+      this.processTimeoutControls.delete(this.getProcessControlKey(sessionId, pid));
+      if (killProcessTree(pid, "SIGKILL")) {
         killedPids.push(pid);
         continue;
       }
-      try {
-        process.kill(pid, "SIGKILL");
-        killedPids.push(pid);
-      } catch {
-        failedPids.push(pid);
-      }
+      failedPids.push(pid);
     }
     const controller = this.sessionControllers.get(sessionId);
     if (controller) {
@@ -4361,6 +5288,33 @@ ${compactedSummary}`,
   }
   isInterrupted(sessionId) {
     return !this.sessionControllers.has(sessionId);
+  }
+  adjustActiveBashTimeout(deltaMs) {
+    const sessionId = this.activeSessionId;
+    if (!sessionId || !Number.isFinite(deltaMs)) {
+      return null;
+    }
+    const session = this.getSession(sessionId);
+    if (!session?.processes) {
+      return null;
+    }
+    let selectedPid = null;
+    for (const pid of session.processes.keys()) {
+      if (this.processTimeoutControls.has(this.getProcessControlKey(sessionId, pid))) {
+        selectedPid = pid;
+      }
+    }
+    if (!selectedPid) {
+      return null;
+    }
+    const control = this.processTimeoutControls.get(this.getProcessControlKey(sessionId, selectedPid));
+    if (!control) {
+      return null;
+    }
+    const current = control.getInfo();
+    const next = control.setTimeoutMs(current.timeoutMs + deltaMs);
+    this.updateSessionProcessTimeout(sessionId, selectedPid, next);
+    return this.buildBashTimeoutAdjustment(selectedPid, next);
   }
   listSessions() {
     const index = this.loadSessionsIndex();
@@ -4405,13 +5359,13 @@ ${compactedSummary}`,
       meta: nextMeta,
     };
   }
-  getProjectCode(projectRoot) {
-    return projectRoot.replace(/[\\/]/g, "-").replace(/:/g, "");
+  getProjectCode(projectRoot2) {
+    return projectRoot2.replace(/[\\/]/g, "-").replace(/:/g, "");
   }
   getProjectStorage() {
     const projectCode = this.getProjectCode(this.projectRoot);
-    const projectDir = path8.join(os5.homedir(), ".deepcode", "projects", projectCode);
-    const sessionsIndexPath = path8.join(projectDir, "sessions-index.json");
+    const projectDir = path9.join(os6.homedir(), ".deepcode", "projects", projectCode);
+    const sessionsIndexPath = path9.join(projectDir, "sessions-index.json");
     return { projectCode, projectDir, sessionsIndexPath };
   }
   ensureProjectDir() {
@@ -4455,7 +5409,7 @@ ${compactedSummary}`,
   }
   getSessionMessagesPath(sessionId) {
     const { projectDir } = this.getProjectStorage();
-    return path8.join(projectDir, `${sessionId}.jsonl`);
+    return path9.join(projectDir, `${sessionId}.jsonl`);
   }
   removeSessionMessages(sessionIds) {
     for (const sessionId of sessionIds) {
@@ -4512,7 +5466,7 @@ ${compactedSummary}`,
           image_url: { url },
         })) ?? [];
     return {
-      id: crypto.randomUUID(),
+      id: crypto2.randomUUID(),
       sessionId,
       role: "user",
       content: prompt.text ?? "",
@@ -4524,16 +5478,10 @@ ${compactedSummary}`,
       updateTime: now,
     };
   }
-  applyInitCommandPrompt(userPrompt) {
-    if (userPrompt.text !== "/init") {
-      return;
-    }
-    userPrompt.text = this.renderInitCommandPrompt();
-  }
   renderInitCommandPrompt() {
-    const templatePath = path8.join(getExtensionRoot2(), "docs", "prompts", "init_command.md.ejs");
+    const templatePath = path9.join(getExtensionRoot2(), "templates", "prompts", "init_command.md.ejs");
     const template = fs9.readFileSync(templatePath, "utf8");
-    return ejs.render(template, {
+    return ejs2.render(template, {
       agentsMdFile: this.getEffectiveProjectAgentsMdFile(),
     });
   }
@@ -4543,11 +5491,11 @@ ${compactedSummary}`,
   loadProjectAgentInstructions() {
     const candidatePaths = [
       {
-        absolutePath: path8.join(this.projectRoot, ".deepcode", "AGENTS.md"),
+        absolutePath: path9.join(this.projectRoot, ".deepcode", "AGENTS.md"),
         displayPath: "./.deepcode/AGENTS.md",
       },
       {
-        absolutePath: path8.join(this.projectRoot, "AGENTS.md"),
+        absolutePath: path9.join(this.projectRoot, "AGENTS.md"),
         displayPath: "./AGENTS.md",
       },
     ];
@@ -4578,27 +5526,28 @@ ${compactedSummary}`,
     if (projectInstructions) {
       return projectInstructions.content;
     }
-    return this.readNonEmptyFile(path8.join(os5.homedir(), ".deepcode", "AGENTS.md"));
+    return this.readNonEmptyFile(path9.join(os6.homedir(), ".deepcode", "AGENTS.md"));
   }
-  buildSystemMessage(sessionId, content, contentParams = null) {
+  buildSystemMessage(sessionId, content, contentParams = null, visible = false, meta) {
     const now = /* @__PURE__ */ new Date().toISOString();
     return {
-      id: crypto.randomUUID(),
+      id: crypto2.randomUUID(),
       sessionId,
       role: "system",
       content,
       contentParams,
       messageParams: null,
       compacted: false,
-      visible: false,
+      visible,
       createTime: now,
       updateTime: now,
+      meta,
     };
   }
   buildSkillMessage(sessionId, content, skill) {
     const now = /* @__PURE__ */ new Date().toISOString();
     return {
-      id: crypto.randomUUID(),
+      id: crypto2.randomUUID(),
       sessionId,
       role: "system",
       content,
@@ -4622,7 +5571,7 @@ ${compactedSummary}`,
       messageParams.reasoning_content = reasoningContent;
     }
     return {
-      id: crypto.randomUUID(),
+      id: crypto2.randomUUID(),
       sessionId,
       role: "assistant",
       content,
@@ -4641,7 +5590,7 @@ ${compactedSummary}`,
     const resultMd = this.buildToolResultSnippet(content);
     const isInvisibleExecution = this.isInvisibleExecution(content);
     return {
-      id: crypto.randomUUID(),
+      id: crypto2.randomUUID(),
       sessionId,
       role: "tool",
       content,
@@ -4662,6 +5611,8 @@ ${compactedSummary}`,
     const toolExecutions = await this.toolExecutor.executeToolCalls(sessionId, toolCalls, {
       onProcessStart: (pid, command) => this.addSessionProcess(sessionId, pid, command),
       onProcessExit: (pid) => this.removeSessionProcess(sessionId, pid),
+      onProcessStdout: (pid, chunk) => this.onProcessStdout?.(Number(pid), chunk),
+      onProcessTimeoutControl: (pid, control) => this.setSessionProcessTimeoutControl(sessionId, pid, control),
       shouldStop: () => this.isInterrupted(sessionId),
     });
     if (this.isInterrupted(sessionId)) {
@@ -4691,7 +5642,7 @@ ${compactedSummary}`,
     }
     return { waitingForUser };
   }
-  buildOpenAIMessages(messages, thinkingEnabled) {
+  buildOpenAIMessages(messages, thinkingEnabled, model) {
     const activeMessages = messages.filter((message) => !message.compacted);
     const toolPairings = this.pairToolMessages(activeMessages);
     const openAIMessages = [];
@@ -4700,7 +5651,7 @@ ${compactedSummary}`,
       if (message.role === "tool") {
         continue;
       }
-      openAIMessages.push(this.sessionMessageToOpenAIMessage(message, thinkingEnabled));
+      openAIMessages.push(this.sessionMessageToOpenAIMessage(message, thinkingEnabled, model));
       const toolCalls = this.getAssistantToolCalls(message);
       if (toolCalls.length === 0) {
         continue;
@@ -4712,7 +5663,9 @@ ${compactedSummary}`,
         }
         const pairedToolIndex = toolPairings.get(this.buildToolPairingKey(index, toolCallIndex));
         if (pairedToolIndex != null) {
-          openAIMessages.push(this.sessionMessageToOpenAIMessage(activeMessages[pairedToolIndex], thinkingEnabled));
+          openAIMessages.push(
+            this.sessionMessageToOpenAIMessage(activeMessages[pairedToolIndex], thinkingEnabled, model)
+          );
           continue;
         }
         openAIMessages.push(this.buildInterruptedOpenAIToolMessage(toolCalls, toolCallId));
@@ -4720,10 +5673,11 @@ ${compactedSummary}`,
     }
     return openAIMessages;
   }
-  sessionMessageToOpenAIMessage(message, thinkingEnabled) {
+  sessionMessageToOpenAIMessage(message, thinkingEnabled, model) {
+    const content = this.renderOpenAIMessageContent(message);
     const base = {
       role: message.role,
-      content: message.content ?? "",
+      content,
     };
     const messageParams = message.messageParams;
     if (messageParams?.tool_calls) {
@@ -4739,19 +5693,26 @@ ${compactedSummary}`,
     }
     if ((message.role === "user" || message.role === "system") && message.contentParams) {
       const contentParts = [];
-      if (message.content) {
-        contentParts.push({ type: "text", text: message.content });
+      if (content) {
+        contentParts.push({ type: "text", text: content });
       }
       const params = Array.isArray(message.contentParams) ? message.contentParams : [message.contentParams];
       for (const param of params) {
-        if (param && typeof param === "object") {
-          contentParts.push(param);
+        const part = param;
+        if (part && (part.type !== "image_url" || supportsMultimodal(model))) {
+          contentParts.push(part);
         }
       }
-      const contentValue = contentParts.length > 0 ? contentParts : (message.content ?? "");
+      const contentValue = contentParts.length > 0 ? contentParts : content;
       base.content = contentValue;
     }
     return base;
+  }
+  renderOpenAIMessageContent(message) {
+    if (message.role === "user" && message.content === "/init") {
+      return this.renderInitCommandPrompt();
+    }
+    return message.content ?? "";
   }
   pairToolMessages(messages) {
     const pairings = /* @__PURE__ */ new Map();
@@ -4777,6 +5738,18 @@ ${compactedSummary}`,
       }
     }
     return pairings;
+  }
+  getTrailingPendingToolCalls(messages) {
+    const activeMessages = messages.filter((message) => !message.compacted);
+    const latestMessage = activeMessages[activeMessages.length - 1];
+    if (!latestMessage || latestMessage.role !== "assistant") {
+      return [];
+    }
+    const toolCalls = this.getAssistantToolCalls(latestMessage);
+    if (toolCalls.length === 0) {
+      return [];
+    }
+    return toolCalls.filter((toolCall) => Boolean(this.getToolCallId(toolCall)));
   }
   findPairableToolMessageIndex(messages, assistantIndex, toolCallId, usedToolMessageIndexes) {
     let firstMatchingIndex = null;
@@ -4885,6 +5858,10 @@ ${compactedSummary}`,
       if (description) {
         return description;
       }
+    } else if (toolName === "UpdatePlan") {
+      return typeof args2.explanation === "string" ? args2.explanation.trim() : "";
+    } else if (toolName === "write") {
+      return typeof args2.file_path === "string" ? args2.file_path.trim() : "";
     }
     const firstKey = Object.keys(args2)[0];
     if (!firstKey) {
@@ -4931,7 +5908,7 @@ ${compactedSummary}`,
       return false;
     }
   }
-  maybeNotifyTaskCompletion(sessionId, notifyCommand, startedAt) {
+  maybeNotifyTaskCompletion(sessionId, notifyCommand, startedAt, configuredEnv = {}) {
     if (!notifyCommand) {
       return;
     }
@@ -4939,7 +5916,21 @@ ${compactedSummary}`,
     if (!session || (session.status !== "completed" && session.status !== "failed")) {
       return;
     }
-    launchNotifyScript(notifyCommand, Date.now() - startedAt, this.projectRoot);
+    let body;
+    const messages = this.listSessionMessages(sessionId);
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg && msg.role === "assistant" && msg.content) {
+        body = msg.content;
+        break;
+      }
+    }
+    launchNotifyScript(notifyCommand, Date.now() - startedAt, this.projectRoot, void 0, configuredEnv, {
+      status: session.status,
+      failReason: session.failReason ?? void 0,
+      body,
+      title: session.summary ?? void 0,
+    });
   }
   addSessionProcess(sessionId, processId, command) {
     const now = /* @__PURE__ */ new Date().toISOString();
@@ -4955,6 +5946,7 @@ ${compactedSummary}`,
   }
   removeSessionProcess(sessionId, processId) {
     const now = /* @__PURE__ */ new Date().toISOString();
+    this.processTimeoutControls.delete(this.getProcessControlKey(sessionId, processId));
     this.updateSessionEntry(sessionId, (entry) => {
       const processes = new Map(entry.processes ?? []);
       processes.delete(String(processId));
@@ -4964,6 +5956,48 @@ ${compactedSummary}`,
         updateTime: now,
       };
     });
+  }
+  setSessionProcessTimeoutControl(sessionId, processId, control) {
+    const key = this.getProcessControlKey(sessionId, processId);
+    if (!control) {
+      this.processTimeoutControls.delete(key);
+      return;
+    }
+    this.processTimeoutControls.set(key, control);
+    this.updateSessionProcessTimeout(sessionId, processId, control.getInfo());
+  }
+  updateSessionProcessTimeout(sessionId, processId, info) {
+    const now = /* @__PURE__ */ new Date().toISOString();
+    this.updateSessionEntry(sessionId, (entry) => {
+      const processes = new Map(entry.processes ?? []);
+      const pid = String(processId);
+      const processInfo = processes.get(pid);
+      if (!processInfo) {
+        return entry;
+      }
+      processes.set(pid, {
+        ...processInfo,
+        timeoutMs: info.timeoutMs,
+        deadlineAt: new Date(info.deadlineAtMs).toISOString(),
+        timedOut: info.timedOut,
+      });
+      return {
+        ...entry,
+        processes,
+        updateTime: now,
+      };
+    });
+  }
+  buildBashTimeoutAdjustment(processId, info) {
+    return {
+      processId,
+      timeoutMs: info.timeoutMs,
+      deadlineAt: new Date(info.deadlineAtMs).toISOString(),
+      timedOut: info.timedOut,
+    };
+  }
+  getProcessControlKey(sessionId, processId) {
+    return `${sessionId}:${String(processId)}`;
   }
   getProcessIds(processes) {
     if (!processes) {
@@ -4996,21 +6030,10 @@ ${compactedSummary}`,
       2
     );
   }
-  killProcessGroup(pid) {
-    if (process.platform === "win32") {
-      return false;
-    }
-    try {
-      process.kill(-pid, "SIGKILL");
-      return true;
-    } catch {
-      return false;
-    }
-  }
   normalizeSessionEntry(entry) {
     const value = entry && typeof entry === "object" ? entry : {};
     return {
-      id: typeof value.id === "string" ? value.id : crypto.randomUUID(),
+      id: typeof value.id === "string" ? value.id : crypto2.randomUUID(),
       summary: typeof value.summary === "string" ? value.summary : null,
       assistantReply: typeof value.assistantReply === "string" ? value.assistantReply : null,
       assistantThinking: typeof value.assistantThinking === "string" ? value.assistantThinking : null,
@@ -5019,6 +6042,7 @@ ${compactedSummary}`,
       status: this.normalizeSessionStatus(value.status),
       failReason: typeof value.failReason === "string" ? value.failReason : null,
       usage: value.usage ?? null,
+      usagePerModel: this.normalizeUsagePerModel(value),
       activeTokens: typeof value.activeTokens === "number" ? value.activeTokens : 0,
       createTime: typeof value.createTime === "string" ? value.createTime : /* @__PURE__ */ new Date().toISOString(),
       updateTime: typeof value.updateTime === "string" ? value.updateTime : /* @__PURE__ */ new Date().toISOString(),
@@ -5038,6 +6062,22 @@ ${compactedSummary}`,
     }
     return "pending";
   }
+  normalizeUsagePerModel(entry) {
+    if (!Object.prototype.hasOwnProperty.call(entry, "usagePerModel")) {
+      return null;
+    }
+    if (!isUsageRecord(entry.usagePerModel)) {
+      return null;
+    }
+    const usagePerModel = {};
+    for (const [model, usage] of Object.entries(entry.usagePerModel)) {
+      if (!model || !isUsageRecord(usage)) {
+        continue;
+      }
+      usagePerModel[model] = usage;
+    }
+    return usagePerModel;
+  }
   deserializeProcesses(value) {
     if (!value || typeof value !== "object") {
       return null;
@@ -5053,7 +6093,13 @@ ${compactedSummary}`,
         const obj = entry;
         const startTime = typeof obj.startTime === "string" ? obj.startTime : /* @__PURE__ */ new Date().toISOString();
         const command = typeof obj.command === "string" ? obj.command : "Running process...";
-        processes.set(pid, { startTime, command });
+        processes.set(pid, {
+          startTime,
+          command,
+          timeoutMs: typeof obj.timeoutMs === "number" ? obj.timeoutMs : void 0,
+          deadlineAt: typeof obj.deadlineAt === "string" ? obj.deadlineAt : void 0,
+          timedOut: typeof obj.timedOut === "boolean" ? obj.timedOut : void 0,
+        });
       }
     }
     return processes.size > 0 ? processes : null;
@@ -5070,41 +6116,161 @@ ${compactedSummary}`,
   }
 };
 
-// src/clientFactory.ts
-import * as fs10 from "fs";
-import * as os6 from "os";
-import * as path9 from "path";
-import OpenAI from "openai";
-
 // src/settings.ts
 function resolveReasoningEffort(value) {
-  return value === "high" || value === "max" ? value : "max";
+  return value === "high" || value === "max" ? value : void 0;
 }
-function resolveThinkingEnabled(settings, model) {
-  if (typeof settings?.thinkingEnabled === "boolean") {
-    return settings.thinkingEnabled;
+function parseBoolean(value) {
+  if (typeof value === "boolean") {
+    return value;
   }
-  const legacyThinking = settings?.env?.THINKING;
-  if (typeof legacyThinking === "string" && legacyThinking.trim()) {
-    return legacyThinking.trim().toLowerCase() === "enabled";
+  if (typeof value !== "string") {
+    return void 0;
   }
-  return defaultsToThinkingMode(model);
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "enabled", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "disabled", "no", "off"].includes(normalized)) {
+    return false;
+  }
+  return void 0;
 }
-function resolveSettings(settings, defaults) {
-  const env = settings?.env ?? {};
-  const topLevelModel = typeof settings?.model === "string" ? settings.model.trim() : "";
-  const model = topLevelModel || env.MODEL?.trim() || defaults.model;
-  const notify = typeof settings?.notify === "string" ? settings.notify.trim() : "";
-  const webSearchTool = typeof settings?.webSearchTool === "string" ? settings.webSearchTool.trim() : "";
+function trimString(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+function normalizeEnv(env) {
+  const result = {};
+  if (!env) {
+    return result;
+  }
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value === "string") {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+function collectDeepcodeEnv(processEnv = process.env) {
+  const result = {};
+  for (const [key, value] of Object.entries(processEnv)) {
+    if (!key.startsWith("DEEPCODE_") || typeof value !== "string") {
+      continue;
+    }
+    const strippedKey = key.slice("DEEPCODE_".length);
+    if (strippedKey) {
+      result[strippedKey] = value;
+    }
+  }
+  return result;
+}
+function extractMcpEnv(env) {
+  const result = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (!key.startsWith("MCP_")) {
+      continue;
+    }
+    const strippedKey = key.slice("MCP_".length);
+    if (strippedKey) {
+      result[strippedKey] = value;
+    }
+  }
+  return result;
+}
+function mergeMcpServers(userSettings, projectSettings, userEnv, projectEnv, systemEnv) {
+  const userServers = userSettings?.mcpServers ?? {};
+  const projectServers = projectSettings?.mcpServers ?? {};
+  const serverNames = /* @__PURE__ */ new Set([...Object.keys(userServers), ...Object.keys(projectServers)]);
+  if (serverNames.size === 0) {
+    return void 0;
+  }
+  const userMcpEnv = extractMcpEnv(userEnv);
+  const projectMcpEnv = extractMcpEnv(projectEnv);
+  const systemMcpEnv = extractMcpEnv(systemEnv);
+  const merged = {};
+  for (const name of serverNames) {
+    const userConfig = userServers[name];
+    const projectConfig = projectServers[name];
+    const command = projectConfig?.command ?? userConfig?.command;
+    if (!command) {
+      continue;
+    }
+    const env = {
+      ...userEnv,
+      ...(userConfig?.env ?? {}),
+      ...userMcpEnv,
+      ...projectEnv,
+      ...(projectConfig?.env ?? {}),
+      ...projectMcpEnv,
+      ...systemEnv,
+      ...systemMcpEnv,
+    };
+    const config = {
+      command,
+      args: projectConfig?.args ?? userConfig?.args,
+    };
+    if (Object.keys(env).length > 0) {
+      config.env = env;
+    }
+    merged[name] = config;
+  }
+  return Object.keys(merged).length > 0 ? merged : void 0;
+}
+function resolveSettingsSources(userSettings, projectSettings, defaults, processEnv = process.env) {
+  const userEnv = normalizeEnv(userSettings?.env);
+  const projectEnv = normalizeEnv(projectSettings?.env);
+  const systemEnv = collectDeepcodeEnv(processEnv);
+  const env = {
+    ...userEnv,
+    ...projectEnv,
+    ...systemEnv,
+  };
+  const model =
+    trimString(systemEnv.MODEL) ||
+    trimString(projectSettings?.model) ||
+    trimString(projectEnv.MODEL) ||
+    trimString(userSettings?.model) ||
+    trimString(userEnv.MODEL) ||
+    defaults.model;
+  const thinkingEnabled =
+    parseBoolean(systemEnv.THINKING_ENABLED) ??
+    parseBoolean(projectSettings?.thinkingEnabled) ??
+    parseBoolean(projectEnv.THINKING_ENABLED) ??
+    parseBoolean(userSettings?.thinkingEnabled) ??
+    parseBoolean(userEnv.THINKING_ENABLED) ??
+    defaultsToThinkingMode(model);
+  const reasoningEffort =
+    resolveReasoningEffort(systemEnv.REASONING_EFFORT) ??
+    resolveReasoningEffort(projectSettings?.reasoningEffort) ??
+    resolveReasoningEffort(projectEnv.REASONING_EFFORT) ??
+    resolveReasoningEffort(userSettings?.reasoningEffort) ??
+    resolveReasoningEffort(userEnv.REASONING_EFFORT) ??
+    "max";
+  const debugLogEnabled =
+    parseBoolean(systemEnv.DEBUG_LOG_ENABLED) ??
+    parseBoolean(projectSettings?.debugLogEnabled) ??
+    parseBoolean(projectEnv.DEBUG_LOG_ENABLED) ??
+    parseBoolean(userSettings?.debugLogEnabled) ??
+    parseBoolean(userEnv.DEBUG_LOG_ENABLED) ??
+    false;
+  const notify =
+    trimString(systemEnv.NOTIFY) || trimString(projectSettings?.notify) || trimString(userSettings?.notify) || "";
+  const webSearchTool =
+    trimString(systemEnv.WEB_SEARCH_TOOL) ||
+    trimString(projectSettings?.webSearchTool) ||
+    trimString(userSettings?.webSearchTool) ||
+    "";
   return {
-    apiKey: env.API_KEY?.trim(),
-    baseURL: env.BASE_URL?.trim() || defaults.baseURL,
+    env,
+    apiKey: trimString(env.API_KEY) || void 0,
+    baseURL: trimString(env.BASE_URL) || defaults.baseURL,
     model,
-    thinkingEnabled: resolveThinkingEnabled(settings, model),
-    reasoningEffort: resolveReasoningEffort(settings?.reasoningEffort),
-    debugLogEnabled: settings?.debugLogEnabled === true,
+    thinkingEnabled,
+    reasoningEffort,
+    debugLogEnabled,
     notify: notify || void 0,
     webSearchTool: webSearchTool || void 0,
+    mcpServers: mergeMcpServers(userSettings, projectSettings, userEnv, projectEnv, systemEnv),
   };
 }
 function modelConfigKey(config) {
@@ -5128,92 +6294,13 @@ function applyModelConfigSelection(settings, current, selected) {
   return { settings: next, changed: true };
 }
 
-// src/clientFactory.ts
-var DEFAULT_MODEL = "deepseek-v4-pro";
-var DEFAULT_BASE_URL = "https://api.deepseek.com";
-function readSettings() {
-  try {
-    const settingsPath = path9.join(os6.homedir(), ".deepcode", "settings.json");
-    if (!fs10.existsSync(settingsPath)) {
-      return null;
-    }
-    const raw = fs10.readFileSync(settingsPath, "utf8");
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-function resolveCurrentSettings() {
-  return resolveSettings(readSettings(), {
-    model: DEFAULT_MODEL,
-    baseURL: DEFAULT_BASE_URL,
-  });
-}
-function writeLastProjectRoot(projectRoot) {
-  const settingsPath = path9.join(os6.homedir(), ".deepcode", "settings.json");
-  let settings = {};
-  try {
-    if (fs10.existsSync(settingsPath)) {
-      const raw = fs10.readFileSync(settingsPath, "utf8");
-      settings = JSON.parse(raw);
-    }
-  } catch {}
-  settings.lastProjectRoot = projectRoot;
-  const dir = path9.dirname(settingsPath);
-  fs10.mkdirSync(dir, { recursive: true });
-  fs10.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf8");
-}
-function createOpenAIClient() {
-  const settings = resolveCurrentSettings();
-  if (!settings.apiKey) {
-    return {
-      client: null,
-      model: settings.model,
-      baseURL: settings.baseURL,
-      thinkingEnabled: settings.thinkingEnabled,
-      reasoningEffort: settings.reasoningEffort,
-      notify: settings.notify,
-      webSearchTool: settings.webSearchTool,
-      machineId: getMachineId(),
-    };
-  }
-  const client = new OpenAI({
-    apiKey: settings.apiKey,
-    baseURL: settings.baseURL || void 0,
-  });
-  return {
-    client,
-    model: settings.model,
-    baseURL: settings.baseURL,
-    thinkingEnabled: settings.thinkingEnabled,
-    reasoningEffort: settings.reasoningEffort,
-    notify: settings.notify,
-    webSearchTool: settings.webSearchTool,
-    machineId: getMachineId(),
-  };
-}
-function getMachineId() {
-  try {
-    const idPath = path9.join(os6.homedir(), ".deepcode", "machine-id");
-    if (fs10.existsSync(idPath)) {
-      const raw = fs10.readFileSync(idPath, "utf8").trim();
-      if (raw) {
-        return raw;
-      }
-    }
-    const generated = `${os6.hostname()}-${Math.random().toString(36).slice(2)}-${Date.now()}`;
-    fs10.mkdirSync(path9.dirname(idPath), { recursive: true });
-    fs10.writeFileSync(idPath, generated, "utf8");
-    return generated;
-  } catch {
-    return void 0;
-  }
-}
-
 // src/ui/PromptInput.tsx
-import React2, { useEffect as useEffect3, useState as useState2 } from "react";
-import { Box as Box2, Text as Text2, useApp, useStdout } from "ink";
-import chalk from "chalk";
+import React5, { useEffect as useEffect2, useMemo as useMemo2, useState as useState3 } from "react";
+import { Box as Box4, Text as Text4, useApp, useStdout } from "ink";
+import chalk3 from "chalk";
+
+// src/ui/constants.ts
+var ARGS_SEPARATOR = " | ";
 
 // src/ui/promptBuffer.ts
 var EMPTY_BUFFER = { text: "", cursor: 0 };
@@ -5378,6 +6465,41 @@ function locate(state) {
   };
 }
 
+// src/ui/promptUndoRedo.ts
+function createPromptUndoRedoState() {
+  return { undoStack: [], redoStack: [] };
+}
+function recordPromptEdit(history, current, next, maxUndoEntries = 1e3) {
+  if (next.text === current.text || next.text === history.undoStack.at(-1)?.text) {
+    return;
+  }
+  history.undoStack.push(current);
+  if (history.undoStack.length > maxUndoEntries) {
+    history.undoStack = history.undoStack.slice(-maxUndoEntries);
+  }
+  history.redoStack = [];
+}
+function undoPromptEdit(history, current) {
+  const previous = history.undoStack.pop();
+  if (!previous) {
+    return null;
+  }
+  history.redoStack.push(current);
+  return previous;
+}
+function redoPromptEdit(history, current) {
+  const next = history.redoStack.pop();
+  if (!next) {
+    return null;
+  }
+  history.undoStack.push(current);
+  return next;
+}
+function clearPromptUndoRedoState(history) {
+  history.undoStack = [];
+  history.redoStack = [];
+}
+
 // src/ui/slashCommands.ts
 var BUILTIN_SLASH_COMMANDS = [
   {
@@ -5390,7 +6512,7 @@ var BUILTIN_SLASH_COMMANDS = [
     kind: "model",
     name: "model",
     label: "/model",
-    description: "Select model, thinking mode and thinking effort",
+    description: "Select model, thinking mode and effort control",
   },
   {
     kind: "new",
@@ -5409,6 +6531,25 @@ var BUILTIN_SLASH_COMMANDS = [
     name: "resume",
     label: "/resume",
     description: "Pick a previous conversation to continue",
+  },
+  {
+    kind: "continue",
+    name: "continue",
+    label: "/continue",
+    description: "Continue the active conversation or pick one to resume",
+  },
+  {
+    kind: "mcp",
+    name: "mcp",
+    label: "/mcp",
+    description: "Show MCP server status and available tools",
+  },
+  {
+    kind: "raw",
+    name: "raw",
+    label: "/raw",
+    args: ["lite", "normal", "raw-scrollback"],
+    description: "Toggle display mode for viewing or collapsing reasoning content",
   },
   {
     kind: "exit",
@@ -5452,11 +6593,355 @@ function formatSlashCommandLabel(item) {
   return item.kind === "skill" && item.skill?.isLoaded ? `${item.label} \u2713` : item.label;
 }
 
+// src/ui/fileMentions.ts
+import * as fs10 from "fs";
+import * as path10 from "path";
+import ignore2 from "ignore";
+var DEFAULT_MAX_ITEMS = 2e3;
+var DEFAULT_MAX_DEPTH = 8;
+function scanFileMentionItems(root, maxItems = DEFAULT_MAX_ITEMS) {
+  const items = [];
+  const seen = /* @__PURE__ */ new Set();
+  const gitRoot = findGitRoot(root);
+  const visitedDirectories = /* @__PURE__ */ new Set();
+  function addItem(item) {
+    if (items.length >= maxItems || seen.has(item.path)) {
+      return;
+    }
+    seen.add(item.path);
+    items.push(item);
+  }
+  function visit(directory, depth, matchers) {
+    if (items.length >= maxItems || depth > DEFAULT_MAX_DEPTH) {
+      return;
+    }
+    const currentMatchers = [...matchers, ...loadDirectoryIgnoreMatchers(directory, gitRoot)];
+    let entries;
+    try {
+      entries = fs10.readdirSync(directory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    entries.sort((a, b) => {
+      if (a.isDirectory() !== b.isDirectory()) {
+        return a.isDirectory() ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+    for (const entry of entries) {
+      if (items.length >= maxItems) {
+        return;
+      }
+      if (entry.name === "." || entry.name === ".." || entry.name === ".git") {
+        continue;
+      }
+      const absolute = path10.join(directory, entry.name);
+      const relative3 = toMentionPath(path10.relative(root, absolute));
+      if (!relative3) {
+        continue;
+      }
+      const entryType = getMentionEntryType(entry, absolute);
+      if (!entryType) {
+        continue;
+      }
+      if (matchesAnyIgnore(absolute, entryType === "directory", currentMatchers)) {
+        continue;
+      }
+      if (entryType === "directory") {
+        const realPath = safeRealpath(absolute);
+        if (realPath) {
+          if (visitedDirectories.has(realPath)) {
+            continue;
+          }
+          visitedDirectories.add(realPath);
+        }
+        addItem({ path: `${relative3}/`, type: "directory" });
+        visit(absolute, depth + 1, currentMatchers);
+        continue;
+      }
+      if (entryType === "file") {
+        addItem({ path: relative3, type: "file" });
+      }
+    }
+  }
+  const rootRealPath = safeRealpath(root);
+  if (rootRealPath) {
+    visitedDirectories.add(rootRealPath);
+  }
+  visit(root, 0, loadAncestorIgnoreMatchers(root, gitRoot));
+  return items;
+}
+function getMentionEntryType(entry, absolute) {
+  if (entry.isDirectory()) {
+    return "directory";
+  }
+  if (entry.isFile()) {
+    return "file";
+  }
+  if (!entry.isSymbolicLink()) {
+    return null;
+  }
+  try {
+    const stat = fs10.statSync(absolute);
+    if (stat.isDirectory()) {
+      return "directory";
+    }
+    if (stat.isFile()) {
+      return "file";
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+function safeRealpath(absolute) {
+  try {
+    return fs10.realpathSync(absolute);
+  } catch {
+    return null;
+  }
+}
+function loadDirectoryIgnoreMatchers(directory, gitRoot) {
+  const matchers = [];
+  if (gitRoot && isPathInsideOrEqual(directory, gitRoot)) {
+    const gitignoreMatcher = loadIgnoreFileMatcher(directory, path10.join(directory, ".gitignore"));
+    if (gitignoreMatcher) {
+      matchers.push(gitignoreMatcher);
+    }
+    if (path10.resolve(directory) === path10.resolve(gitRoot)) {
+      const gitExcludeMatcher = loadIgnoreFileMatcher(directory, path10.join(directory, ".git", "info", "exclude"));
+      if (gitExcludeMatcher) {
+        matchers.push(gitExcludeMatcher);
+      }
+    }
+  }
+  const ignoreMatcher = loadIgnoreFileMatcher(directory, path10.join(directory, ".ignore"));
+  if (ignoreMatcher) {
+    matchers.push(ignoreMatcher);
+  }
+  return matchers;
+}
+function loadAncestorIgnoreMatchers(root, gitRoot) {
+  const resolvedRoot = path10.resolve(root);
+  const ancestors = [];
+  let current = path10.dirname(resolvedRoot);
+  while (gitRoot && isPathInsideOrEqual(current, gitRoot)) {
+    ancestors.push(current);
+    if (path10.resolve(current) === path10.resolve(gitRoot)) {
+      break;
+    }
+    current = path10.dirname(current);
+  }
+  return ancestors.reverse().flatMap((directory) => loadDirectoryIgnoreMatchers(directory, gitRoot));
+}
+function loadIgnoreFileMatcher(base, ignoreFilePath) {
+  try {
+    if (!fs10.existsSync(ignoreFilePath)) {
+      return null;
+    }
+    const content = fs10.readFileSync(ignoreFilePath, "utf8");
+    if (!content.trim()) {
+      return null;
+    }
+    return { base, matcher: ignore2().add(content) };
+  } catch {
+    return null;
+  }
+}
+function matchesAnyIgnore(absolute, isDir, matchers) {
+  let ignored = false;
+  for (const { base, matcher } of matchers) {
+    const relative3 = toMentionPath(path10.relative(base, absolute));
+    if (!relative3 || relative3.startsWith("../")) {
+      continue;
+    }
+    const result = matcher.test(isDir ? `${relative3}/` : relative3);
+    if (result.ignored) {
+      ignored = true;
+    }
+    if (result.unignored) {
+      ignored = false;
+    }
+  }
+  return ignored;
+}
+function findGitRoot(start) {
+  let current = path10.resolve(start);
+  while (true) {
+    if (fs10.existsSync(path10.join(current, ".git"))) {
+      return current;
+    }
+    const parent = path10.dirname(current);
+    if (parent === current) {
+      return null;
+    }
+    current = parent;
+  }
+}
+function isPathInsideOrEqual(candidate, parent) {
+  const relative3 = path10.relative(parent, candidate);
+  return relative3 === "" || (!relative3.startsWith("..") && !path10.isAbsolute(relative3));
+}
+function filterFileMentionItems(items, query, maxResults = 12) {
+  const normalizedQuery = normalizeForSearch(query);
+  const scored = items
+    .map((item, index) => ({ item, index, score: scoreFileMention(item.path, normalizedQuery) }))
+    .filter((entry) => entry.score !== Number.POSITIVE_INFINITY)
+    .sort((a, b) => a.score - b.score || a.item.path.length - b.item.path.length || a.index - b.index);
+  return scored.slice(0, maxResults).map((entry) => entry.item);
+}
+function getCurrentFileMentionToken(state) {
+  const text = state.text;
+  const cursor = clampCursorToBoundary(text, state.cursor);
+  const quoted = getCurrentQuotedFileMentionToken(text, cursor);
+  if (quoted) {
+    return quoted;
+  }
+  return getCurrentBareFileMentionToken(text, cursor);
+}
+function replaceCurrentFileMentionToken(state, token, selectedPath) {
+  const inserted = `${formatFileMentionPath(selectedPath)} `;
+  const end = token.end < state.text.length && isWhitespace(state.text[token.end] ?? "") ? token.end + 1 : token.end;
+  const text = `${state.text.slice(0, token.start)}${inserted}${state.text.slice(end)}`;
+  return { text, cursor: token.start + inserted.length };
+}
+function formatFileMentionPath(filePath) {
+  if (!/[\s"]/.test(filePath)) {
+    return `@${filePath}`;
+  }
+  return `@"${filePath.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+function getCurrentBareFileMentionToken(text, cursor) {
+  const beforeCursor = text.slice(0, cursor);
+  const afterCursor = text.slice(cursor);
+  const start = findTokenStart(beforeCursor);
+  const end = cursor + findTokenEnd(afterCursor);
+  const token = text.slice(start, end);
+  if (!token.startsWith("@") || token.startsWith('@"')) {
+    return null;
+  }
+  if (start > 0 && !isWhitespace(text[start - 1] ?? "")) {
+    return null;
+  }
+  return { query: token.slice(1), start, end, quoted: false };
+}
+function getCurrentQuotedFileMentionToken(text, cursor) {
+  for (let index = cursor; index >= 0; index--) {
+    if (text[index] !== "@" || text[index + 1] !== '"') {
+      continue;
+    }
+    if (index > 0 && !isWhitespace(text[index - 1] ?? "")) {
+      continue;
+    }
+    const closeQuote = findClosingQuote(text, index + 2);
+    if (closeQuote !== -1 && cursor > closeQuote) {
+      continue;
+    }
+    const end = closeQuote === -1 ? cursor : closeQuote + 1;
+    return {
+      query: unescapeQuotedMentionQuery(
+        text.slice(index + 2, Math.min(cursor, closeQuote === -1 ? cursor : closeQuote))
+      ),
+      start: index,
+      end,
+      quoted: true,
+    };
+  }
+  return null;
+}
+function findTokenStart(beforeCursor) {
+  const whitespaceIndex = findLastWhitespaceIndex(beforeCursor);
+  return whitespaceIndex === -1 ? 0 : whitespaceIndex + 1;
+}
+function findTokenEnd(afterCursor) {
+  const whitespaceIndex = afterCursor.search(/\s/);
+  return whitespaceIndex === -1 ? afterCursor.length : whitespaceIndex;
+}
+function findLastWhitespaceIndex(value) {
+  for (let index = value.length - 1; index >= 0; index--) {
+    if (isWhitespace(value[index] ?? "")) {
+      return index;
+    }
+  }
+  return -1;
+}
+function findClosingQuote(text, start) {
+  let escaped = false;
+  for (let index = start; index < text.length; index++) {
+    const char = text[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      return index;
+    }
+  }
+  return -1;
+}
+function unescapeQuotedMentionQuery(query) {
+  return query.replace(/\\(["\\])/g, "$1");
+}
+function clampCursorToBoundary(text, cursor) {
+  return Math.max(0, Math.min(cursor, text.length));
+}
+function scoreFileMention(itemPath, normalizedQuery) {
+  if (!normalizedQuery) {
+    return itemPath.endsWith("/") ? 5 : 10;
+  }
+  const normalizedPath = normalizeForSearch(itemPath);
+  const normalizedBase = normalizeForSearch(path10.posix.basename(itemPath.replace(/\/$/, "")));
+  if (normalizedPath === normalizedQuery) {
+    return 0;
+  }
+  if (normalizedPath.startsWith(normalizedQuery)) {
+    return 1;
+  }
+  if (normalizedBase.startsWith(normalizedQuery)) {
+    return isQueryBoundary(normalizedBase[normalizedQuery.length] ?? "") ? 2 : 3;
+  }
+  const pathIndex = normalizedPath.indexOf(normalizedQuery);
+  if (pathIndex !== -1) {
+    return 20 + pathIndex;
+  }
+  const fuzzyScore = fuzzyMatchScore(normalizedPath, normalizedQuery);
+  return fuzzyScore === null ? Number.POSITIVE_INFINITY : 100 + fuzzyScore;
+}
+function fuzzyMatchScore(value, query) {
+  let valueIndex = 0;
+  let score = 0;
+  for (const char of query) {
+    const nextIndex = value.indexOf(char, valueIndex);
+    if (nextIndex === -1) {
+      return null;
+    }
+    score += nextIndex - valueIndex;
+    valueIndex = nextIndex + 1;
+  }
+  return score;
+}
+function normalizeForSearch(value) {
+  return value.trim().toLocaleLowerCase();
+}
+function isQueryBoundary(value) {
+  return value === "" || /[\s._/-]/.test(value);
+}
+function toMentionPath(value) {
+  return value.split(path10.sep).join("/");
+}
+function isWhitespace(value) {
+  return /\s/.test(value);
+}
+
 // src/ui/clipboard.ts
-import { spawnSync, execSync as execSync2 } from "child_process";
+import { spawnSync as spawnSync2 } from "child_process";
 import * as fs11 from "fs";
 import * as os7 from "os";
-import * as path10 from "path";
+import * as path11 from "path";
 var PNG_MIME = "image/png";
 var IMAGE_MIME_BY_EXT = /* @__PURE__ */ new Map([
   [".png", "image/png"],
@@ -5469,20 +6954,28 @@ function bufferToDataUrl(buffer, mimeType) {
   return `data:${mimeType};base64,${buffer.toString("base64")}`;
 }
 function isImageFilePath(value) {
-  return IMAGE_MIME_BY_EXT.has(path10.extname(value.trim()).toLowerCase());
+  return IMAGE_MIME_BY_EXT.has(path11.extname(value.trim()).toLowerCase());
 }
 function mimeTypeForPath(value) {
-  return IMAGE_MIME_BY_EXT.get(path10.extname(value.trim()).toLowerCase()) ?? PNG_MIME;
+  return IMAGE_MIME_BY_EXT.get(path11.extname(value.trim()).toLowerCase()) ?? PNG_MIME;
 }
 function tryRun(command, args2) {
   try {
-    const result = spawnSync(command, args2, { encoding: "buffer", maxBuffer: 32 * 1024 * 1024 });
+    const result = spawnSync2(command, args2, { encoding: "buffer", maxBuffer: 32 * 1024 * 1024 });
     if (result.status !== 0 || !result.stdout || result.stdout.length === 0) {
       return null;
     }
     return result.stdout;
   } catch {
     return null;
+  }
+}
+function tryRunStatus(command, args2) {
+  try {
+    const result = spawnSync2(command, args2, { encoding: "buffer", maxBuffer: 32 * 1024 * 1024 });
+    return result.status === 0;
+  } catch {
+    return false;
   }
 }
 function readImageFile(filePath) {
@@ -5500,74 +6993,35 @@ function readImageFile(filePath) {
     return null;
   }
 }
-function parseOsascriptHexData(output, format) {
-  const prefix = `\xABdata ${format}`;
-  const idx = output.indexOf(prefix);
-  if (idx === -1) return null;
-  const hexStart = idx + prefix.length;
-  const hexEnd = output.indexOf("\xBB", hexStart);
-  if (hexEnd === -1) return null;
-  let hexStr = output.slice(hexStart, hexEnd).trim();
-  if (hexStr.length === 0) return null;
-  if (hexStr.length % 2 !== 0) {
-    hexStr = "0" + hexStr;
-  }
-  try {
-    return Buffer.from(hexStr, "hex");
-  } catch {
-    return null;
-  }
-}
 function readMacClipboardImage() {
   const pngpaste = tryRun("pngpaste", ["-"]);
   if (pngpaste && pngpaste.length > 0) {
     return { dataUrl: bufferToDataUrl(pngpaste, PNG_MIME), mimeType: PNG_MIME };
   }
-  const pngOutput = tryRun("osascript", ["-e", "the clipboard as \xABclass PNGf\xBB"]);
-  if (pngOutput) {
-    const pngBuffer = parseOsascriptHexData(pngOutput.toString("utf8"), "PNGf");
-    if (pngBuffer && pngBuffer.length > 0) {
-      return { dataUrl: bufferToDataUrl(pngBuffer, PNG_MIME), mimeType: PNG_MIME };
-    }
-  }
-  const tiffOutput = tryRun("osascript", ["-e", "the clipboard as \xABclass TIFF\xBB"]);
-  if (tiffOutput) {
-    const tiffBuffer = parseOsascriptHexData(tiffOutput.toString("utf8"), "TIFF");
-    if (tiffBuffer && tiffBuffer.length > 0) {
-      const pngBuffer = convertTiffToPng(tiffBuffer);
-      if (pngBuffer) {
-        return { dataUrl: bufferToDataUrl(pngBuffer, PNG_MIME), mimeType: PNG_MIME };
+  const tempDir = fs11.mkdtempSync(path11.join(os7.tmpdir(), "deepcode-clipboard-"));
+  const screenshotPath = path11.join(tempDir, "clipboard.png");
+  try {
+    const saved = tryRunStatus("osascript", [
+      "-e",
+      "set png_data to (the clipboard as \xABclass PNGf\xBB)",
+      "-e",
+      `set fp to open for access POSIX file "${screenshotPath}" with write permission`,
+      "-e",
+      "write png_data to fp",
+      "-e",
+      "close access fp",
+    ]);
+    if (saved) {
+      const image = readImageFile(screenshotPath);
+      if (image) {
+        return image;
       }
     }
-  }
-  const fileUrl = tryRun("osascript", ["-e", "get POSIX path of (the clipboard as \xABclass furl\xBB)"]);
-  const filePath = fileUrl?.toString("utf8").trim();
-  if (filePath) {
-    return readImageFile(filePath);
-  }
-  return null;
-}
-function convertTiffToPng(tiffBuffer) {
-  const tempDir = fs11.mkdtempSync(path10.join(os7.tmpdir(), "deepcode-tiff-"));
-  try {
-    const tiffPath = path10.join(tempDir, "clipboard.tiff");
-    const pngPath = path10.join(tempDir, "clipboard.png");
-    fs11.writeFileSync(tiffPath, tiffBuffer);
-    try {
-      execSync2(`sips -s format png "${tiffPath}" --out "${pngPath}"`, {
-        encoding: "buffer",
-        stdio: "pipe",
-        timeout: 1e4,
-      });
-    } catch {
-      return null;
+    const fileUrl = tryRun("osascript", ["-e", "get POSIX path of (the clipboard as \xABclass furl\xBB)"]);
+    const filePath = fileUrl?.toString("utf8").trim();
+    if (filePath) {
+      return readImageFile(filePath);
     }
-    if (!fs11.existsSync(pngPath)) {
-      return null;
-    }
-    const pngBuffer = fs11.readFileSync(pngPath);
-    return pngBuffer.length > 0 ? pngBuffer : null;
-  } catch {
     return null;
   } finally {
     try {
@@ -5602,10 +7056,11 @@ function readClipboardImage() {
   return null;
 }
 async function readClipboardImageAsync() {
-  return new Promise((resolve6, reject) => {
+  return new Promise((resolve7, reject) => {
     setImmediate(() => {
       try {
-        resolve6(readClipboardImage());
+        const result = readClipboardImage();
+        resolve7(result);
       } catch (error) {
         reject(error);
       }
@@ -5616,24 +7071,11 @@ async function readClipboardImageAsync() {
 // src/ui/prompt/useTerminalInput.ts
 import { useEffect, useRef } from "react";
 import { useStdin } from "ink";
-var rawModeSetters = /* @__PURE__ */ new Set();
-function acquireRawMode(setRawMode) {
-  if (rawModeSetters.size === 0) {
-    setRawMode(true);
-  }
-  rawModeSetters.add(setRawMode);
-}
-function releaseRawMode(setRawMode) {
-  rawModeSetters.delete(setRawMode);
-  if (rawModeSetters.size === 0) {
-    setRawMode(false);
-  }
-}
 var BACKSPACE_BYTES = /* @__PURE__ */ new Set(["\x7F", "\b"]);
 var FORWARD_DELETE_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[3~", "\x1B[P"]);
 var HOME_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[H", "\x1B[1~", "\x1B[7~", "\x1BOH"]);
 var END_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[F", "\x1B[4~", "\x1B[8~", "\x1BOF"]);
-var SHIFT_RETURN_SEQUENCES = /* @__PURE__ */ new Set(["\x1B\r", "\x1B[13;2u"]);
+var SHIFT_RETURN_SEQUENCES = /* @__PURE__ */ new Set(["\x1B\r", "\x1B[13;2u", "\x1B[13;2~", "\x1B[27;2;13~"]);
 var META_RETURN_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[13;3u", "\x1B[13;4u"]);
 var CTRL_LEFT_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[1;5D", "\x1B[5D"]);
 var CTRL_RIGHT_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[1;5C", "\x1B[5C"]);
@@ -5641,9 +7083,59 @@ var META_LEFT_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[1;3D", "\x1B[3D", "\x1B
 var META_RIGHT_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[1;3C", "\x1B[3C", "\x1Bf"]);
 var TERMINAL_FOCUS_IN = "\x1B[I";
 var TERMINAL_FOCUS_OUT = "\x1B[O";
+var CTRL_MINUS_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[45;5u", "\x1B[27;5;45~"]);
+var CTRL_SHIFT_MINUS_SEQUENCES = /* @__PURE__ */ new Set(["\x1B[45;6u", "\x1B[27;6;45~"]);
 function parseTerminalInput(data) {
   const raw = String(data);
   let input = raw;
+  if (CTRL_MINUS_SEQUENCES.has(raw)) {
+    input = "-";
+    const key2 = {
+      upArrow: false,
+      downArrow: false,
+      leftArrow: false,
+      rightArrow: false,
+      home: false,
+      end: false,
+      pageDown: false,
+      pageUp: false,
+      return: false,
+      escape: false,
+      ctrl: true,
+      shift: false,
+      tab: false,
+      backspace: false,
+      delete: false,
+      meta: false,
+      focusIn: false,
+      focusOut: false,
+    };
+    return { input, key: key2 };
+  }
+  if (CTRL_SHIFT_MINUS_SEQUENCES.has(raw) || raw === "") {
+    input = "-";
+    const key2 = {
+      upArrow: false,
+      downArrow: false,
+      leftArrow: false,
+      rightArrow: false,
+      home: false,
+      end: false,
+      pageDown: false,
+      pageUp: false,
+      return: false,
+      escape: false,
+      ctrl: true,
+      shift: true,
+      tab: false,
+      backspace: false,
+      delete: false,
+      meta: false,
+      focusIn: false,
+      focusOut: false,
+    };
+    return { input, key: key2 };
+  }
   const key = {
     upArrow: raw === "\x1B[A",
     downArrow: raw === "\x1B[B",
@@ -5702,7 +7194,7 @@ function parseTerminalInput(data) {
   return { input, key };
 }
 function useTerminalInput(inputHandler, options = {}) {
-  const { setRawMode, internal_eventEmitter } = useStdin();
+  const { stdin, setRawMode } = useStdin();
   const isActive = options.isActive ?? true;
   const handlerRef = useRef(inputHandler);
   handlerRef.current = inputHandler;
@@ -5710,9 +7202,9 @@ function useTerminalInput(inputHandler, options = {}) {
     if (!isActive) {
       return;
     }
-    acquireRawMode(setRawMode);
+    setRawMode(true);
     return () => {
-      releaseRawMode(setRawMode);
+      setRawMode(false);
     };
   }, [isActive, setRawMode]);
   useEffect(() => {
@@ -5723,24 +7215,15 @@ function useTerminalInput(inputHandler, options = {}) {
       const { input, key } = parseTerminalInput(data);
       handlerRef.current(input, key);
     };
-    internal_eventEmitter?.on("input", handleData);
+    stdin?.on("data", handleData);
     return () => {
-      internal_eventEmitter?.removeListener("input", handleData);
+      stdin?.off("data", handleData);
     };
-  }, [isActive, internal_eventEmitter]);
+  }, [isActive, stdin]);
 }
 
 // src/ui/prompt/cursor.ts
-import { useLayoutEffect, useEffect as useEffect2, useRef as useRef2, useState, useCallback } from "react";
-function cursorUp(rows) {
-  return rows > 0 ? `\x1B[${rows}A` : "";
-}
-function cursorDown(rows) {
-  return rows > 0 ? `\x1B[${rows}B` : "";
-}
-function cursorForward(columns) {
-  return columns > 0 ? `\x1B[${columns}C` : "";
-}
+import { useLayoutEffect, useRef as useRef2 } from "react";
 function showCursor() {
   return "\x1B[?25h";
 }
@@ -5753,77 +7236,22 @@ function enableTerminalFocusReporting() {
 function disableTerminalFocusReporting() {
   return "\x1B[?1004l";
 }
-function getPromptCursorPlacement(state, screenWidth, prefixWidth, footerText) {
-  const width = Math.max(1, screenWidth);
-  const cursor = Math.max(0, Math.min(state.cursor, state.text.length));
-  const beforeCursor = state.text.slice(0, cursor);
-  const at = state.text[cursor];
-  const displayText =
-    beforeCursor +
-    (typeof at === "undefined" || at === "\n" ? " " : at) +
-    (at === "\n" ? "\n" : "") +
-    (typeof at === "undefined" ? "" : state.text.slice(cursor + 1));
-  const cursorPosition = measureTextPosition(beforeCursor, width, prefixWidth);
-  const promptRows = measureTextRows(displayText, width, prefixWidth);
-  const footerRows = 1 + measureTextRows(footerText, width, 0);
-  return {
-    rowsUp: promptRows - 1 - cursorPosition.row + footerRows + 1,
-    column: cursorPosition.column,
-  };
+function enableTerminalExtendedKeys() {
+  return "\x1B[>4;1m";
 }
-function measureTextRows(text, width, initialColumn) {
-  return measureTextPosition(text, width, initialColumn).row + 1;
+function disableTerminalExtendedKeys() {
+  return "\x1B[>4;0m";
 }
-function measureTextPosition(text, width, initialColumn) {
-  let row = 0;
-  let column = Math.min(initialColumn, width - 1);
-  for (const char of Array.from(text)) {
-    if (char === "\n") {
-      row++;
-      column = Math.min(initialColumn, width - 1);
-      continue;
+function useHiddenTerminalCursor(stdout, isActive) {
+  useLayoutEffect(() => {
+    if (!isActive || !stdout?.isTTY) {
+      return;
     }
-    const charColumns = textWidth(char);
-    if (column + charColumns > width) {
-      row++;
-      column = Math.min(initialColumn, width - 1);
-    }
-    column += charColumns;
-    if (column >= width) {
-      row++;
-      column = Math.min(initialColumn, width - 1);
-    }
-  }
-  return { row, column };
-}
-function textWidth(value) {
-  let width = 0;
-  for (const char of Array.from(value.normalize())) {
-    width += characterWidth(char);
-  }
-  return width;
-}
-function characterWidth(char) {
-  const codePoint = char.codePointAt(0) ?? 0;
-  if (codePoint === 0 || codePoint < 32 || (codePoint >= 127 && codePoint < 160)) {
-    return 0;
-  }
-  if (codePoint >= 768 && codePoint <= 879) {
-    return 0;
-  }
-  if (
-    (codePoint >= 4352 && codePoint <= 4447) ||
-    (codePoint >= 11904 && codePoint <= 42191) ||
-    (codePoint >= 44032 && codePoint <= 55203) ||
-    (codePoint >= 63744 && codePoint <= 64255) ||
-    (codePoint >= 65040 && codePoint <= 65049) ||
-    (codePoint >= 65072 && codePoint <= 65135) ||
-    (codePoint >= 65280 && codePoint <= 65376) ||
-    (codePoint >= 65504 && codePoint <= 65510)
-  ) {
-    return 2;
-  }
-  return 1;
+    stdout.write(hideCursor());
+    return () => {
+      stdout.write(showCursor());
+    };
+  }, [isActive, stdout]);
 }
 function useTerminalFocusReporting(stdout, isActive) {
   useLayoutEffect(() => {
@@ -5836,124 +7264,16 @@ function useTerminalFocusReporting(stdout, isActive) {
     };
   }, [isActive, stdout]);
 }
-function useFocusState(stdout) {
-  const [hasFocus, setHasFocus] = useState(true);
-  const timeoutRef = useRef2(null);
-  const stdoutRef = useRef2(stdout);
-  stdoutRef.current = stdout;
-  const handleFocusEvent = useCallback((focused) => {
-    setHasFocus(focused);
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-    if (!focused) {
-      timeoutRef.current = setTimeout(() => {
-        timeoutRef.current = null;
-        const s = stdoutRef.current;
-        if (s?.isTTY) {
-          s.write(disableTerminalFocusReporting());
-          s.write(enableTerminalFocusReporting());
-        }
-      }, 5e3);
-    }
-  }, []);
-  const resetFocus = useCallback(() => {
-    setHasFocus(true);
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-  }, []);
-  useEffect2(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
-  return { hasFocus, handleFocusEvent, resetFocus };
-}
-function useTerminalCursor(stdout, isActive, placement) {
-  useTerminalFocusReporting(stdout, isActive);
-  const { hasFocus, handleFocusEvent, resetFocus } = useFocusState(stdout);
-  const directWriteRef = useRef2(null);
-  const activePlacementRef = useRef2(null);
-  const lastPlacementRef = useRef2(null);
-  const unmountingRef = useRef2(false);
-  useLayoutEffect(() => {
-    if (!stdout?.isTTY) {
-      return;
-    }
-    const stream = stdout;
-    const originalWrite = stream.write;
-    const directWrite = (data) => {
-      originalWrite.call(stdout, data);
-    };
-    const restorePromptCursor = () => {
-      if (unmountingRef.current) {
-        return;
-      }
-      const activePlacement = activePlacementRef.current;
-      if (!activePlacement) {
-        return;
-      }
-      directWrite("\r" + cursorDown(activePlacement.rowsUp) + hideCursor());
-      activePlacementRef.current = null;
-      Promise.resolve().then(() => {
-        if (unmountingRef.current || activePlacementRef.current) {
-          return;
-        }
-        const latest = directWriteRef.current;
-        const p = lastPlacementRef.current;
-        if (latest && p) {
-          latest(showCursor() + cursorUp(p.rowsUp) + "\r" + cursorForward(p.column));
-          activePlacementRef.current = p;
-        }
-      });
-    };
-    const patchedWrite = (...args2) => {
-      restorePromptCursor();
-      return originalWrite.apply(stdout, args2);
-    };
-    directWriteRef.current = directWrite;
-    stream.write = patchedWrite;
-    return () => {
-      restorePromptCursor();
-      stream.write = originalWrite;
-      directWriteRef.current = null;
-    };
-  }, [stdout]);
+function useTerminalExtendedKeys(stdout, isActive) {
   useLayoutEffect(() => {
     if (!isActive || !stdout?.isTTY) {
       return;
     }
-    unmountingRef.current = false;
-    const directWrite = directWriteRef.current;
-    if (!directWrite) {
-      return;
-    }
-    if (placement) {
-      directWrite(showCursor() + cursorUp(placement.rowsUp) + "\r" + cursorForward(placement.column));
-      activePlacementRef.current = placement;
-      lastPlacementRef.current = placement;
-    } else {
-      directWrite(hideCursor());
-      activePlacementRef.current = null;
-      lastPlacementRef.current = null;
-    }
+    stdout.write(enableTerminalExtendedKeys());
     return () => {
-      unmountingRef.current = true;
-      lastPlacementRef.current = null;
-      const activePlacement = activePlacementRef.current;
-      if (!activePlacement) {
-        return;
-      }
-      directWrite("\r" + cursorDown(activePlacement.rowsUp) + hideCursor());
-      activePlacementRef.current = null;
+      stdout.write(disableTerminalExtendedKeys());
     };
-  }, [isActive, placement?.column, placement?.rowsUp, stdout]);
-  return { hasFocus, handleFocusEvent, resetFocus };
+  }, [isActive, stdout]);
 }
 
 // src/ui/SlashCommandMenu.tsx
@@ -5965,7 +7285,9 @@ var SlashCommandMenu = React.memo(function SlashCommandMenu2({ items, activeInde
     if (items.length === 0) {
       return 0;
     }
-    const longestLabel = Math.max(...items.map((s) => s.label.length));
+    const longestLabel = Math.max(
+      ...items.map((s) => s.label.length + (s.args ? s.args?.join(ARGS_SEPARATOR)?.length + 4 : 0))
+    );
     const contentWidth = longestLabel + 2;
     const maxAllowed = Math.max(10, (width - 2) >> 1);
     return Math.min(contentWidth, maxAllowed);
@@ -5998,17 +7320,23 @@ var SlashCommandMenu = React.memo(function SlashCommandMenu2({ items, activeInde
             flexDirection: "row",
             flexGrow: 1,
             children: [
-              /* @__PURE__ */ jsx(Box, {
+              /* @__PURE__ */ jsxs(Box, {
                 width: labelColumnWidth,
                 flexShrink: 0,
-                children: /* @__PURE__ */ jsxs(Text, {
-                  color: actualIndex === activeIndex ? "#229ac3" : void 0,
-                  wrap: "truncate-end",
-                  children: [
-                    actualIndex === activeIndex ? "\u203A " : "  ",
-                    /* @__PURE__ */ jsx(Text, { bold: true, children: formatSlashCommandLabel(item) }),
-                  ],
-                }),
+                gap: 2,
+                children: [
+                  /* @__PURE__ */ jsxs(Text, {
+                    color: actualIndex === activeIndex ? "#229ac3" : void 0,
+                    wrap: "truncate-end",
+                    children: [
+                      actualIndex === activeIndex ? "> " : "  ",
+                      /* @__PURE__ */ jsx(Text, { bold: true, children: formatSlashCommandLabel(item) }),
+                    ],
+                  }),
+                  item.args
+                    ? /* @__PURE__ */ jsx(Text, { dimColor: true, children: item.args.join(ARGS_SEPARATOR) })
+                    : null,
+                ],
               }),
               /* @__PURE__ */ jsx(Box, {
                 flexGrow: 1,
@@ -6042,795 +7370,277 @@ var SlashCommandMenu = React.memo(function SlashCommandMenu2({ items, activeInde
 });
 var SlashCommandMenu_default = SlashCommandMenu;
 
-// src/ui/PromptInput.tsx
+// src/ui/DropdownMenu.tsx
+import React2, { useMemo } from "react";
+import { Box as Box2, Text as Text2 } from "ink";
 import { jsx as jsx2, jsxs as jsxs2 } from "react/jsx-runtime";
-var SPINNER_FRAMES = [
-  "\u280B",
-  "\u2819",
-  "\u2839",
-  "\u2838",
-  "\u283C",
-  "\u2834",
-  "\u2826",
-  "\u2827",
-  "\u2807",
-  "\u280F",
-];
-var PROMPT_PREFIX_WIDTH = 2;
-var MODEL_COMMAND_MODELS = ["deepseek-v4-pro", "deepseek-v4-flash"];
-var MODEL_COMMAND_THINKING_OPTIONS = [
-  { label: "Thinking mode [max]", thinkingEnabled: true, reasoningEffort: "max" },
-  { label: "Thinking mode [high]", thinkingEnabled: true, reasoningEffort: "high" },
-  { label: "No thinking", thinkingEnabled: false },
-];
-var PromptPrefixLine = React2.memo(function PromptPrefixLine2({ busy }) {
-  const [spinnerIndex, setSpinnerIndex] = useState2(0);
-  useEffect3(() => {
-    if (!busy) {
-      setSpinnerIndex(0);
-      return;
-    }
-    const timer = setInterval(() => {
-      setSpinnerIndex((index) => (index + 1) % SPINNER_FRAMES.length);
-    }, 80);
-    return () => clearInterval(timer);
-  }, [busy]);
-  const prefix = busy ? `${SPINNER_FRAMES[spinnerIndex]} ` : "> ";
-  return /* @__PURE__ */ jsx2(Text2, { color: busy ? "yellow" : "green", children: prefix });
-});
-var PromptInput = React2.memo(function PromptInput2({
-  skills,
-  modelConfig,
-  screenWidth,
-  promptHistory,
-  busy,
-  loadingText,
-  disabled,
-  placeholder,
-  onSubmit,
-  onModelConfigChange,
-  onInterrupt,
+function calculateVisibleStart(activeIndex, totalItems, maxVisible) {
+  return Math.min(Math.max(0, activeIndex - Math.floor((maxVisible - 1) / 2)), Math.max(0, totalItems - maxVisible));
+}
+var DropdownMenu = React2.memo(function DropdownMenu2({
+  items,
+  activeIndex,
+  maxVisible = 8,
+  width,
+  title,
+  titleColor = "magenta",
+  activeColor = "cyanBright",
+  helpText,
+  emptyText = "No items found",
+  renderItem,
 }) {
-  const { exit } = useApp();
-  const { stdout } = useStdout();
-  const [buffer, setBuffer] = useState2(EMPTY_BUFFER);
-  const [imageUrls, setImageUrls] = useState2([]);
-  const [selectedSkills, setSelectedSkills] = useState2([]);
-  const [statusMessage, setStatusMessage] = useState2(null);
-  const [pendingExit, setPendingExit] = useState2(false);
-  const [menuIndex, setMenuIndex] = useState2(0);
-  const [showSkillsDropdown, setShowSkillsDropdown] = useState2(false);
-  const [skillsDropdownIndex, setSkillsDropdownIndex] = useState2(0);
-  const [modelDropdownStep, setModelDropdownStep] = useState2(null);
-  const [modelDropdownIndex, setModelDropdownIndex] = useState2(0);
-  const [pendingModel, setPendingModel] = useState2(null);
-  const [historyCursor, setHistoryCursor] = useState2(-1);
-  const [draftBeforeHistory, setDraftBeforeHistory] = useState2(null);
-  const lastCtrlDAt = React2.useRef(0);
-  const slashItems = React2.useMemo(() => buildSlashCommands(skills), [skills]);
-  const slashToken = getCurrentSlashToken(buffer);
-  const slashMenu = React2.useMemo(
-    () =>
-      showSkillsDropdown || modelDropdownStep ? [] : slashToken ? filterSlashCommands(slashItems, slashToken) : [],
-    [showSkillsDropdown, modelDropdownStep, slashToken, slashItems]
-  );
-  const showMenu = slashMenu.length > 0;
-  const promptHistoryKey = React2.useMemo(() => promptHistory.join("\0"), [promptHistory]);
-  const footerText = statusMessage
-    ? statusMessage
-    : busy
-      ? loadingText && loadingText.trim()
-        ? loadingText
-        : "esc to interrupt \xB7 ctrl+c to cancel input"
-      : "enter send \xB7 shift+enter newline \xB7 ctrl+v image \xB7 / commands \xB7 ctrl+d exit";
-  const cursorPlacement = React2.useMemo(() => {
-    if (!showMenu && !showSkillsDropdown) {
-      return getPromptCursorPlacement(buffer, screenWidth, PROMPT_PREFIX_WIDTH, footerText);
+  const visibleStart = calculateVisibleStart(activeIndex, items?.length, maxVisible);
+  const visibleItems = items?.slice(visibleStart, visibleStart + maxVisible);
+  const labelColumnWidth = useMemo(() => {
+    if (visibleItems.length === 0) {
+      return 0;
     }
-    return null;
-  }, [buffer, screenWidth, footerText, showMenu, showSkillsDropdown]);
-  const { hasFocus, handleFocusEvent, resetFocus } = useTerminalCursor(stdout, !disabled, cursorPlacement);
-  useEffect3(() => {
-    if (!busy) {
-      resetFocus();
-    }
-  }, [busy, resetFocus]);
-  useEffect3(() => {
-    if (!showMenu) {
-      setMenuIndex(0);
-      return;
-    }
-    if (menuIndex >= slashMenu.length) {
-      setMenuIndex(slashMenu.length - 1);
-    }
-  }, [slashMenu, showMenu, menuIndex]);
-  useEffect3(() => {
-    if (skillsDropdownIndex >= skills.length) {
-      setSkillsDropdownIndex(Math.max(0, skills.length - 1));
-    }
-  }, [skills.length, skillsDropdownIndex]);
-  useEffect3(() => {
-    if (!modelDropdownStep) {
-      return;
-    }
-    const optionCount =
-      modelDropdownStep === "model" ? MODEL_COMMAND_MODELS.length : MODEL_COMMAND_THINKING_OPTIONS.length;
-    if (modelDropdownIndex >= optionCount) {
-      setModelDropdownIndex(Math.max(0, optionCount - 1));
-    }
-  }, [modelDropdownIndex, modelDropdownStep]);
-  useEffect3(() => {
-    if (!statusMessage) {
-      return;
-    }
-    const timer = setTimeout(() => setStatusMessage(null), 2500);
-    return () => clearTimeout(timer);
-  }, [statusMessage]);
-  useEffect3(() => {
-    setHistoryCursor(-1);
-    setDraftBeforeHistory(null);
-  }, [promptHistoryKey]);
-  useTerminalInput(
-    (input, key) => {
-      if (key.focusIn) {
-        handleFocusEvent(true);
-        return;
-      }
-      if (key.focusOut) {
-        handleFocusEvent(false);
-        return;
-      }
-      if (disabled) {
-        return;
-      }
-      if (key.escape) {
-        if (modelDropdownStep) {
-          closeModelDropdown();
-          return;
+    const maxContentWidth = Math.max(
+      ...visibleItems.map((item) => {
+        let width2 = 2;
+        if (item.selected !== void 0) {
+          width2 += 2;
         }
-        if (showSkillsDropdown) {
-          setShowSkillsDropdown(false);
-          return;
+        width2 += item.label.length;
+        if (item.statusIndicator) {
+          width2 += 2;
         }
-        if (busy) {
-          onInterrupt();
-          setStatusMessage("Interrupting\u2026");
-        }
-        return;
-      }
-      if (key.ctrl && (input === "d" || input === "D")) {
-        if (!isEmpty(buffer)) {
-          updateBuffer((s) => deleteForward(s));
-          return;
-        }
-        const now = Date.now();
-        if (pendingExit && now - lastCtrlDAt.current < 2e3) {
-          exit();
-          return;
-        }
-        lastCtrlDAt.current = now;
-        setPendingExit(true);
-        setStatusMessage("press ctrl+d again to exit");
-        return;
-      }
-      if (key.ctrl && (input === "c" || input === "C")) {
-        if (busy) {
-          onInterrupt();
-          setStatusMessage("Interrupting\u2026");
-        } else if (!isEmpty(buffer)) {
-          setBuffer(EMPTY_BUFFER);
-        } else {
-          setStatusMessage("press ctrl+d to exit");
-        }
-        return;
-      }
-      if (pendingExit && (!key.ctrl || (input !== "d" && input !== "D"))) {
-        setPendingExit(false);
-      }
-      if (historyCursor !== -1 && !key.upArrow && !key.downArrow) {
-        exitHistoryBrowsing();
-      }
-      if (showSkillsDropdown) {
-        if (skills.length === 0) {
-          setShowSkillsDropdown(false);
-        } else {
-          if (key.upArrow) {
-            setSkillsDropdownIndex((idx) => (idx - 1 + skills.length) % skills.length);
-            return;
-          }
-          if (key.downArrow) {
-            setSkillsDropdownIndex((idx) => (idx + 1) % skills.length);
-            return;
-          }
-          if ((input === " " && !key.ctrl && !key.meta) || (key.return && !key.shift && !key.meta)) {
-            const skill = skills[skillsDropdownIndex];
-            if (skill) {
-              toggleSelectedSkill(skill);
-            }
-            return;
-          }
-          if (key.tab) {
-            setShowSkillsDropdown(false);
-            return;
-          }
-        }
-      }
-      if (modelDropdownStep) {
-        const optionCount =
-          modelDropdownStep === "model" ? MODEL_COMMAND_MODELS.length : MODEL_COMMAND_THINKING_OPTIONS.length;
-        if (key.upArrow) {
-          setModelDropdownIndex((idx) => (idx - 1 + optionCount) % optionCount);
-          return;
-        }
-        if (key.downArrow) {
-          setModelDropdownIndex((idx) => (idx + 1) % optionCount);
-          return;
-        }
-        if ((input === " " && !key.ctrl && !key.meta) || (key.return && !key.shift && !key.meta)) {
-          selectModelDropdownItem();
-          return;
-        }
-        if (key.tab) {
-          closeModelDropdown();
-          return;
-        }
-      }
-      if (key.ctrl && (input === "v" || input === "V")) {
-        setStatusMessage("Reading clipboard...");
-        readClipboardImageAsync()
-          .then((image) => {
-            if (image) {
-              setImageUrls((prev) => [...prev, image.dataUrl]);
-              setStatusMessage("Attached image from clipboard");
-            } else {
-              setStatusMessage("No image found in clipboard");
-            }
-          })
-          .catch(() => {
-            setStatusMessage("Failed to read clipboard");
-          });
-        return;
-      }
-      if (isClearImageAttachmentsShortcut(input, key)) {
-        if (imageUrls.length > 0) {
-          setImageUrls([]);
-          setStatusMessage("Cleared attached images");
-        } else {
-          setStatusMessage("No attached images to clear");
-        }
-        return;
-      }
-      const noModifier = !key.shift && !key.ctrl && !key.meta;
-      const isPlainReturn = key.return && !key.shift && !key.meta;
-      if (showMenu) {
-        if (key.upArrow) {
-          setMenuIndex((idx) => (idx - 1 + slashMenu.length) % slashMenu.length);
-          return;
-        }
-        if (key.downArrow) {
-          setMenuIndex((idx) => (idx + 1) % slashMenu.length);
-          return;
-        }
-        if (key.tab || (key.return && !key.shift && !key.meta)) {
-          const selected = slashMenu[menuIndex];
-          if (selected) {
-            handleSlashSelection(selected);
-            return;
-          }
-        }
-      }
-      if (busy && isPlainReturn) {
-        setStatusMessage("wait for the current response or press esc to interrupt");
-        return;
-      }
-      if (key.return) {
-        const isShiftEnter = key.shift || key.meta;
-        if (isShiftEnter) {
-          updateBuffer((s) => insertText(s, "\n"));
-          return;
-        }
-        submitCurrentBuffer();
-        return;
-      }
-      if (key.delete) {
-        updateBuffer((s) => deleteForward(s));
-        return;
-      }
-      if (key.backspace) {
-        updateBuffer((s) => backspace(s));
-        return;
-      }
-      if ((key.ctrl || key.meta) && key.leftArrow) {
-        updateBuffer((s) => moveWordLeft(s));
-        return;
-      }
-      if ((key.ctrl || key.meta) && key.rightArrow) {
-        updateBuffer((s) => moveWordRight(s));
-        return;
-      }
-      if (key.leftArrow) {
-        updateBuffer((s) => moveLeft(s));
-        return;
-      }
-      if (key.rightArrow) {
-        updateBuffer((s) => moveRight(s));
-        return;
-      }
-      if (key.home) {
-        updateBuffer((s) => moveLineStart(s));
-        return;
-      }
-      if (key.end) {
-        updateBuffer((s) => moveLineEnd(s));
-        return;
-      }
-      if (key.upArrow) {
-        if (noModifier && (historyCursor !== -1 || buffer.cursor === 0) && promptHistory.length > 0) {
-          navigateHistory(-1);
-          return;
-        }
-        updateBuffer((s) => moveUp(s));
-        return;
-      }
-      if (key.downArrow) {
-        if (noModifier && (historyCursor !== -1 || buffer.cursor === buffer.text.length)) {
-          navigateHistory(1);
-          return;
-        }
-        updateBuffer((s) => moveDown(s));
-        return;
-      }
-      if (key.ctrl && (input === "p" || input === "P")) {
-        navigateHistory(-1);
-        return;
-      }
-      if (key.ctrl && (input === "n" || input === "N")) {
-        navigateHistory(1);
-        return;
-      }
-      if (key.ctrl && (input === "a" || input === "A")) {
-        updateBuffer((s) => moveLineStart(s));
-        return;
-      }
-      if (key.ctrl && (input === "e" || input === "E")) {
-        updateBuffer((s) => moveLineEnd(s));
-        return;
-      }
-      if (key.ctrl && (input === "b" || input === "B")) {
-        updateBuffer((s) => moveLeft(s));
-        return;
-      }
-      if (key.ctrl && (input === "f" || input === "F")) {
-        updateBuffer((s) => moveRight(s));
-        return;
-      }
-      if (key.meta && (input === "b" || input === "B")) {
-        updateBuffer((s) => moveWordLeft(s));
-        return;
-      }
-      if (key.meta && (input === "f" || input === "F")) {
-        updateBuffer((s) => moveWordRight(s));
-        return;
-      }
-      if (key.ctrl && (input === "k" || input === "K")) {
-        updateBuffer((s) => killLine(s));
-        return;
-      }
-      if (key.ctrl && (input === "u" || input === "U")) {
-        updateBuffer(() => EMPTY_BUFFER);
-        return;
-      }
-      if (key.ctrl && (input === "w" || input === "W")) {
-        updateBuffer((s) => deleteWordBefore(s));
-        return;
-      }
-      if (key.meta && (input === "d" || input === "D")) {
-        updateBuffer((s) => deleteWordAfter(s));
-        return;
-      }
-      if (key.meta && (input === "\x7F" || input === "\b")) {
-        updateBuffer((s) => deleteWordBefore(s));
-        return;
-      }
-      if (key.ctrl && (input === "j" || input === "J")) {
-        updateBuffer((s) => insertText(s, "\n"));
-        return;
-      }
-      if (input.startsWith("\x1B")) {
-        return;
-      }
-      if (input && !key.ctrl && !key.meta) {
-        const sanitized = input.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-        updateBuffer((s) => insertText(s, sanitized));
-      }
-    },
-    { isActive: !disabled }
-  );
-  function exitHistoryBrowsing() {
-    setHistoryCursor(-1);
-    setDraftBeforeHistory(null);
-  }
-  function updateBuffer(updater) {
-    exitHistoryBrowsing();
-    setBuffer(updater);
-  }
-  function navigateHistory(direction) {
-    if (promptHistory.length === 0) {
-      return;
-    }
-    const previousCursor = historyCursor === -1 ? promptHistory.length : historyCursor;
-    const nextCursor = Math.max(0, Math.min(promptHistory.length, previousCursor + direction));
-    const draft = historyCursor === -1 ? buffer.text : draftBeforeHistory;
-    if (historyCursor === -1) {
-      setDraftBeforeHistory(buffer.text);
-    }
-    if (nextCursor === promptHistory.length) {
-      const text2 = draft ?? "";
-      setBuffer({ text: text2, cursor: text2.length });
-      setHistoryCursor(-1);
-      setDraftBeforeHistory(null);
-      return;
-    }
-    const text = promptHistory[nextCursor] ?? "";
-    setBuffer({ text, cursor: text.length });
-    setHistoryCursor(nextCursor);
-  }
-  function handleSlashSelection(item) {
-    if (busy && item.kind !== "exit") {
-      setStatusMessage("wait for the current response or press esc to interrupt");
-      return;
-    }
-    if (item.kind === "skill" && item.skill) {
-      addSelectedSkill(item.skill);
-      clearSlashToken();
-      setShowSkillsDropdown(false);
-      return;
-    }
-    if (item.kind === "skills") {
-      clearSlashToken();
-      setShowSkillsDropdown(true);
-      return;
-    }
-    if (item.kind === "model") {
-      clearSlashToken();
-      openModelDropdown();
-      return;
-    }
-    if (item.kind === "new") {
-      onSubmit({ text: "", imageUrls: [], command: "new" });
-      setBuffer(EMPTY_BUFFER);
-      setImageUrls([]);
-      setSelectedSkills([]);
-      setShowSkillsDropdown(false);
-      return;
-    }
-    if (item.kind === "init") {
-      onSubmit(buildInitPromptSubmission(selectedSkills));
-      setBuffer(EMPTY_BUFFER);
-      setImageUrls([]);
-      setSelectedSkills([]);
-      setShowSkillsDropdown(false);
-      return;
-    }
-    if (item.kind === "resume") {
-      onSubmit({ text: "", imageUrls: [], command: "resume" });
-      setBuffer(EMPTY_BUFFER);
-      setImageUrls([]);
-      setSelectedSkills([]);
-      setShowSkillsDropdown(false);
-      return;
-    }
-    if (item.kind === "exit") {
-      onSubmit({ text: "/exit", imageUrls: [], command: "exit" });
-      setBuffer(EMPTY_BUFFER);
-      return;
-    }
-  }
-  function submitCurrentBuffer() {
-    if (busy) {
-      setStatusMessage("wait for the current response or press esc to interrupt");
-      return;
-    }
-    const trimmed = buffer.text.trim();
-    if (!trimmed && imageUrls.length === 0 && selectedSkills.length === 0) {
-      return;
-    }
-    if (trimmed.startsWith("/")) {
-      const exactMatch = findExactSlashCommand(slashItems, trimmed.split(/\s+/, 1)[0]);
-      if (exactMatch) {
-        handleSlashSelection(exactMatch);
-        return;
-      }
-    }
-    onSubmit({
-      text: buffer.text,
-      imageUrls,
-      selectedSkills,
-    });
-    setBuffer(EMPTY_BUFFER);
-    setImageUrls([]);
-    setSelectedSkills([]);
-    setShowSkillsDropdown(false);
-  }
-  function addSelectedSkill(skill) {
-    setSelectedSkills((prev) => addUniqueSkill(prev, skill));
-  }
-  function toggleSelectedSkill(skill) {
-    setSelectedSkills((prev) => toggleSkillSelection(prev, skill));
-  }
-  function clearSlashToken() {
-    exitHistoryBrowsing();
-    setBuffer((state) => removeCurrentSlashToken(state));
-  }
-  function openModelDropdown() {
-    const currentModelIndex = MODEL_COMMAND_MODELS.findIndex((model) => model === modelConfig.model);
-    setPendingModel(null);
-    setModelDropdownStep("model");
-    setModelDropdownIndex(currentModelIndex >= 0 ? currentModelIndex : 0);
-    setShowSkillsDropdown(false);
-  }
-  function closeModelDropdown() {
-    setModelDropdownStep(null);
-    setPendingModel(null);
-  }
-  function selectModelDropdownItem() {
-    if (modelDropdownStep === "model") {
-      const model = MODEL_COMMAND_MODELS[modelDropdownIndex] ?? modelConfig.model;
-      setPendingModel(model);
-      setModelDropdownStep("thinking");
-      setModelDropdownIndex(getThinkingOptionIndex(modelConfig));
-      return;
-    }
-    const option = MODEL_COMMAND_THINKING_OPTIONS[modelDropdownIndex] ?? MODEL_COMMAND_THINKING_OPTIONS[0];
-    const selection = {
-      model: pendingModel ?? modelConfig.model,
-      thinkingEnabled: option.thinkingEnabled,
-      reasoningEffort: option.reasoningEffort ?? modelConfig.reasoningEffort,
-    };
-    closeModelDropdown();
-    Promise.resolve(onModelConfigChange(selection))
-      .then((message) => {
-        if (message) {
-          setStatusMessage(message);
-        }
+        return width2;
       })
-      .catch((error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        setStatusMessage(`Failed to update model settings: ${message}`);
-      });
+    );
+    const maxAllowed = Math.max(10, (width - 2) >> 1);
+    return Math.min(maxContentWidth, maxAllowed);
+  }, [visibleItems, width]);
+  if (items?.length === 0) {
+    return /* @__PURE__ */ jsxs2(Box2, {
+      flexDirection: "column",
+      marginBottom: 1,
+      width,
+      children: [
+        title ? /* @__PURE__ */ jsx2(Text2, { color: titleColor, bold: true, children: title }) : null,
+        /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: emptyText }),
+        helpText ? /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: helpText }) : null,
+      ],
+    });
   }
-  const visibleSkillStart = Math.min(Math.max(0, skillsDropdownIndex - 7), Math.max(0, skills.length - 8));
-  const visibleSkills = skills.slice(visibleSkillStart, visibleSkillStart + 8);
-  const modelDropdownItems =
-    modelDropdownStep === "model"
-      ? MODEL_COMMAND_MODELS.map((model) => ({
-          label: model,
-          selected: model === (pendingModel ?? modelConfig.model),
-          description: model === modelConfig.model ? "current model" : "",
-        }))
-      : MODEL_COMMAND_THINKING_OPTIONS.map((option) => ({
-          label: option.label,
-          selected: getThinkingOptionIndex(modelConfig) === MODEL_COMMAND_THINKING_OPTIONS.indexOf(option),
-          description: option.thinkingEnabled ? `reasoningEffort: ${option.reasoningEffort}` : "thinking disabled",
-        }));
   return /* @__PURE__ */ jsxs2(Box2, {
     flexDirection: "column",
-    width: screenWidth,
+    marginBottom: 1,
+    borderStyle: "round",
+    borderDimColor: true,
+    width,
     children: [
-      imageUrls.length > 0
-        ? /* @__PURE__ */ jsxs2(Box2, {
-            flexDirection: "column",
-            borderStyle: "round",
-            borderColor: "magenta",
+      title
+        ? /* @__PURE__ */ jsx2(Box2, {
+            borderStyle: "single",
+            borderDimColor: true,
+            borderBottom: true,
+            borderRight: false,
+            borderTop: false,
+            borderLeft: false,
             paddingX: 1,
-            children: [
-              /* @__PURE__ */ jsx2(Text2, { color: "magentaBright", bold: true, children: "\u{1F5BC} Image Attached" }),
-              /* @__PURE__ */ jsx2(Text2, {
-                color: "magenta",
-                children: `${imageUrls.length} image${imageUrls.length === 1 ? "" : "s"} pasted`,
-              }),
-              /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: IMAGE_ATTACHMENT_CLEAR_HINT }),
-            ],
+            children: /* @__PURE__ */ jsx2(Text2, { color: titleColor, bold: true, children: title }),
           })
         : null,
-      selectedSkills.length > 0
-        ? /* @__PURE__ */ jsxs2(Box2, {
-            children: [
-              /* @__PURE__ */ jsx2(Text2, {
-                color: "magenta",
-                wrap: "truncate-end",
-                children: formatSelectedSkillsStatus(selectedSkills),
-              }),
-              /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: " (use /skills to edit)" }),
-            ],
+      visibleStart > 0
+        ? /* @__PURE__ */ jsx2(Box2, {
+            marginLeft: 2,
+            children: /* @__PURE__ */ jsxs2(Text2, { dimColor: true, children: ["\u2026 ", visibleStart, " above"] }),
           })
         : null,
-      /* @__PURE__ */ jsxs2(Box2, {
-        borderStyle: "single",
-        borderTop: true,
-        borderBottom: true,
-        borderLeft: false,
-        borderRight: false,
-        borderDimColor: true,
-        children: [
-          /* @__PURE__ */ jsx2(PromptPrefixLine, { busy }),
-          /* @__PURE__ */ jsx2(Text2, { children: renderBufferWithCursor(buffer, !disabled && hasFocus, placeholder) }),
-        ],
-      }),
-      showSkillsDropdown
-        ? /* @__PURE__ */ jsxs2(Box2, {
-            flexDirection: "column",
-            marginBottom: 1,
-            children: [
-              /* @__PURE__ */ jsx2(Text2, { color: "magenta", bold: true, children: "Select Skills" }),
-              skills.length === 0
-                ? /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: "No skills found" })
-                : visibleSkills.map((skill, idx) => {
-                    const skillIndex = visibleSkillStart + idx;
-                    const selected = isSkillSelected(selectedSkills, skill);
-                    const active = skillIndex === skillsDropdownIndex;
-                    return /* @__PURE__ */ jsxs2(
-                      Text2,
-                      {
-                        color: active ? "cyanBright" : void 0,
-                        wrap: "truncate-end",
-                        children: [
-                          active ? "\u203A " : "  ",
-                          selected ? "\u25CF" : "\u25CB",
-                          " ",
-                          /* @__PURE__ */ jsx2(Text2, { bold: true, children: skill.name }),
-                          skill.isLoaded ? /* @__PURE__ */ jsx2(Text2, { color: "green", children: " \u2713" }) : null,
-                          /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: `  ${skill.path}` }),
-                        ],
-                      },
-                      skill.path || skill.name
-                    );
-                  }),
-              visibleSkillStart > 0
-                ? /* @__PURE__ */ jsxs2(Text2, { dimColor: true, children: ["\u2026 ", visibleSkillStart, " above"] })
-                : null,
-              visibleSkillStart + visibleSkills.length < skills.length
-                ? /* @__PURE__ */ jsxs2(Text2, {
-                    dimColor: true,
-                    children: ["\u2026 ", skills.length - visibleSkillStart - visibleSkills.length, " more"],
-                  })
-                : null,
-              /* @__PURE__ */ jsx2(Text2, {
-                dimColor: true,
-                children: "space toggle \xB7 enter toggle \xB7 esc to close",
-              }),
-            ],
-          })
-        : null,
-      modelDropdownStep
-        ? /* @__PURE__ */ jsxs2(Box2, {
-            flexDirection: "column",
-            marginBottom: 1,
-            children: [
-              /* @__PURE__ */ jsx2(Text2, {
-                color: "magenta",
-                bold: true,
-                children: modelDropdownStep === "model" ? "Select Model" : "Select Thinking Mode",
-              }),
-              modelDropdownItems.map((item, idx) => {
-                const active = idx === modelDropdownIndex;
-                return /* @__PURE__ */ jsxs2(
-                  Text2,
-                  {
-                    color: active ? "cyanBright" : void 0,
+      /* @__PURE__ */ jsx2(Box2, {
+        flexDirection: "column",
+        children: visibleItems.map((item, idx) => {
+          const actualIndex = visibleStart + idx;
+          const isActive = actualIndex === activeIndex;
+          if (renderItem) {
+            return /* @__PURE__ */ jsx2(React2.Fragment, { children: renderItem(item, isActive) }, item.key);
+          }
+          return /* @__PURE__ */ jsxs2(
+            Box2,
+            {
+              flexGrow: 1,
+              flexDirection: "row",
+              gap: 2,
+              paddingX: 1,
+              children: [
+                /* @__PURE__ */ jsx2(Box2, {
+                  width: labelColumnWidth,
+                  flexShrink: 0,
+                  children: /* @__PURE__ */ jsxs2(Text2, {
+                    color: isActive ? activeColor : void 0,
                     wrap: "truncate-end",
                     children: [
-                      active ? "\u203A " : "  ",
-                      item.selected ? "\u25CF" : "\u25CB",
+                      isActive ? "> " : "  ",
+                      item.selected !== void 0 ? (item.selected ? "\u25CF" : "\u25CB") : null,
                       " ",
                       /* @__PURE__ */ jsx2(Text2, { bold: true, children: item.label }),
-                      item.description
-                        ? /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: `  ${item.description}` })
+                      item.statusIndicator
+                        ? /* @__PURE__ */ jsxs2(Text2, {
+                            color: item.statusIndicator.color,
+                            children: [" ", item.statusIndicator.symbol],
+                          })
                         : null,
                     ],
-                  },
-                  item.label
-                );
-              }),
-              /* @__PURE__ */ jsx2(Text2, {
-                dimColor: true,
-                children:
-                  modelDropdownStep === "model"
-                    ? "space/enter select model \xB7 esc to cancel"
-                    : "space/enter apply \xB7 esc to cancel",
-              }),
-            ],
+                  }),
+                }),
+                /* @__PURE__ */ jsx2(Box2, {
+                  flexGrow: 1,
+                  children: item.description
+                    ? /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: `${item.description}` })
+                    : null,
+                }),
+              ],
+            },
+            item.key
+          );
+        }),
+      }),
+      visibleStart + visibleItems.length < items.length
+        ? /* @__PURE__ */ jsx2(Box2, {
+            marginLeft: 2,
+            children: /* @__PURE__ */ jsxs2(Text2, {
+              dimColor: true,
+              children: ["\u2026 ", items.length - visibleStart - visibleItems.length, " more"],
+            }),
           })
         : null,
-      /* @__PURE__ */ jsx2(SlashCommandMenu_default, { width: screenWidth, items: slashMenu, activeIndex: menuIndex }),
-      !showMenu &&
-        /* @__PURE__ */ jsx2(Box2, { children: /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: footerText }) }),
+      helpText
+        ? /* @__PURE__ */ jsx2(Box2, {
+            borderStyle: "single",
+            borderDimColor: true,
+            borderBottom: false,
+            borderRight: false,
+            borderTop: true,
+            borderLeft: false,
+            paddingX: 1,
+            children: /* @__PURE__ */ jsx2(Text2, { dimColor: true, children: helpText }),
+          })
+        : null,
     ],
   });
 });
-var IMAGE_ATTACHMENT_CLEAR_HINT = "Ctrl+X to clear";
-function formatSelectedSkillsStatus(skills) {
-  const names = skills.map((skill) => skill.name).filter(Boolean);
-  if (names.length === 0) {
-    return "";
-  }
-  return `\u26A1 ${names.join(", ")}`;
-}
-function isSkillSelected(skills, skill) {
-  return skills.some((item) => item.name === skill.name);
-}
-function addUniqueSkill(skills, skill) {
-  if (isSkillSelected(skills, skill)) {
-    return skills;
-  }
-  return [...skills, skill];
-}
-function toggleSkillSelection(skills, skill) {
-  return isSkillSelected(skills, skill) ? skills.filter((item) => item.name !== skill.name) : [...skills, skill];
-}
-function buildInitPromptSubmission(selectedSkills) {
-  return {
-    text: "/init",
-    imageUrls: [],
-    selectedSkills: selectedSkills.length > 0 ? selectedSkills : void 0,
-  };
-}
-function getThinkingOptionIndex(config) {
-  const index = MODEL_COMMAND_THINKING_OPTIONS.findIndex((option) => {
-    if (!config.thinkingEnabled) {
-      return !option.thinkingEnabled;
-    }
-    return option.thinkingEnabled && option.reasoningEffort === config.reasoningEffort;
-  });
-  return index >= 0 ? index : 0;
-}
-function removeCurrentSlashToken(state) {
-  let start = state.cursor;
-  while (start > 0 && !/\s/.test(state.text[start - 1] ?? "")) {
-    start -= 1;
-  }
-  const token = state.text.slice(start, state.cursor);
-  if (!token.startsWith("/")) {
-    return state;
-  }
-  const text = `${state.text.slice(0, start)}${state.text.slice(state.cursor)}`;
-  return { text, cursor: start };
-}
-function isClearImageAttachmentsShortcut(input, key) {
-  return key.ctrl && (input === "x" || input === "X");
-}
-function renderBufferWithCursor(state, isFocused, placeholder) {
-  const text = state.text || "";
-  const cursor = Math.max(0, Math.min(state.cursor, text.length));
-  const before = text.slice(0, cursor);
-  const at = text[cursor];
-  const after = text.slice(cursor + 1);
-  if (text.length === 0 && placeholder) {
-    if (!isFocused) {
-      return chalk.dim(`  ${placeholder}`);
-    }
-    return renderCursorCell(" ") + chalk.dim(` ${placeholder}`);
-  }
-  if (!isFocused) {
-    return text.endsWith("\n") ? `${text} ` : text;
-  }
-  if (typeof at === "undefined") {
-    return before + renderCursorCell(" ");
-  }
-  if (at === "\n") {
-    return before + renderCursorCell(" ") + "\n" + after;
-  }
-  return before + renderCursorCell(at) + after;
-}
-function renderCursorCell(value) {
-  return `\x1B[7m${value}\x1B[27m`;
-}
+var DropdownMenu_default = DropdownMenu;
 
-// src/ui/MessageView.tsx
+// src/ui/components/RawModelDropdown/index.tsx
+import { useState as useState2 } from "react";
+import { useInput } from "ink";
+
+// src/ui/contexts/AppContext.tsx
+import { createContext, useContext } from "react";
+var AppContext = createContext(null);
+var useAppContext = () => {
+  const context = useContext(AppContext);
+  if (!context) {
+    return { version: "unknown" };
+  }
+  return context;
+};
+
+// src/ui/contexts/RawModeContext.tsx
+import {
+  createContext as createContext2,
+  useCallback,
+  useContext as useContext2,
+  useRef as useRef3,
+  useState,
+} from "react";
+import { jsx as jsx3 } from "react/jsx-runtime";
+var RAW_COMMAND_MODELS = [
+  {
+    label: "Lite mode",
+    key: "Lite mode" /* Lite */,
+    description: "Collapse chain-of-thought reasoning.",
+  },
+  {
+    label: "Normal mode",
+    key: "Normal mode" /* None */,
+    description: "Show full chain-of-thought reasoning.",
+  },
+  {
+    label: "Raw scrollback mode",
+    key: "Raw scrollback mode" /* Raw */,
+    description: "Show scrollback mode for copy-friendly terminal selection.",
+  },
+];
+var RawModeContext = createContext2({
+  mode: "Lite mode" /* Lite */,
+  setMode: () => {},
+  previousMode: "Lite mode" /* Lite */,
+});
+function useRawModeContext() {
+  const context = useContext2(RawModeContext);
+  if (!context) {
+    throw new Error("useRawModeContext must be used within a RawModeProvider");
+  }
+  return context;
+}
+var RawModeProvider = ({ children }) => {
+  const [mode, _setMode] = useState("Lite mode" /* Lite */);
+  const previousModeRef = useRef3("Lite mode" /* Lite */);
+  const setMode = useCallback((next) => {
+    _setMode((current) => {
+      const resolved = typeof next === "function" ? next(current) : next;
+      if (resolved !== current) {
+        previousModeRef.current = current;
+      }
+      return resolved;
+    });
+  }, []);
+  return /* @__PURE__ */ jsx3(RawModeContext.Provider, {
+    value: { mode, setMode, previousMode: previousModeRef.current },
+    children,
+  });
+};
+
+// src/ui/components/RawModelDropdown/index.tsx
+import { jsx as jsx4 } from "react/jsx-runtime";
+var RawModelDropdown = ({ open = false, screenWidth, onSelect, onClose }) => {
+  const { mode, setMode } = useRawModeContext();
+  const [index, setIndex] = useState2(0);
+  useInput(
+    (input, key) => {
+      if (key.upArrow) {
+        setIndex((i) => Math.max(0, i - 1));
+        return;
+      }
+      if (key.downArrow) {
+        setIndex((i) => Math.min(RAW_COMMAND_MODELS.length - 1, i + 1));
+        return;
+      }
+      if ((input === " " && !key.ctrl && !key.meta) || (key.return && !key.shift && !key.meta)) {
+        setMode(RAW_COMMAND_MODELS[index].key);
+        onClose?.(false);
+        onSelect?.(RAW_COMMAND_MODELS[index].key);
+        return;
+      }
+      if (key.escape) {
+        onClose?.(false);
+        return;
+      }
+    },
+    { isActive: open }
+  );
+  if (!open) {
+    return null;
+  }
+  return /* @__PURE__ */ jsx4(DropdownMenu_default, {
+    title: "Select mode",
+    items: RAW_COMMAND_MODELS.map((model) => ({ ...model, selected: model.key === mode })),
+    helpText: "Space/Enter select mode \xB7 Esc to close",
+    activeColor: "#229ac3",
+    maxVisible: 6,
+    activeIndex: index,
+    width: screenWidth,
+  });
+};
+var RawModelDropdown_default = RawModelDropdown;
+
+// src/ui/components/MessageView/index.tsx
 import { Box as Box3, Text as Text3 } from "ink";
 
-// src/ui/markdown.ts
-import chalk2 from "chalk";
+// src/ui/components/MessageView/markdown.ts
+import chalk from "chalk";
 function renderMarkdown(text) {
   if (!text) {
     return "";
@@ -6839,8 +7649,8 @@ function renderMarkdown(text) {
   return fenceSegments
     .map((segment) => {
       if (segment.kind === "code") {
-        const langTag = segment.lang ? chalk2.dim(`[${segment.lang}]`) + "\n" : "";
-        return langTag + chalk2.cyan(segment.body);
+        const langTag = segment.lang ? chalk.dim(`[${segment.lang}]`) + "\n" : "";
+        return langTag + chalk.cyan(segment.body);
       }
       return renderInlineBlock(segment.body);
     })
@@ -6899,23 +7709,23 @@ function renderInlineLine(line) {
   const headingMatch = /^(\s*)(#{1,6})\s+(.*)$/.exec(line);
   if (headingMatch) {
     const [, lead, hashes, content] = headingMatch;
-    const styled = hashes.length <= 2 ? chalk2.bold.cyanBright(content) : chalk2.bold.cyan(content);
-    return `${lead}${chalk2.dim(hashes)} ${styled}`;
+    const styled = hashes.length <= 2 ? chalk.bold.cyanBright(content) : chalk.bold.cyan(content);
+    return `${lead}${chalk.dim(hashes)} ${styled}`;
   }
   const listMatch = /^(\s*)([-*+])\s+(.*)$/.exec(line);
   if (listMatch) {
     const [, lead, bullet, content] = listMatch;
-    return `${lead}${chalk2.yellow(bullet)} ${renderInlineSpans(content)}`;
+    return `${lead}${chalk.yellow(bullet)} ${renderInlineSpans(content)}`;
   }
   const numListMatch = /^(\s*)(\d+\.)\s+(.*)$/.exec(line);
   if (numListMatch) {
     const [, lead, marker, content] = numListMatch;
-    return `${lead}${chalk2.yellow(marker)} ${renderInlineSpans(content)}`;
+    return `${lead}${chalk.yellow(marker)} ${renderInlineSpans(content)}`;
   }
   const quoteMatch = /^(\s*)>\s?(.*)$/.exec(line);
   if (quoteMatch) {
     const [, lead, content] = quoteMatch;
-    return `${lead}${chalk2.dim("\u2502 ")}${chalk2.italic(renderInlineSpans(content))}`;
+    return `${lead}${chalk.dim("\u2502 ")}${chalk.italic(renderInlineSpans(content))}`;
   }
   return renderInlineSpans(line);
 }
@@ -6924,148 +7734,50 @@ function renderInlineSpans(text) {
     return text;
   }
   let result = text;
-  result = result.replace(/`([^`]+)`/g, (_, inner) => chalk2.cyan(inner));
-  result = result.replace(/\*\*([^*]+)\*\*/g, (_, inner) => chalk2.bold(inner));
-  result = result.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, (_, inner) => chalk2.italic(inner));
-  result = result.replace(/_([^_\n]+)_/g, (_, inner) => chalk2.italic(inner));
+  result = result.replace(/`([^`]+)`/g, (_, inner) => chalk.cyan(inner));
+  result = result.replace(/\*\*([^*]+)\*\*/g, (_, inner) => chalk.bold(inner));
+  result = result.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, (_, inner) => chalk.italic(inner));
+  result = result.replace(/_([^_\n]+)_/g, (_, inner) => chalk.italic(inner));
   return result;
 }
 
-// src/ui/MessageView.tsx
-import { jsx as jsx3, jsxs as jsxs3 } from "react/jsx-runtime";
-function MessageView({ message, collapsed }) {
-  if (!message.visible) {
-    return null;
-  }
-  if (message.role === "user") {
-    const text = message.content || "";
-    const imageParams = Array.isArray(message.contentParams) ? message.contentParams : null;
-    const hasImages = imageParams !== null && imageParams.length > 0;
-    return /* @__PURE__ */ jsx3(Box3, {
-      marginLeft: 1,
-      marginBottom: 1,
-      flexDirection: "column",
-      marginY: 0,
-      children: /* @__PURE__ */ jsxs3(Box3, {
-        flexGrow: 1,
-        gap: 1,
-        children: [
-          /* @__PURE__ */ jsx3(Box3, { children: /* @__PURE__ */ jsx3(Text3, { color: "#229ac3", children: `>` }) }),
-          /* @__PURE__ */ jsxs3(Box3, {
-            flexGrow: 1,
-            children: [
-              /* @__PURE__ */ jsx3(Text3, { color: "#229ac3", children: text }),
-              Array.isArray(message.contentParams) && message.contentParams.length > 0
-                ? /* @__PURE__ */ jsx3(Text3, {
-                    color: "#229ac3",
-                    children: `  \u{1F4CE} ${message.contentParams.length} image attachment(s)`,
-                  })
-                : null,
-            ],
-          }),
-        ],
-      }),
-    });
-  }
-  if (message.role === "assistant") {
-    const isThinking = Boolean(message.meta?.asThinking);
-    const content = (message.content || "").trim();
-    if (isThinking) {
-      const summary = buildThinkingSummary(content, message.messageParams);
-      if (collapsed !== false) {
-        return /* @__PURE__ */ jsx3(Box3, {
-          marginLeft: 1,
-          marginY: 0,
-          children: /* @__PURE__ */ jsx3(StatusLine, { bulletColor: "gray", name: "Thinking", params: summary }),
-        });
-      }
-      return /* @__PURE__ */ jsxs3(Box3, {
-        marginLeft: 1,
-        flexDirection: "column",
-        marginY: 0,
-        children: [
-          /* @__PURE__ */ jsx3(StatusLine, { bulletColor: "gray", name: "Thinking", params: summary }),
-          /* @__PURE__ */ jsx3(Box3, {
-            flexDirection: "column",
-            children: content
-              ? /* @__PURE__ */ jsx3(Text3, { dimColor: true, children: renderMarkdown(content) })
-              : null,
-          }),
-        ],
-      });
-    }
-    return /* @__PURE__ */ jsxs3(Box3, {
-      marginLeft: 1,
-      marginBottom: 1,
-      flexGrow: 1,
-      gap: 1,
-      marginY: 0,
-      children: [
-        /* @__PURE__ */ jsx3(Box3, { children: /* @__PURE__ */ jsx3(Text3, { color: "#229ac3", children: "\u2726" }) }),
-        /* @__PURE__ */ jsx3(Box3, {
-          flexDirection: "column",
-          flexGrow: 1,
-          children: content ? /* @__PURE__ */ jsx3(Text3, { children: renderMarkdown(content) }) : null,
-        }),
-      ],
-    });
-  }
-  if (message.role === "tool") {
-    const summary = buildToolSummary(message);
-    const diffLines = getToolDiffPreviewLines(summary);
-    return /* @__PURE__ */ jsxs3(Box3, {
-      flexDirection: "column",
-      marginLeft: 1,
-      marginBottom: 1,
-      marginY: 0,
-      children: [
-        /* @__PURE__ */ jsx3(StatusLine, {
-          bulletColor: summary.ok ? "green" : "red",
-          name: formatStatusName(summary.name),
-          params: formatToolStatusParams(summary),
-        }),
-        diffLines.length > 0 ? /* @__PURE__ */ jsx3(DiffPreview, { lines: diffLines }) : null,
-      ],
-    });
-  }
-  if (message.role === "system") {
-    if (message.meta?.skill) {
-      return /* @__PURE__ */ jsx3(Box3, {
-        marginY: 0,
-        marginLeft: 1,
-        marginBottom: 1,
-        children: /* @__PURE__ */ jsxs3(Text3, {
-          color: "magenta",
-          children: ["\u26A1 Loaded skill: ", message.meta.skill.name],
-        }),
-      });
-    }
-    if (message.meta?.isSummary) {
-      return /* @__PURE__ */ jsx3(Box3, {
-        marginY: 0,
-        marginLeft: 1,
-        marginBottom: 1,
-        children: /* @__PURE__ */ jsx3(Text3, {
-          dimColor: true,
-          italic: true,
-          children: "(conversation summary inserted)",
-        }),
-      });
-    }
-    return null;
-  }
-  return null;
+// src/ui/components/MessageView/utils.ts
+import chalk2 from "chalk";
+function isPlainRecord(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
-function StatusLine({ bulletColor, name, params }) {
-  return /* @__PURE__ */ jsx3(Text3, {
-    wrap: "truncate-end",
-    children: [
-      /* @__PURE__ */ jsx3(Text3, { color: bulletColor, children: "\u2727" }, "bullet"),
-      " ",
-      /* @__PURE__ */ jsx3(Text3, { bold: true, children: name }, "name"),
-      params ? /* @__PURE__ */ jsx3(Text3, { color: "white", children: `  ${params}` }, "params") : null,
-    ],
-  });
+function formatStatusName(value) {
+  return value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : "Tool";
+}
+function truncate(value, max) {
+  if (value.length <= max) {
+    return value;
+  }
+  return `${value.slice(0, max)}\u2026`;
+}
+function firstNonEmptyLine(value) {
+  for (const line of value.split(/\r?\n/)) {
+    const trimmed = line.trim().replace(/\s+/g, " ");
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+  return "";
+}
+function buildThinkingSummary(content, messageParams, mode) {
+  if (content) {
+    const normalized = content.replace(/\r?\n/g, " ").replace(/\s+/g, " ");
+    let result = truncate(normalized, 100);
+    if (result.endsWith(":") || result.endsWith("\uFF1A")) {
+      result = result.slice(0, -1);
+    }
+    return result;
+  }
+  const params = messageParams;
+  if (typeof params?.reasoning_content === "string" && params.reasoning_content.trim()) {
+    return mode !== "Lite mode" /* Lite */ ? params?.reasoning_content || "" : "(reasoning...)";
+  }
+  return "";
 }
 function formatToolStatusParams(summary) {
   const params = firstNonEmptyLine(summary.params);
@@ -7178,13 +7890,272 @@ function parseDiffPreview(diffPreview) {
       };
     });
 }
+function renderMessageToStdout(message, mode) {
+  if (!message.visible) {
+    return "";
+  }
+  if (message.role === "user") {
+    const text = message.content || "(no content)";
+    return chalk2(`> ${text}`);
+  }
+  if (message.role === "assistant") {
+    const isThinking = Boolean(message.meta?.asThinking);
+    const content = (message.content || "").trim();
+    if (isThinking) {
+      const summary = buildThinkingSummary(content, message.messageParams, mode);
+      return `${chalk2("\u2727")} ${chalk2("Thinking")}${summary ? ` ${chalk2(summary)}` : ""}`;
+    }
+    return `${chalk2("\u2726")} ${content}`;
+  }
+  if (message.role === "tool") {
+    const payload = parseToolPayload(message.content);
+    const metaFunctionName =
+      message.meta?.function && typeof message.meta.function.name === "string" ? message.meta.function.name : null;
+    const name = payload.name || metaFunctionName || "tool";
+    const metaParams = typeof message.meta?.paramsMd === "string" ? message.meta.paramsMd.trim() : "";
+    const params = name.toLowerCase() === "bash" ? metaParams : truncate(metaParams, 120);
+    const statusLine = `${chalk2("\u2727")} ${chalk2(formatStatusName(name))}${params ? ` ${chalk2(params)}` : ""}`;
+    const metaResultMd = typeof message.meta?.resultMd === "string" ? message.meta.resultMd.trim() : "";
+    const result = metaResultMd
+      ? `
+${chalk2.dim("  \u2514 Result")}
+${metaResultMd}`
+      : "";
+    const summary = {
+      name,
+      params,
+      ok: payload.ok !== false,
+      metadata: payload.metadata,
+    };
+    const planLines = getUpdatePlanPreviewLines(summary);
+    if (planLines.length > 0) {
+      const planText = planLines.map((line) => `  ${line}`).join("\n");
+      return `${statusLine}
+${chalk2.dim("  \u2514 Plan")}
+${planText}${result}`;
+    }
+    return `${statusLine}${result}`;
+  }
+  if (message.role === "system") {
+    if (message.meta?.isModelChange) {
+      return chalk2(`> ${message.content}`);
+    }
+    if (message.meta?.skill && typeof message.meta.skill === "object") {
+      const skillName = message.meta.skill.name;
+      return chalk2(`\u26A1 Loaded skill: ${typeof skillName === "string" ? skillName : ""}`);
+    }
+    if (message.meta?.isSummary) {
+      return chalk2.dim.italic("(conversation summary inserted)");
+    }
+    return "";
+  }
+  return "";
+}
+function getUpdatePlanPreviewLines(summary) {
+  if (!summary.ok || summary.name !== "UpdatePlan") {
+    return [];
+  }
+  const plan = summary.metadata?.plan;
+  if (typeof plan !== "string" || !plan.trim()) {
+    return [];
+  }
+  return plan
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0);
+}
+
+// src/ui/components/MessageView/index.tsx
+import { jsx as jsx5, jsxs as jsxs3 } from "react/jsx-runtime";
+function MessageView({ message, collapsed, width = 80 }) {
+  const { mode } = useRawModeContext();
+  if (!message.visible) {
+    return null;
+  }
+  if (message.role === "user") {
+    const text = message.content || "(no content)";
+    return /* @__PURE__ */ jsxs3(Box3, {
+      marginLeft: 1,
+      marginBottom: 1,
+      flexDirection: "row",
+      marginY: 0,
+      flexGrow: 1,
+      gap: 1,
+      children: [
+        /* @__PURE__ */ jsx5(Box3, { children: /* @__PURE__ */ jsx5(Text3, { color: "#229ac3", children: `>` }) }),
+        /* @__PURE__ */ jsxs3(Box3, {
+          flexGrow: 1,
+          children: [
+            /* @__PURE__ */ jsx5(Text3, { color: "#229ac3", children: text }),
+            Array.isArray(message.contentParams) && message.contentParams.length > 0
+              ? /* @__PURE__ */ jsx5(Text3, {
+                  color: "#229ac3",
+                  children: `  \u{1F4CE} ${message.contentParams.length} image attachment(s)`,
+                })
+              : null,
+          ],
+        }),
+      ],
+    });
+  }
+  if (message.role === "assistant") {
+    const isThinking = Boolean(message.meta?.asThinking);
+    const content = (message.content || "").trim();
+    if (isThinking) {
+      const summary = buildThinkingSummary(content, message.messageParams, mode);
+      if (collapsed !== false) {
+        return /* @__PURE__ */ jsx5(Box3, {
+          marginLeft: 1,
+          marginBottom: 1,
+          marginY: 0,
+          children: /* @__PURE__ */ jsx5(StatusLine, { width, bulletColor: "gray", name: "Thinking", params: summary }),
+        });
+      }
+      return /* @__PURE__ */ jsxs3(Box3, {
+        marginLeft: 1,
+        flexDirection: "column",
+        marginBottom: 1,
+        marginY: 0,
+        children: [
+          /* @__PURE__ */ jsx5(StatusLine, {
+            width,
+            bulletColor: "gray",
+            name: "Thinking",
+            params: content ? "" : summary,
+          }),
+          /* @__PURE__ */ jsx5(Box3, {
+            flexDirection: "column",
+            marginLeft: 2,
+            children: content
+              ? /* @__PURE__ */ jsx5(Text3, { dimColor: true, children: renderMarkdown(content) })
+              : null,
+          }),
+        ],
+      });
+    }
+    const containerWidth = Math.max(1, width - 2);
+    const contentWidth = Math.max(1, width - 4);
+    return /* @__PURE__ */ jsxs3(Box3, {
+      marginLeft: 1,
+      marginBottom: 1,
+      width: containerWidth,
+      gap: 1,
+      marginY: 0,
+      flexDirection: "row",
+      children: [
+        /* @__PURE__ */ jsx5(Box3, {
+          alignSelf: "stretch",
+          children: /* @__PURE__ */ jsx5(Text3, { color: "#229ac3", children: "\u2726" }),
+        }),
+        /* @__PURE__ */ jsx5(Box3, {
+          flexGrow: 1,
+          width: contentWidth,
+          children: content ? /* @__PURE__ */ jsx5(Text3, { wrap: "wrap", children: renderMarkdown(content) }) : null,
+        }),
+      ],
+    });
+  }
+  if (message.role === "tool") {
+    const summary = buildToolSummary(message);
+    const diffLines = getToolDiffPreviewLines(summary);
+    const planLines = getUpdatePlanPreviewLines(summary);
+    return /* @__PURE__ */ jsxs3(Box3, {
+      flexDirection: "column",
+      marginLeft: 1,
+      marginBottom: 1,
+      marginY: 0,
+      children: [
+        /* @__PURE__ */ jsx5(StatusLine, {
+          width,
+          bulletColor: summary.ok ? "green" : "red",
+          name: formatStatusName(summary.name),
+          params: formatToolStatusParams(summary),
+        }),
+        diffLines.length > 0 ? /* @__PURE__ */ jsx5(DiffPreview, { lines: diffLines }) : null,
+        planLines.length > 0 ? /* @__PURE__ */ jsx5(PlanPreview, { lines: planLines }) : null,
+      ],
+    });
+  }
+  if (message.role === "system") {
+    if (message.meta?.isModelChange) {
+      return /* @__PURE__ */ jsxs3(Box3, {
+        marginY: 0,
+        marginLeft: 1,
+        marginBottom: 1,
+        flexGrow: 1,
+        flexDirection: "row",
+        gap: 1,
+        children: [
+          /* @__PURE__ */ jsx5(Box3, { children: /* @__PURE__ */ jsx5(Text3, { color: "#229ac3", children: `>` }) }),
+          /* @__PURE__ */ jsx5(Box3, {
+            flexGrow: 1,
+            flexDirection: "column",
+            children: /* @__PURE__ */ jsx5(Text3, { color: "#229ac3", children: message.content }),
+          }),
+        ],
+      });
+    }
+    if (message.meta?.skill) {
+      return /* @__PURE__ */ jsx5(Box3, {
+        marginY: 0,
+        marginLeft: 1,
+        marginBottom: 1,
+        children: /* @__PURE__ */ jsxs3(Text3, {
+          color: "magenta",
+          children: ["\u26A1 Loaded skill: ", message.meta.skill.name],
+        }),
+      });
+    }
+    if (message.meta?.isSummary) {
+      return /* @__PURE__ */ jsx5(Box3, {
+        marginY: 0,
+        marginLeft: 1,
+        marginBottom: 1,
+        children: /* @__PURE__ */ jsx5(Text3, {
+          dimColor: true,
+          italic: true,
+          children: "(conversation summary inserted)",
+        }),
+      });
+    }
+    return null;
+  }
+  return null;
+}
+function StatusLine({ bulletColor, name, params, width }) {
+  const { mode } = useRawModeContext();
+  const containerWidth = Math.max(1, width - 2);
+  const contentWidth = Math.max(1, width - 4);
+  return /* @__PURE__ */ jsxs3(Box3, {
+    gap: 1,
+    width: containerWidth,
+    children: [
+      /* @__PURE__ */ jsx5(Box3, {
+        alignSelf: "stretch",
+        children: /* @__PURE__ */ jsx5(Text3, { color: bulletColor, children: "\u2727" }, "bullet"),
+      }),
+      /* @__PURE__ */ jsx5(Box3, {
+        flexGrow: 1,
+        width: contentWidth,
+        gap: 1,
+        children: /* @__PURE__ */ jsxs3(Text3, {
+          wrap: mode === "Lite mode" /* Lite */ ? "truncate-end" : "wrap",
+          children: [
+            /* @__PURE__ */ jsx5(Text3, { bold: true, children: name }, "name"),
+            params ? /* @__PURE__ */ jsx5(Text3, { color: "white", children: ` ${params}` }, "params") : null,
+          ],
+        }),
+      }),
+    ],
+  });
+}
 function DiffPreview({ lines }) {
   return /* @__PURE__ */ jsxs3(Box3, {
     flexDirection: "column",
     marginLeft: 2,
     children: [
-      /* @__PURE__ */ jsx3(Text3, { dimColor: true, children: "\u2514 Changes" }),
-      /* @__PURE__ */ jsx3(Box3, {
+      /* @__PURE__ */ jsx5(Text3, { dimColor: true, children: "\u2514 Changes" }),
+      /* @__PURE__ */ jsx5(Box3, {
         flexDirection: "column",
         marginLeft: 2,
         children: lines.map((line, index) =>
@@ -7193,11 +8164,11 @@ function DiffPreview({ lines }) {
             {
               wrap: "truncate-end",
               children: [
-                /* @__PURE__ */ jsx3(Text3, {
+                /* @__PURE__ */ jsx5(Text3, {
                   color: line.kind === "added" ? "green" : line.kind === "removed" ? "red" : "gray",
                   children: line.marker,
                 }),
-                /* @__PURE__ */ jsx3(Text3, {
+                /* @__PURE__ */ jsx5(Text3, {
                   color: line.kind === "added" ? "green" : line.kind === "removed" ? "red" : void 0,
                   children: line.content,
                 }),
@@ -7210,98 +8181,1031 @@ function DiffPreview({ lines }) {
     ],
   });
 }
-function isPlainRecord(value) {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
-}
-function formatStatusName(value) {
-  return value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : "Tool";
-}
-function truncate(value, max) {
-  if (value.length <= max) {
-    return value;
-  }
-  return `${value.slice(0, max)}\u2026`;
-}
-function firstNonEmptyLine(value) {
-  for (const line of value.split(/\r?\n/)) {
-    const trimmed = line.trim().replace(/\s+/g, " ");
-    if (trimmed) {
-      return trimmed;
-    }
-  }
-  return "";
-}
-function buildThinkingSummary(content, messageParams) {
-  if (content) {
-    const normalized = content.replace(/\r?\n/g, " ").replace(/\s+/g, " ");
-    let result = truncate(normalized, 100);
-    if (result.endsWith(":") || result.endsWith("\uFF1A")) {
-      result = result.slice(0, -1);
-    }
-    return result;
-  }
-  const params = messageParams;
-  if (typeof params?.reasoning_content === "string" && params.reasoning_content.trim()) {
-    return "(reasoning...)";
-  }
-  return "";
-}
-
-// src/ui/SessionList.tsx
-import { useState as useState4, useMemo } from "react";
-import { Box as Box4, Text as Text4 } from "ink";
-
-// src/ui/useTerminalSize.ts
-import { useEffect as useEffect4, useState as useState3 } from "react";
-import { useStdout as useStdout2 } from "ink";
-var DEFAULT_COLUMNS = 80;
-var DEFAULT_ROWS = 24;
-function useTerminalSize() {
-  const { stdout } = useStdout2();
-  const readSize = () => ({
-    columns: stdout?.columns ?? DEFAULT_COLUMNS,
-    rows: stdout?.rows ?? DEFAULT_ROWS,
+function PlanPreview({ lines }) {
+  return /* @__PURE__ */ jsxs3(Box3, {
+    flexDirection: "column",
+    marginLeft: 2,
+    children: [
+      /* @__PURE__ */ jsx5(Text3, { dimColor: true, children: "\u2514 Plan" }),
+      /* @__PURE__ */ jsx5(Box3, {
+        flexDirection: "column",
+        marginLeft: 2,
+        children: lines.map((line, index) =>
+          /* @__PURE__ */ jsx5(Text3, { wrap: "wrap", children: line }, `${index}-${line}`)
+        ),
+      }),
+    ],
   });
-  const [size, setSize] = useState3(() => readSize());
-  useEffect4(() => {
-    setSize(readSize());
-    if (!stdout?.on) {
+}
+
+// src/ui/components/RawModeExitPrompt/index.tsx
+import { useRef as useRef4 } from "react";
+import { useInput as useInput2 } from "ink";
+function RawModeExitPrompt({ onExit }) {
+  const { previousMode } = useRawModeContext();
+  const snapshotRef = useRef4(previousMode);
+  useInput2(
+    (_input, key) => {
+      if (key.escape) {
+        onExit(snapshotRef.current);
+      }
+    },
+    { isActive: true }
+  );
+  return null;
+}
+
+// src/ui/PromptInput.tsx
+import { jsx as jsx6, jsxs as jsxs4 } from "react/jsx-runtime";
+var SPINNER_FRAMES = [
+  "\u280B",
+  "\u2819",
+  "\u2839",
+  "\u2838",
+  "\u283C",
+  "\u2834",
+  "\u2826",
+  "\u2827",
+  "\u2807",
+  "\u280F",
+];
+var MODEL_COMMAND_MODELS = ["deepseek-v4-pro", "deepseek-v4-flash"];
+var MODEL_COMMAND_THINKING_OPTIONS = [
+  { label: "Thinking mode [max]", thinkingEnabled: true, reasoningEffort: "max" },
+  { label: "Thinking mode [high]", thinkingEnabled: true, reasoningEffort: "high" },
+  { label: "No thinking", thinkingEnabled: false },
+];
+var PromptPrefixLine = React5.memo(function PromptPrefixLine2({ busy }) {
+  const [spinnerIndex, setSpinnerIndex] = useState3(0);
+  useEffect2(() => {
+    if (!busy) {
+      setSpinnerIndex(0);
       return;
     }
-    const handleResize = () => {
-      setSize(readSize());
+    const timer = setInterval(() => {
+      setSpinnerIndex((index) => (index + 1) % SPINNER_FRAMES.length);
+    }, 80);
+    return () => clearInterval(timer);
+  }, [busy]);
+  const prefix = busy ? `${SPINNER_FRAMES[spinnerIndex]} ` : "> ";
+  return /* @__PURE__ */ jsx6(Text4, { color: busy ? "yellow" : "#229ac3", children: prefix });
+});
+var PromptInput = React5.memo(function PromptInput2({
+  projectRoot: projectRoot2,
+  skills,
+  modelConfig,
+  screenWidth,
+  promptHistory,
+  busy,
+  loadingText,
+  disabled,
+  placeholder,
+  runningProcesses,
+  onSubmit,
+  onModelConfigChange,
+  onInterrupt,
+  onToggleProcessStdout,
+  onRawModeChange,
+}) {
+  const { exit } = useApp();
+  const { stdout } = useStdout();
+  const [buffer, setBuffer] = useState3(EMPTY_BUFFER);
+  const [imageUrls, setImageUrls] = useState3([]);
+  const [selectedSkills, setSelectedSkills] = useState3([]);
+  const [statusMessage, setStatusMessage] = useState3(null);
+  const [pendingExit, setPendingExit] = useState3(false);
+  const [menuIndex, setMenuIndex] = useState3(0);
+  const [showSkillsDropdown, setShowSkillsDropdown] = useState3(false);
+  const [openRawModelDropdown, setOpenRawModelDropdown] = useState3(false);
+  const [skillsDropdownIndex, setSkillsDropdownIndex] = useState3(0);
+  const [modelDropdownStep, setModelDropdownStep] = useState3(null);
+  const [modelDropdownIndex, setModelDropdownIndex] = useState3(0);
+  const [pendingModel, setPendingModel] = useState3(null);
+  const [fileMentionItems, setFileMentionItems] = useState3(() => scanFileMentionItems(projectRoot2));
+  const [fileMentionIndex, setFileMentionIndex] = useState3(0);
+  const [dismissedFileMentionKey, setDismissedFileMentionKey] = useState3(null);
+  const [historyCursor, setHistoryCursor] = useState3(-1);
+  const [draftBeforeHistory, setDraftBeforeHistory] = useState3(null);
+  const [hasTerminalFocus, setHasTerminalFocus] = useState3(true);
+  const lastCtrlDAt = React5.useRef(0);
+  const undoRedoRef = React5.useRef(createPromptUndoRedoState());
+  const wasBusyRef = React5.useRef(busy);
+  const hadFileMentionTokenRef = React5.useRef(false);
+  const fileMentionToken = getCurrentFileMentionToken(buffer);
+  const hasFileMentionToken = fileMentionToken !== null;
+  const fileMentionKey = fileMentionToken ? `${fileMentionToken.start}:${fileMentionToken.query}` : null;
+  const fileMentionMatches = React5.useMemo(
+    () => (fileMentionToken ? filterFileMentionItems(fileMentionItems, fileMentionToken.query) : []),
+    [fileMentionItems, fileMentionToken]
+  );
+  const showFileMentionMenu =
+    !showSkillsDropdown &&
+    !modelDropdownStep &&
+    fileMentionToken !== null &&
+    fileMentionKey !== dismissedFileMentionKey;
+  const slashItems = React5.useMemo(() => buildSlashCommands(skills), [skills]);
+  const slashToken = getCurrentSlashToken(buffer);
+  const slashMenu = React5.useMemo(
+    () =>
+      showSkillsDropdown || modelDropdownStep || showFileMentionMenu
+        ? []
+        : slashToken
+          ? filterSlashCommands(slashItems, slashToken)
+          : [],
+    [showSkillsDropdown, modelDropdownStep, showFileMentionMenu, slashToken, slashItems]
+  );
+  const showMenu = slashMenu.length > 0;
+  const promptHistoryKey = React5.useMemo(() => promptHistory.join("\0"), [promptHistory]);
+  const hasRunningProcess = runningProcesses && runningProcesses.size > 0;
+  const processHint = hasRunningProcess ? " \xB7 ctrl+o view output" : "";
+  const footerText = statusMessage
+    ? statusMessage
+    : busy
+      ? loadingText && loadingText.trim()
+        ? `${loadingText}${processHint}`
+        : `esc to interrupt \xB7 ctrl+c to cancel input${processHint}`
+      : `enter send \xB7 shift+enter newline \xB7 @ files \xB7 ctrl+v image \xB7 / commands \xB7 ctrl+d exit${processHint}`;
+  useTerminalFocusReporting(stdout, !disabled);
+  useTerminalExtendedKeys(stdout, !disabled);
+  useHiddenTerminalCursor(stdout, !disabled);
+  const refreshFileMentionItems = React5.useCallback(() => {
+    setFileMentionItems(scanFileMentionItems(projectRoot2));
+  }, [projectRoot2]);
+  useEffect2(() => {
+    refreshFileMentionItems();
+  }, [refreshFileMentionItems]);
+  useEffect2(() => {
+    if (wasBusyRef.current && !busy) {
+      refreshFileMentionItems();
+    }
+    wasBusyRef.current = busy;
+  }, [busy, refreshFileMentionItems]);
+  useEffect2(() => {
+    if (hasFileMentionToken && !hadFileMentionTokenRef.current) {
+      refreshFileMentionItems();
+    }
+    hadFileMentionTokenRef.current = hasFileMentionToken;
+  }, [hasFileMentionToken, refreshFileMentionItems]);
+  useEffect2(() => {
+    if (!showMenu) {
+      setMenuIndex(0);
+      return;
+    }
+    if (menuIndex >= slashMenu.length) {
+      setMenuIndex(slashMenu.length - 1);
+    }
+  }, [slashMenu, showMenu, menuIndex]);
+  useEffect2(() => {
+    if (!fileMentionKey) {
+      setDismissedFileMentionKey(null);
+    }
+  }, [fileMentionKey]);
+  useEffect2(() => {
+    if (!showFileMentionMenu) {
+      setFileMentionIndex(0);
+      return;
+    }
+    if (fileMentionIndex >= fileMentionMatches.length) {
+      setFileMentionIndex(Math.max(0, fileMentionMatches.length - 1));
+    }
+  }, [fileMentionMatches.length, fileMentionIndex, showFileMentionMenu]);
+  useEffect2(() => {
+    if (skillsDropdownIndex >= skills.length) {
+      setSkillsDropdownIndex(Math.max(0, skills.length - 1));
+    }
+  }, [skills.length, skillsDropdownIndex]);
+  useEffect2(() => {
+    if (!modelDropdownStep) {
+      return;
+    }
+    const optionCount =
+      modelDropdownStep === "model" ? MODEL_COMMAND_MODELS.length : MODEL_COMMAND_THINKING_OPTIONS.length;
+    if (modelDropdownIndex >= optionCount) {
+      setModelDropdownIndex(Math.max(0, optionCount - 1));
+    }
+  }, [modelDropdownIndex, modelDropdownStep]);
+  useEffect2(() => {
+    if (!statusMessage) {
+      return;
+    }
+    const timer = setTimeout(() => setStatusMessage(null), 2500);
+    return () => clearTimeout(timer);
+  }, [statusMessage]);
+  useEffect2(() => {
+    setHistoryCursor(-1);
+    setDraftBeforeHistory(null);
+  }, [promptHistoryKey]);
+  useTerminalInput(
+    (input, key) => {
+      if (key.focusIn) {
+        setHasTerminalFocus(true);
+        return;
+      }
+      if (key.focusOut) {
+        setHasTerminalFocus(false);
+        return;
+      }
+      if (disabled) {
+        return;
+      }
+      if (key.escape) {
+        if (modelDropdownStep) {
+          closeModelDropdown();
+          return;
+        }
+        if (showSkillsDropdown) {
+          setShowSkillsDropdown(false);
+          return;
+        }
+        if (showFileMentionMenu && fileMentionKey) {
+          setDismissedFileMentionKey(fileMentionKey);
+          return;
+        }
+        if (busy) {
+          onInterrupt();
+          setStatusMessage("Interrupting\u2026");
+        }
+        return;
+      }
+      if (key.ctrl && (input === "o" || input === "O")) {
+        if (runningProcesses && runningProcesses.size > 0 && onToggleProcessStdout) {
+          onToggleProcessStdout();
+        } else {
+          setStatusMessage("No running process to inspect");
+        }
+        return;
+      }
+      if (key.ctrl && (input === "d" || input === "D")) {
+        if (!isEmpty(buffer)) {
+          updateBuffer((s) => deleteForward(s));
+          return;
+        }
+        const now = Date.now();
+        if (pendingExit && now - lastCtrlDAt.current < 2e3) {
+          exit();
+          return;
+        }
+        lastCtrlDAt.current = now;
+        setPendingExit(true);
+        setStatusMessage("press ctrl+d again to exit");
+        return;
+      }
+      if (key.ctrl && (input === "c" || input === "C")) {
+        if (busy) {
+          onInterrupt();
+          setStatusMessage("Interrupting\u2026");
+        } else if (!isEmpty(buffer)) {
+          setBuffer(EMPTY_BUFFER);
+          clearUndoRedoStacks();
+        } else {
+          setStatusMessage("press ctrl+d to exit");
+        }
+        return;
+      }
+      if (pendingExit && (!key.ctrl || (input !== "d" && input !== "D"))) {
+        setPendingExit(false);
+      }
+      if (openRawModelDropdown) {
+        return;
+      }
+      if (historyCursor !== -1 && !key.upArrow && !key.downArrow) {
+        exitHistoryBrowsing();
+      }
+      if (showSkillsDropdown) {
+        if (skills.length === 0) {
+          setShowSkillsDropdown(false);
+        } else {
+          if (key.upArrow) {
+            setSkillsDropdownIndex((idx) => (idx - 1 + skills.length) % skills.length);
+            return;
+          }
+          if (key.downArrow) {
+            setSkillsDropdownIndex((idx) => (idx + 1) % skills.length);
+            return;
+          }
+          if ((input === " " && !key.ctrl && !key.meta) || (key.return && !key.shift && !key.meta)) {
+            const skill = skills[skillsDropdownIndex];
+            if (skill) {
+              toggleSelectedSkill(skill);
+            }
+            return;
+          }
+          if (key.tab) {
+            setShowSkillsDropdown(false);
+            return;
+          }
+        }
+      }
+      if (modelDropdownStep) {
+        const optionCount =
+          modelDropdownStep === "model" ? MODEL_COMMAND_MODELS.length : MODEL_COMMAND_THINKING_OPTIONS.length;
+        if (key.upArrow) {
+          setModelDropdownIndex((idx) => (idx - 1 + optionCount) % optionCount);
+          return;
+        }
+        if (key.downArrow) {
+          setModelDropdownIndex((idx) => (idx + 1) % optionCount);
+          return;
+        }
+        if ((input === " " && !key.ctrl && !key.meta) || (key.return && !key.shift && !key.meta)) {
+          selectModelDropdownItem();
+          return;
+        }
+        if (key.tab) {
+          closeModelDropdown();
+          return;
+        }
+      }
+      if (key.ctrl && (input === "v" || input === "V")) {
+        setStatusMessage("Reading clipboard...");
+        readClipboardImageAsync()
+          .then((image) => {
+            if (image) {
+              setImageUrls((prev) => [...prev, image.dataUrl]);
+              setStatusMessage("Attached image from clipboard");
+            } else {
+              setStatusMessage("No image found in clipboard");
+            }
+          })
+          .catch(() => {
+            setStatusMessage("Failed to read clipboard");
+          });
+        return;
+      }
+      if (isClearImageAttachmentsShortcut(input, key)) {
+        if (imageUrls.length > 0) {
+          setImageUrls([]);
+          setStatusMessage("Cleared attached images");
+        } else {
+          setStatusMessage("No attached images to clear");
+        }
+        return;
+      }
+      const noModifier = !key.shift && !key.ctrl && !key.meta;
+      const returnAction = getPromptReturnKeyAction(key);
+      const isPlainReturn = returnAction === "submit";
+      if (showFileMentionMenu) {
+        if (key.upArrow) {
+          if (fileMentionMatches.length > 0) {
+            setFileMentionIndex((idx) => (idx - 1 + fileMentionMatches.length) % fileMentionMatches.length);
+          }
+          return;
+        }
+        if (key.downArrow) {
+          if (fileMentionMatches.length > 0) {
+            setFileMentionIndex((idx) => (idx + 1) % fileMentionMatches.length);
+          }
+          return;
+        }
+        if (key.tab || returnAction === "submit") {
+          const selected = fileMentionMatches[fileMentionIndex];
+          if (selected && fileMentionToken) {
+            insertFileMentionSelection(selected);
+            return;
+          }
+          if (key.tab) {
+            setDismissedFileMentionKey(fileMentionKey);
+            return;
+          }
+          if (fileMentionKey) {
+            setDismissedFileMentionKey(fileMentionKey);
+          }
+        }
+      }
+      if (showMenu) {
+        if (key.upArrow) {
+          setMenuIndex((idx) => (idx - 1 + slashMenu.length) % slashMenu.length);
+          return;
+        }
+        if (key.downArrow) {
+          setMenuIndex((idx) => (idx + 1) % slashMenu.length);
+          return;
+        }
+        if (key.tab || returnAction === "submit") {
+          const selected = slashMenu[menuIndex];
+          if (selected) {
+            handleSlashSelection(selected);
+            return;
+          }
+        }
+      }
+      if (busy && isPlainReturn) {
+        setStatusMessage("wait for the current response or press esc to interrupt");
+        return;
+      }
+      if (returnAction === "newline") {
+        updateBuffer((s) => insertText(s, "\n"));
+        return;
+      }
+      if (returnAction === "submit") {
+        submitCurrentBuffer();
+        return;
+      }
+      if (key.delete) {
+        updateBuffer((s) => deleteForward(s));
+        return;
+      }
+      if (key.backspace) {
+        updateBuffer((s) => backspace(s));
+        return;
+      }
+      if ((key.ctrl || key.meta) && key.leftArrow) {
+        updateBuffer((s) => moveWordLeft(s));
+        return;
+      }
+      if ((key.ctrl || key.meta) && key.rightArrow) {
+        updateBuffer((s) => moveWordRight(s));
+        return;
+      }
+      if (key.leftArrow) {
+        updateBuffer((s) => moveLeft(s));
+        return;
+      }
+      if (key.rightArrow) {
+        updateBuffer((s) => moveRight(s));
+        return;
+      }
+      if (key.home) {
+        updateBuffer((s) => moveLineStart(s));
+        return;
+      }
+      if (key.end) {
+        updateBuffer((s) => moveLineEnd(s));
+        return;
+      }
+      if (key.upArrow) {
+        if (noModifier && (historyCursor !== -1 || buffer.cursor === 0) && promptHistory.length > 0) {
+          navigateHistory(-1);
+          return;
+        }
+        updateBuffer((s) => moveUp(s));
+        return;
+      }
+      if (key.downArrow) {
+        if (noModifier && (historyCursor !== -1 || buffer.cursor === buffer.text.length)) {
+          navigateHistory(1);
+          return;
+        }
+        updateBuffer((s) => moveDown(s));
+        return;
+      }
+      if (key.ctrl && (input === "p" || input === "P")) {
+        navigateHistory(-1);
+        return;
+      }
+      if (key.ctrl && (input === "n" || input === "N")) {
+        navigateHistory(1);
+        return;
+      }
+      if (key.ctrl && (input === "a" || input === "A")) {
+        updateBuffer((s) => moveLineStart(s));
+        return;
+      }
+      if (key.ctrl && (input === "e" || input === "E")) {
+        updateBuffer((s) => moveLineEnd(s));
+        return;
+      }
+      if (key.ctrl && (input === "b" || input === "B")) {
+        updateBuffer((s) => moveLeft(s));
+        return;
+      }
+      if (key.ctrl && (input === "f" || input === "F")) {
+        updateBuffer((s) => moveRight(s));
+        return;
+      }
+      if (key.meta && (input === "b" || input === "B")) {
+        updateBuffer((s) => moveWordLeft(s));
+        return;
+      }
+      if (key.meta && (input === "f" || input === "F")) {
+        updateBuffer((s) => moveWordRight(s));
+        return;
+      }
+      if (key.ctrl && (input === "k" || input === "K")) {
+        updateBuffer((s) => killLine(s));
+        return;
+      }
+      if (key.ctrl && (input === "u" || input === "U")) {
+        updateBuffer(() => EMPTY_BUFFER);
+        return;
+      }
+      if (key.ctrl && (input === "w" || input === "W")) {
+        updateBuffer((s) => deleteWordBefore(s));
+        return;
+      }
+      if (key.meta && (input === "d" || input === "D")) {
+        updateBuffer((s) => deleteWordAfter(s));
+        return;
+      }
+      if (key.meta && (input === "\x7F" || input === "\b")) {
+        updateBuffer((s) => deleteWordBefore(s));
+        return;
+      }
+      if (key.ctrl && (input === "j" || input === "J")) {
+        updateBuffer((s) => insertText(s, "\n"));
+        return;
+      }
+      if (key.ctrl && key.shift && input === "-") {
+        redo();
+        return;
+      }
+      if (key.ctrl && input === "-") {
+        undo();
+        return;
+      }
+      if (input.startsWith("\x1B")) {
+        return;
+      }
+      if (input && !key.ctrl && !key.meta) {
+        const sanitized = input.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        updateBuffer((s) => insertText(s, sanitized));
+      }
+    },
+    { isActive: !disabled }
+  );
+  function undo() {
+    const previous = undoPromptEdit(undoRedoRef.current, buffer);
+    if (!previous) {
+      return;
+    }
+    exitHistoryBrowsing();
+    setBuffer(previous);
+  }
+  function redo() {
+    const next = redoPromptEdit(undoRedoRef.current, buffer);
+    if (!next) {
+      return;
+    }
+    exitHistoryBrowsing();
+    setBuffer(next);
+  }
+  function clearUndoRedoStacks() {
+    clearPromptUndoRedoState(undoRedoRef.current);
+  }
+  function exitHistoryBrowsing() {
+    setHistoryCursor(-1);
+    setDraftBeforeHistory(null);
+  }
+  function updateBuffer(updater) {
+    exitHistoryBrowsing();
+    setBuffer((current) => {
+      const next = updater(current);
+      recordPromptEdit(undoRedoRef.current, current, next);
+      return next;
+    });
+  }
+  function navigateHistory(direction) {
+    if (promptHistory.length === 0) {
+      return;
+    }
+    const previousCursor = historyCursor === -1 ? promptHistory.length : historyCursor;
+    const nextCursor = Math.max(0, Math.min(promptHistory.length, previousCursor + direction));
+    const draft = historyCursor === -1 ? buffer.text : draftBeforeHistory;
+    if (historyCursor === -1) {
+      setDraftBeforeHistory(buffer.text);
+    }
+    if (nextCursor === promptHistory.length) {
+      const text2 = draft ?? "";
+      setBuffer({ text: text2, cursor: text2.length });
+      setHistoryCursor(-1);
+      setDraftBeforeHistory(null);
+      return;
+    }
+    const text = promptHistory[nextCursor] ?? "";
+    setBuffer({ text, cursor: text.length });
+    setHistoryCursor(nextCursor);
+  }
+  function insertFileMentionSelection(item) {
+    if (!fileMentionToken) {
+      return;
+    }
+    updateBuffer((state) => replaceCurrentFileMentionToken(state, fileMentionToken, item.path));
+    setDismissedFileMentionKey(null);
+  }
+  function handleSlashSelection(item) {
+    if (busy && item.kind !== "exit") {
+      setStatusMessage("wait for the current response or press esc to interrupt");
+      return;
+    }
+    if (item.kind === "skill" && item.skill) {
+      addSelectedSkill(item.skill);
+      clearSlashToken();
+      setShowSkillsDropdown(false);
+      return;
+    }
+    if (item.kind === "skills") {
+      clearSlashToken();
+      setShowSkillsDropdown(true);
+      return;
+    }
+    if (item.kind === "model") {
+      clearSlashToken();
+      openModelDropdown();
+      return;
+    }
+    if (item.kind === "raw") {
+      clearSlashToken();
+      setOpenRawModelDropdown(true);
+      return;
+    }
+    if (item.kind === "new") {
+      onSubmit({ text: "", imageUrls: [], command: "new" });
+      setBuffer(EMPTY_BUFFER);
+      clearUndoRedoStacks();
+      setImageUrls([]);
+      setSelectedSkills([]);
+      setShowSkillsDropdown(false);
+      return;
+    }
+    if (item.kind === "init") {
+      onSubmit(buildInitPromptSubmission(selectedSkills));
+      setBuffer(EMPTY_BUFFER);
+      clearUndoRedoStacks();
+      setImageUrls([]);
+      setSelectedSkills([]);
+      setShowSkillsDropdown(false);
+      return;
+    }
+    if (item.kind === "resume") {
+      onSubmit({ text: "", imageUrls: [], command: "resume" });
+      setBuffer(EMPTY_BUFFER);
+      clearUndoRedoStacks();
+      setImageUrls([]);
+      setSelectedSkills([]);
+      setShowSkillsDropdown(false);
+      return;
+    }
+    if (item.kind === "continue") {
+      onSubmit({ text: "/continue", imageUrls: [], command: "continue" });
+      setBuffer(EMPTY_BUFFER);
+      clearUndoRedoStacks();
+      setImageUrls([]);
+      setSelectedSkills([]);
+      setShowSkillsDropdown(false);
+      return;
+    }
+    if (item.kind === "mcp") {
+      onSubmit({ text: "/mcp", imageUrls: [], command: "mcp" });
+      setBuffer(EMPTY_BUFFER);
+      clearUndoRedoStacks();
+      setImageUrls([]);
+      setSelectedSkills([]);
+      setShowSkillsDropdown(false);
+      return;
+    }
+    if (item.kind === "exit") {
+      onSubmit({ text: "/exit", imageUrls: [], command: "exit" });
+      setBuffer(EMPTY_BUFFER);
+      clearUndoRedoStacks();
+      return;
+    }
+  }
+  function submitCurrentBuffer() {
+    if (busy) {
+      setStatusMessage("wait for the current response or press esc to interrupt");
+      return;
+    }
+    const trimmed = buffer.text.trim();
+    if (!trimmed && imageUrls.length === 0 && selectedSkills.length === 0) {
+      return;
+    }
+    if (trimmed.startsWith("/")) {
+      const exactMatch = findExactSlashCommand(slashItems, trimmed.split(/\s+/, 1)[0]);
+      if (exactMatch) {
+        handleSlashSelection(exactMatch);
+        return;
+      }
+    }
+    onSubmit({
+      text: buffer.text,
+      imageUrls,
+      selectedSkills,
+    });
+    setBuffer(EMPTY_BUFFER);
+    clearUndoRedoStacks();
+    setImageUrls([]);
+    setSelectedSkills([]);
+    setShowSkillsDropdown(false);
+  }
+  function addSelectedSkill(skill) {
+    setSelectedSkills((prev) => addUniqueSkill(prev, skill));
+  }
+  function toggleSelectedSkill(skill) {
+    setSelectedSkills((prev) => toggleSkillSelection(prev, skill));
+  }
+  function clearSlashToken() {
+    exitHistoryBrowsing();
+    setBuffer((state) => removeCurrentSlashToken(state));
+    clearUndoRedoStacks();
+  }
+  function openModelDropdown() {
+    const currentModelIndex = MODEL_COMMAND_MODELS.findIndex((model) => model === modelConfig.model);
+    setPendingModel(null);
+    setModelDropdownStep("model");
+    setModelDropdownIndex(currentModelIndex >= 0 ? currentModelIndex : 0);
+    setShowSkillsDropdown(false);
+  }
+  function closeModelDropdown() {
+    setModelDropdownStep(null);
+    setPendingModel(null);
+  }
+  function selectModelDropdownItem() {
+    if (modelDropdownStep === "model") {
+      const model = MODEL_COMMAND_MODELS[modelDropdownIndex] ?? modelConfig.model;
+      setPendingModel(model);
+      setModelDropdownStep("thinking");
+      setModelDropdownIndex(getThinkingOptionIndex(modelConfig));
+      return;
+    }
+    const option = MODEL_COMMAND_THINKING_OPTIONS[modelDropdownIndex] ?? MODEL_COMMAND_THINKING_OPTIONS[0];
+    const selection = {
+      model: pendingModel ?? modelConfig.model,
+      thinkingEnabled: option.thinkingEnabled,
+      reasoningEffort: option.reasoningEffort ?? modelConfig.reasoningEffort,
     };
-    stdout.on("resize", handleResize);
-    return () => {
-      stdout.off("resize", handleResize);
-    };
-  }, [stdout]);
-  return size;
+    closeModelDropdown();
+    Promise.resolve(onModelConfigChange(selection))
+      .then((message) => {
+        if (message) {
+          setStatusMessage(message);
+        }
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatusMessage(`Failed to update model settings: ${message}`);
+      });
+  }
+  const modelDropdownItems =
+    modelDropdownStep === "model"
+      ? MODEL_COMMAND_MODELS.map((model) => ({
+          label: model,
+          selected: model === (pendingModel ?? modelConfig.model),
+          description: model === modelConfig.model ? "current model" : "",
+        }))
+      : MODEL_COMMAND_THINKING_OPTIONS.map((option) => ({
+          label: option.label,
+          selected: getThinkingOptionIndex(modelConfig) === MODEL_COMMAND_THINKING_OPTIONS.indexOf(option),
+          description: option.thinkingEnabled ? `reasoningEffort: ${option.reasoningEffort}` : "thinking disabled",
+        }));
+  const showFooterText = useMemo2(
+    () => showMenu || showSkillsDropdown || openRawModelDropdown || modelDropdownStep !== null || showFileMentionMenu,
+    [showMenu, showSkillsDropdown, modelDropdownStep, openRawModelDropdown, showFileMentionMenu]
+  );
+  const matchedCommand = slashToken ? findExactSlashCommand(slashItems, slashToken) : null;
+  const inlineHint = matchedCommand?.args ? ` ${matchedCommand.args.join(ARGS_SEPARATOR)}` : "";
+  return /* @__PURE__ */ jsxs4(Box4, {
+    flexDirection: "column",
+    width: screenWidth,
+    children: [
+      imageUrls.length > 0
+        ? /* @__PURE__ */ jsxs4(Box4, {
+            children: [
+              /* @__PURE__ */ jsx6(Text4, {
+                color: "magenta",
+                children: formatImageAttachmentStatus(imageUrls.length),
+              }),
+              /* @__PURE__ */ jsx6(Text4, { dimColor: true, children: ` (${IMAGE_ATTACHMENT_CLEAR_HINT})` }),
+            ],
+          })
+        : null,
+      selectedSkills.length > 0
+        ? /* @__PURE__ */ jsxs4(Box4, {
+            children: [
+              /* @__PURE__ */ jsx6(Text4, {
+                color: "magenta",
+                wrap: "truncate-end",
+                children: formatSelectedSkillsStatus(selectedSkills),
+              }),
+              /* @__PURE__ */ jsx6(Text4, { dimColor: true, children: " (use /skills to edit)" }),
+            ],
+          })
+        : null,
+      /* @__PURE__ */ jsxs4(Box4, {
+        borderStyle: "single",
+        borderTop: true,
+        borderBottom: true,
+        borderLeft: false,
+        borderRight: false,
+        borderDimColor: true,
+        children: [
+          /* @__PURE__ */ jsx6(PromptPrefixLine, { busy }),
+          /* @__PURE__ */ jsx6(Text4, {
+            children: renderBufferWithCursor(buffer, !disabled && hasTerminalFocus, placeholder),
+          }),
+          inlineHint ? /* @__PURE__ */ jsx6(Text4, { dimColor: true, children: inlineHint }) : null,
+        ],
+      }),
+      /* @__PURE__ */ jsx6(RawModelDropdown_default, {
+        open: openRawModelDropdown,
+        onClose: setOpenRawModelDropdown,
+        onSelect: (mode) => onRawModeChange?.(mode),
+        screenWidth,
+      }),
+      showSkillsDropdown
+        ? /* @__PURE__ */ jsx6(DropdownMenu_default, {
+            width: screenWidth,
+            title: "Select Skills",
+            helpText: "Space toggle \xB7 Enter toggle \xB7 Esc to close",
+            emptyText: "No skills found",
+            items: skills.map((skill) => ({
+              key: skill.path || skill.name,
+              label: skill.name,
+              description: skill.path,
+              selected: isSkillSelected(selectedSkills, skill),
+              statusIndicator: skill.isLoaded ? { symbol: "\u2713", color: "green" } : void 0,
+            })),
+            activeIndex: skillsDropdownIndex,
+            activeColor: "#229ac3",
+            maxVisible: 6,
+          })
+        : null,
+      modelDropdownStep
+        ? /* @__PURE__ */ jsx6(DropdownMenu_default, {
+            width: screenWidth,
+            title: modelDropdownStep === "model" ? "Select Model" : "Select Thinking Mode",
+            helpText:
+              modelDropdownStep === "model"
+                ? "Space/Enter select model \xB7 Esc to cancel"
+                : "Space/Enter apply \xB7 Esc to cancel",
+            items: modelDropdownItems.map((item) => ({
+              key: item.label,
+              label: item.label,
+              description: item.description,
+              selected: item.selected,
+            })),
+            activeIndex: modelDropdownIndex,
+            activeColor: "#229ac3",
+            maxVisible: 6,
+          })
+        : null,
+      showFileMentionMenu
+        ? /* @__PURE__ */ jsx6(DropdownMenu_default, {
+            width: screenWidth,
+            title: "Mention File",
+            helpText: "Enter/Tab insert \xB7 Esc close",
+            emptyText: fileMentionToken?.query ? "No matching files" : "Type after @ to search files",
+            items: fileMentionMatches.map((item) => ({
+              key: item.path,
+              label: item.path,
+              description: item.type === "directory" ? "directory" : "file",
+            })),
+            activeIndex: fileMentionIndex,
+            activeColor: "#229ac3",
+            maxVisible: 8,
+            renderItem: (item, isActive) =>
+              /* @__PURE__ */ jsxs4(Box4, {
+                flexDirection: "row",
+                paddingX: 1,
+                gap: 1,
+                children: [
+                  /* @__PURE__ */ jsx6(Text4, {
+                    color: isActive ? "#229ac3" : void 0,
+                    children: isActive ? "> " : "  ",
+                  }),
+                  /* @__PURE__ */ jsx6(Box4, {
+                    flexGrow: 1,
+                    children: /* @__PURE__ */ jsx6(Text4, {
+                      color: isActive ? "#229ac3" : void 0,
+                      wrap: "truncate-end",
+                      bold: isActive,
+                      children: item.label,
+                    }),
+                  }),
+                  item.description
+                    ? /* @__PURE__ */ jsx6(Box4, {
+                        width: 10,
+                        flexShrink: 0,
+                        children: /* @__PURE__ */ jsx6(Text4, { dimColor: true, children: item.description }),
+                      })
+                    : null,
+                ],
+              }),
+          })
+        : null,
+      /* @__PURE__ */ jsx6(SlashCommandMenu_default, { width: screenWidth, items: slashMenu, activeIndex: menuIndex }),
+      !showFooterText &&
+        /* @__PURE__ */ jsx6(Box4, { children: /* @__PURE__ */ jsx6(Text4, { dimColor: true, children: footerText }) }),
+    ],
+  });
+});
+var IMAGE_ATTACHMENT_CLEAR_HINT = "ctrl+x clear images";
+function formatImageAttachmentStatus(count) {
+  if (count <= 0) {
+    return "";
+  }
+  return `\u{1F4CE} ${count} image${count === 1 ? "" : "s"} attached`;
+}
+function formatSelectedSkillsStatus(skills) {
+  const names = skills.map((skill) => skill.name).filter(Boolean);
+  if (names.length === 0) {
+    return "";
+  }
+  return `\u26A1 ${names.join(", ")}`;
+}
+function isSkillSelected(skills, skill) {
+  return skills.some((item) => item.name === skill.name);
+}
+function addUniqueSkill(skills, skill) {
+  if (isSkillSelected(skills, skill)) {
+    return skills;
+  }
+  return [...skills, skill];
+}
+function toggleSkillSelection(skills, skill) {
+  return isSkillSelected(skills, skill) ? skills.filter((item) => item.name !== skill.name) : [...skills, skill];
+}
+function buildInitPromptSubmission(selectedSkills) {
+  return {
+    text: "/init",
+    imageUrls: [],
+    selectedSkills: selectedSkills.length > 0 ? selectedSkills : void 0,
+  };
+}
+function getThinkingOptionIndex(config) {
+  const index = MODEL_COMMAND_THINKING_OPTIONS.findIndex((option) => {
+    if (!config.thinkingEnabled) {
+      return !option.thinkingEnabled;
+    }
+    return option.thinkingEnabled && option.reasoningEffort === config.reasoningEffort;
+  });
+  return index >= 0 ? index : 0;
+}
+function removeCurrentSlashToken(state) {
+  let start = state.cursor;
+  while (start > 0 && !/\s/.test(state.text[start - 1] ?? "")) {
+    start -= 1;
+  }
+  const token = state.text.slice(start, state.cursor);
+  if (!token.startsWith("/")) {
+    return state;
+  }
+  const text = `${state.text.slice(0, start)}${state.text.slice(state.cursor)}`;
+  return { text, cursor: start };
+}
+function isClearImageAttachmentsShortcut(input, key) {
+  return key.ctrl && (input === "x" || input === "X");
+}
+function getPromptReturnKeyAction(key) {
+  if (!key.return) {
+    return null;
+  }
+  if (key.shift || key.meta) {
+    return "newline";
+  }
+  return "submit";
+}
+function renderBufferWithCursor(state, isFocused, placeholder) {
+  const text = state.text || "";
+  const cursor = Math.max(0, Math.min(state.cursor, text.length));
+  const before = text.slice(0, cursor);
+  const at = text[cursor];
+  const after = text.slice(cursor + 1);
+  if (text.length === 0 && placeholder) {
+    if (!isFocused) {
+      return chalk3.dim(`  ${placeholder}`);
+    }
+    return renderCursorCell(" ") + chalk3.dim(` ${placeholder}`);
+  }
+  if (!isFocused) {
+    return text.endsWith("\n") ? `${text} ` : text;
+  }
+  if (typeof at === "undefined") {
+    return before + renderCursorCell(" ");
+  }
+  if (at === "\n") {
+    return before + renderCursorCell(" ") + "\n" + after;
+  }
+  return before + renderCursorCell(at) + after;
+}
+function renderCursorCell(value) {
+  return `\x1B[7m${value}\x1B[27m`;
 }
 
 // src/ui/SessionList.tsx
-import { jsx as jsx4, jsxs as jsxs4 } from "react/jsx-runtime";
+import { useState as useState4, useMemo as useMemo3 } from "react";
+import { Box as Box5, Text as Text5, useInput as useInput3, useWindowSize } from "ink";
+import { jsx as jsx7, jsxs as jsxs5 } from "react/jsx-runtime";
 function SessionList({ sessions, onSelect, onCancel }) {
   const [index, setIndex] = useState4(0);
-  const { columns, rows } = useTerminalSize();
-  const maxVisibleSessions = useMemo(() => {
+  const { columns, rows } = useWindowSize();
+  const maxVisibleSessions = useMemo3(() => {
     const reservedLines = 8;
     const linesPerSession = 3;
     const availableLines = Math.max(0, Math.min(rows, 30) - reservedLines);
     return Math.max(1, Math.floor(availableLines / linesPerSession));
   }, [rows]);
-  const safeIndex = useMemo(() => {
+  const safeIndex = useMemo3(() => {
     if (sessions.length === 0) return 0;
     return Math.max(0, Math.min(index, sessions.length - 1));
   }, [index, sessions.length]);
-  const scrollOffset = useMemo(() => {
+  const scrollOffset = useMemo3(() => {
     if (safeIndex < maxVisibleSessions) return 0;
     return safeIndex - maxVisibleSessions + 1;
   }, [safeIndex, maxVisibleSessions]);
-  const visibleSessions = useMemo(() => {
+  const visibleSessions = useMemo3(() => {
     return sessions.slice(scrollOffset, scrollOffset + maxVisibleSessions);
   }, [sessions, scrollOffset, maxVisibleSessions]);
-  useTerminalInput((input, key) => {
+  useInput3((input, key) => {
     if (key.escape || (key.ctrl && (input === "c" || input === "C"))) {
       onCancel();
       return;
@@ -7341,40 +9245,40 @@ function SessionList({ sessions, onSelect, onCancel }) {
     }
   });
   if (sessions.length === 0) {
-    return /* @__PURE__ */ jsxs4(Box4, {
+    return /* @__PURE__ */ jsxs5(Box5, {
       flexDirection: "column",
       children: [
-        /* @__PURE__ */ jsx4(Text4, { color: "yellow", children: "No previous sessions found." }),
-        /* @__PURE__ */ jsx4(Text4, { dimColor: true, children: "Press Esc to go back." }),
+        /* @__PURE__ */ jsx7(Text5, { color: "yellow", children: "No previous sessions found." }),
+        /* @__PURE__ */ jsx7(Text5, { dimColor: true, children: "Press Esc to go back." }),
       ],
     });
   }
-  return /* @__PURE__ */ jsx4(Box4, {
+  return /* @__PURE__ */ jsx7(Box5, {
     flexDirection: "column",
     width: Math.max(20, columns - 6),
     height: Math.max(5, Math.min(rows - 1, 30)),
     overflow: "hidden",
     paddingX: 1,
     marginTop: 1,
-    children: /* @__PURE__ */ jsxs4(Box4, {
+    children: /* @__PURE__ */ jsxs5(Box5, {
       flexDirection: "column",
       borderStyle: "round",
       borderDimColor: true,
       flexGrow: 1,
       overflow: "hidden",
       children: [
-        /* @__PURE__ */ jsxs4(Box4, {
+        /* @__PURE__ */ jsxs5(Box5, {
           paddingX: 1,
           children: [
-            /* @__PURE__ */ jsx4(Text4, { bold: true, color: "cyanBright", children: "Resume a session" }),
-            /* @__PURE__ */ jsxs4(Text4, {
+            /* @__PURE__ */ jsx7(Text5, { bold: true, color: "cyanBright", children: "Resume a session" }),
+            /* @__PURE__ */ jsxs5(Text5, {
               bold: true,
               color: "#229ac3",
               children: [" ", "(", sessions.length, " total)"],
             }),
           ],
         }),
-        /* @__PURE__ */ jsxs4(Box4, {
+        /* @__PURE__ */ jsxs5(Box5, {
           borderTop: true,
           borderBottom: true,
           borderLeft: false,
@@ -7388,36 +9292,36 @@ function SessionList({ sessions, onSelect, onCancel }) {
           children: [
             visibleSessions.map((session, i) => {
               const actualIndex = scrollOffset + i;
-              return /* @__PURE__ */ jsxs4(
-                Box4,
+              return /* @__PURE__ */ jsxs5(
+                Box5,
                 {
                   height: 2,
                   marginBottom: 1,
                   children: [
-                    /* @__PURE__ */ jsx4(Box4, {
-                      children: /* @__PURE__ */ jsx4(Text4, {
+                    /* @__PURE__ */ jsx7(Box5, {
+                      children: /* @__PURE__ */ jsx7(Text5, {
                         color: "#229ac3",
-                        children: actualIndex === safeIndex ? "\u203A " : "  ",
+                        children: actualIndex === safeIndex ? "> " : "  ",
                       }),
                     }),
-                    /* @__PURE__ */ jsxs4(Box4, {
+                    /* @__PURE__ */ jsxs5(Box5, {
                       flexDirection: "column",
                       flexGrow: 1,
                       children: [
-                        /* @__PURE__ */ jsxs4(Box4, {
+                        /* @__PURE__ */ jsxs5(Box5, {
                           width: "100%",
                           children: [
-                            /* @__PURE__ */ jsx4(Text4, {
+                            /* @__PURE__ */ jsx7(Text5, {
                               ...(actualIndex === safeIndex ? { bold: true } : {}),
                               color: actualIndex === safeIndex ? "#229ac3" : void 0,
                               children: formatSessionTitle(session.summary || "Untitled"),
                             }),
-                            /* @__PURE__ */ jsxs4(Text4, { dimColor: true, children: [" (", session.status, ")"] }),
+                            /* @__PURE__ */ jsxs5(Text5, { dimColor: true, children: [" (", session.status, ")"] }),
                           ],
                         }),
-                        /* @__PURE__ */ jsx4(Box4, {
+                        /* @__PURE__ */ jsx7(Box5, {
                           width: "100%",
-                          children: /* @__PURE__ */ jsxs4(Text4, {
+                          children: /* @__PURE__ */ jsxs5(Text5, {
                             dimColor: true,
                             children: [formatTimestamp(session.updateTime), " "],
                           }),
@@ -7430,17 +9334,17 @@ function SessionList({ sessions, onSelect, onCancel }) {
               );
             }),
             scrollOffset > 0 || scrollOffset + maxVisibleSessions < sessions.length
-              ? /* @__PURE__ */ jsxs4(Box4, {
+              ? /* @__PURE__ */ jsxs5(Box5, {
                   marginTop: 1,
                   children: [
                     scrollOffset > 0
-                      ? /* @__PURE__ */ jsxs4(Text4, {
+                      ? /* @__PURE__ */ jsxs5(Text5, {
                           dimColor: true,
                           children: ["\u2026 ", scrollOffset, " newer sessions above. "],
                         })
                       : null,
                     scrollOffset + maxVisibleSessions < sessions.length
-                      ? /* @__PURE__ */ jsxs4(Text4, {
+                      ? /* @__PURE__ */ jsxs5(Text5, {
                           dimColor: true,
                           children: [
                             "\u2026 ",
@@ -7454,8 +9358,8 @@ function SessionList({ sessions, onSelect, onCancel }) {
               : null,
           ],
         }),
-        /* @__PURE__ */ jsx4(Box4, {
-          children: /* @__PURE__ */ jsx4(Text4, {
+        /* @__PURE__ */ jsx7(Box5, {
+          children: /* @__PURE__ */ jsx7(Text5, {
             dimColor: true,
             children: "\u2191/\u2193 navigate \xB7 PgUp/PgDn page \xB7 Enter select \xB7 Esc cancel",
           }),
@@ -7554,21 +9458,27 @@ function findExpandedThinkingId(messages) {
 }
 
 // src/ui/WelcomeScreen.tsx
-import { useMemo as useMemo2, useState as useState5 } from "react";
-import { Box as Box5, Text as Text6 } from "ink";
+import { useMemo as useMemo4, useState as useState5 } from "react";
+import { Box as Box6, Text as Text7 } from "ink";
 import * as os8 from "node:os";
-import path11 from "node:path";
+import path12 from "node:path";
 
 // src/ui/ThemedGradient.tsx
-import { Text as Text5 } from "ink";
+import { Text as Text6 } from "ink";
 import Gradient from "ink-gradient";
-import { jsx as jsx5 } from "react/jsx-runtime";
-var THEME_COLOR = "#229ac3";
+import { jsx as jsx8 } from "react/jsx-runtime";
 var ThemedGradient = ({ children, ...props }) => {
-  return /* @__PURE__ */ jsx5(Gradient, {
-    colors: [THEME_COLOR, THEME_COLOR],
-    children: /* @__PURE__ */ jsx5(Text5, { ...props, children }),
-  });
+  const gradient = ["#229ac3e6", "#229ac3e6"];
+  if (gradient && gradient.length >= 2) {
+    return /* @__PURE__ */ jsx8(Gradient, {
+      colors: gradient,
+      children: /* @__PURE__ */ jsx8(Text6, { ...props, children }),
+    });
+  }
+  if (gradient && gradient.length === 1) {
+    return /* @__PURE__ */ jsx8(Text6, { color: gradient[0], ...props, children });
+  }
+  return /* @__PURE__ */ jsx8(Text6, { color: "yellow", ...props, children });
 };
 
 // src/AsciiArt.ts
@@ -7582,7 +9492,7 @@ var AsciiLogo = [
 ].join("\n");
 
 // src/ui/WelcomeScreen.tsx
-import { jsx as jsx6, jsxs as jsxs5 } from "react/jsx-runtime";
+import { jsx as jsx9, jsxs as jsxs6 } from "react/jsx-runtime";
 var TITLE_PANEL_WIDTH = 70;
 var PANEL_CONTENT_HEIGHT = 8;
 var SHORTCUT_TIPS = [
@@ -7593,72 +9503,76 @@ var SHORTCUT_TIPS = [
   { label: "/", description: "Open the skills and commands menu" },
   { label: "Ctrl+D twice", description: "Quit Deep Code CLI" },
 ];
-function WelcomeScreen({ projectRoot, settings, skills, version, width }) {
-  const tips = useMemo2(() => buildWelcomeTips(skills), [skills]);
+function WelcomeScreen({ projectRoot: projectRoot2, settings, skills, width }) {
+  const { version } = useAppContext();
+  const tips = useMemo4(() => buildWelcomeTips(skills), [skills]);
   const [tipIndex] = useState5(() => randomTipIndex(tips.length));
   const compact = width < TITLE_PANEL_WIDTH + 42;
-  const cwd = formatHomeRelativePath(projectRoot);
+  const cwd = formatHomeRelativePath(projectRoot2);
   const tip = tips[Math.min(tipIndex, Math.max(0, tips.length - 1))] ?? tips[0];
   const panelWidth = compact ? void 0 : Math.min(width, 72);
-  return /* @__PURE__ */ jsxs5(Box5, {
+  return /* @__PURE__ */ jsxs6(Box6, {
     flexDirection: "column",
     marginY: 1,
     children: [
-      /* @__PURE__ */ jsx6(Box5, {
+      /* @__PURE__ */ jsx9(Box6, {
         flexDirection: "column",
         width: panelWidth,
-        children: /* @__PURE__ */ jsxs5(Box5, {
+        children: /* @__PURE__ */ jsxs6(Box6, {
           flexDirection: "column",
           paddingX: 1,
           children: [
-            /* @__PURE__ */ jsx6(Box5, {
+            /* @__PURE__ */ jsx9(Box6, {
               flexDirection: "column",
               justifyContent: "center",
               paddingX: 1,
-              children: /* @__PURE__ */ jsx6(Box5, {
+              children: /* @__PURE__ */ jsx9(Box6, {
                 justifyContent: "center",
                 width: compact ? void 0 : TITLE_PANEL_WIDTH,
-                children: /* @__PURE__ */ jsx6(ThemedGradient, { children: AsciiLogo }),
+                children: /* @__PURE__ */ jsx9(ThemedGradient, { children: AsciiLogo }),
               }),
             }),
-            /* @__PURE__ */ jsxs5(Box5, {
+            /* @__PURE__ */ jsxs6(Box6, {
               borderStyle: "round",
-              borderColor: "#229ac3",
+              borderColor: "#229ac3e6",
               flexDirection: "column",
               flexGrow: 1,
               height: compact ? void 0 : PANEL_CONTENT_HEIGHT,
               marginTop: compact ? 1 : 0,
               paddingX: 1,
               children: [
-                /* @__PURE__ */ jsxs5(Box5, {
+                /* @__PURE__ */ jsxs6(Box6, {
                   flexGrow: 1,
                   marginBottom: compact ? 1 : 0,
                   children: [
-                    /* @__PURE__ */ jsxs5(Text6, { color: "#229ac3", children: [">", "_ Deep Code "] }),
-                    /* @__PURE__ */ jsxs5(Text6, { color: "gray", children: [" (v", version || "unknown", ")"] }),
+                    /* @__PURE__ */ jsxs6(Text7, { color: "#229ac3e6", children: [">", "_ Deep Code "] }),
+                    /* @__PURE__ */ jsxs6(Text7, { color: "gray", children: [" (v", version || "unknown", ")"] }),
                   ],
                 }),
-                !compact ? /* @__PURE__ */ jsx6(Text6, { children: " " }) : null,
-                /* @__PURE__ */ jsx6(SettingRow, { label: "Model", value: settings.model }),
-                /* @__PURE__ */ jsx6(SettingRow, {
+                !compact ? /* @__PURE__ */ jsx9(Text7, { children: " " }) : null,
+                /* @__PURE__ */ jsx9(SettingRow, { label: "Model", value: settings.model }),
+                /* @__PURE__ */ jsx9(SettingRow, {
                   label: "Thinking Enabled",
                   value: String(settings.thinkingEnabled),
                 }),
-                /* @__PURE__ */ jsx6(SettingRow, { label: "Reasoning Effort", value: settings.reasoningEffort }),
-                /* @__PURE__ */ jsx6(SettingRow, { label: "CWD", value: cwd }),
+                /* @__PURE__ */ jsx9(SettingRow, {
+                  label: "Reasoning Effort",
+                  value: settings.thinkingEnabled ? settings.reasoningEffort : "-",
+                }),
+                /* @__PURE__ */ jsx9(SettingRow, { label: "CWD", value: cwd }),
               ],
             }),
           ],
         }),
       }),
-      /* @__PURE__ */ jsx6(Box5, {
+      /* @__PURE__ */ jsx9(Box6, {
         flexDirection: "column",
         width: panelWidth,
         paddingX: 1,
         children: tip
-          ? /* @__PURE__ */ jsx6(Box5, {
+          ? /* @__PURE__ */ jsx9(Box6, {
               marginTop: 1,
-              children: /* @__PURE__ */ jsxs5(Text6, {
+              children: /* @__PURE__ */ jsxs6(Text7, {
                 dimColor: true,
                 children: ["Tips: ", tip.label, " - ", tip.description],
               }),
@@ -7669,27 +9583,27 @@ function WelcomeScreen({ projectRoot, settings, skills, version, width }) {
   });
 }
 function SettingRow({ label, value }) {
-  return /* @__PURE__ */ jsxs5(Box5, {
+  return /* @__PURE__ */ jsxs6(Box6, {
     flexDirection: "row",
     children: [
-      /* @__PURE__ */ jsx6(Box5, { width: 20, children: /* @__PURE__ */ jsx6(Text6, { children: label }) }),
-      /* @__PURE__ */ jsx6(Box5, {
+      /* @__PURE__ */ jsx9(Box6, { width: 20, children: /* @__PURE__ */ jsx9(Text7, { children: label }) }),
+      /* @__PURE__ */ jsx9(Box6, {
         flexGrow: 1,
         justifyContent: "flex-end",
-        children: /* @__PURE__ */ jsx6(Text6, { children: value }),
+        children: /* @__PURE__ */ jsx9(Text7, { children: value }),
       }),
     ],
   });
 }
 function formatHomeRelativePath(value, home = os8.homedir()) {
-  const normalizedValue = path11.resolve(value);
-  const normalizedHome = path11.resolve(home);
-  const relative2 = path11.relative(normalizedHome, normalizedValue);
-  if (relative2 === "") {
+  const normalizedValue = path12.resolve(value);
+  const normalizedHome = path12.resolve(home);
+  const relative3 = path12.relative(normalizedHome, normalizedValue);
+  if (relative3 === "") {
     return "~";
   }
-  if (!relative2.startsWith("..") && !path11.isAbsolute(relative2)) {
-    return `~${path11.sep}${relative2}`;
+  if (!relative3.startsWith("..") && !path12.isAbsolute(relative3)) {
+    return `~${path12.sep}${relative3}`;
   }
   return normalizedValue;
 }
@@ -7710,9 +9624,9 @@ function randomTipIndex(length) {
 }
 
 // src/ui/AskUserQuestionPrompt.tsx
-import { useEffect as useEffect5, useMemo as useMemo3, useState as useState6 } from "react";
-import { Box as Box6, Text as Text7 } from "ink";
-import { jsx as jsx7, jsxs as jsxs6 } from "react/jsx-runtime";
+import { useEffect as useEffect3, useMemo as useMemo5, useState as useState6 } from "react";
+import { Box as Box7, Text as Text8 } from "ink";
+import { jsx as jsx10, jsxs as jsxs7 } from "react/jsx-runtime";
 var OTHER_VALUE = "__other__";
 function AskUserQuestionPrompt({ questions, onSubmit, onCancel }) {
   const [questionIndex, setQuestionIndex] = useState6(0);
@@ -7722,18 +9636,18 @@ function AskUserQuestionPrompt({ questions, onSubmit, onCancel }) {
   const [otherTexts, setOtherTexts] = useState6({});
   const [statusMessage, setStatusMessage] = useState6(null);
   const question = questions[questionIndex];
-  const options = useMemo3(() => buildOptions(question), [question]);
+  const options = useMemo5(() => buildOptions(question), [question]);
   const selectedForQuestion = selectedValues[questionIndex] ?? [];
   const otherText = otherTexts[questionIndex] ?? "";
   const isCurrentOther = options[cursorIndex]?.isOther === true;
-  useEffect5(() => {
+  useEffect3(() => {
     if (!statusMessage) {
       return;
     }
     const timer = setTimeout(() => setStatusMessage(null), 2500);
     return () => clearTimeout(timer);
   }, [statusMessage]);
-  useEffect5(() => {
+  useEffect3(() => {
     setQuestionIndex(0);
     setCursorIndex(0);
     setAnswers({});
@@ -7741,7 +9655,7 @@ function AskUserQuestionPrompt({ questions, onSubmit, onCancel }) {
     setOtherTexts({});
     setStatusMessage(null);
   }, [questions]);
-  useEffect5(() => {
+  useEffect3(() => {
     if (cursorIndex >= options.length) {
       setCursorIndex(Math.max(0, options.length - 1));
     }
@@ -7836,22 +9750,22 @@ function AskUserQuestionPrompt({ questions, onSubmit, onCancel }) {
     setQuestionIndex((index) => index + 1);
     setCursorIndex(0);
   }
-  return /* @__PURE__ */ jsxs6(Box6, {
+  return /* @__PURE__ */ jsxs7(Box7, {
     flexDirection: "column",
     borderStyle: "round",
     borderColor: "yellow",
     paddingX: 1,
     marginY: 1,
     children: [
-      /* @__PURE__ */ jsxs6(Box6, {
+      /* @__PURE__ */ jsxs7(Box7, {
         marginBottom: 1,
         children: [
-          /* @__PURE__ */ jsx7(Text7, { color: "yellow", bold: true, children: "Answer questions" }),
-          /* @__PURE__ */ jsxs6(Text7, { dimColor: true, children: [" ", questionIndex + 1, "/", questions.length] }),
+          /* @__PURE__ */ jsx10(Text8, { color: "yellow", bold: true, children: "Answer questions" }),
+          /* @__PURE__ */ jsxs7(Text8, { dimColor: true, children: [" ", questionIndex + 1, "/", questions.length] }),
         ],
       }),
-      /* @__PURE__ */ jsx7(Text7, { bold: true, children: question.question }),
-      /* @__PURE__ */ jsx7(Box6, {
+      /* @__PURE__ */ jsx10(Text8, { bold: true, children: question.question }),
+      /* @__PURE__ */ jsx10(Box7, {
         flexDirection: "column",
         marginTop: 1,
         children: options.map((option, index) => {
@@ -7860,22 +9774,22 @@ function AskUserQuestionPrompt({ questions, onSubmit, onCancel }) {
             ? selectedForQuestion.includes(OTHER_VALUE) || Boolean(otherText.trim())
             : selectedForQuestion.includes(option.value) || answers[question.question] === option.label;
           const marker = question.multiSelect ? (isSelected ? "[x]" : "[ ]") : isSelected ? "\u25CF" : "\u25CB";
-          return /* @__PURE__ */ jsxs6(
-            Box6,
+          return /* @__PURE__ */ jsxs7(
+            Box7,
             {
               flexDirection: "column",
               children: [
-                /* @__PURE__ */ jsxs6(Text7, {
+                /* @__PURE__ */ jsxs7(Text8, {
                   color: isCursor ? "cyanBright" : void 0,
                   children: [
-                    isCursor ? "\u203A " : "  ",
+                    isCursor ? "> " : "  ",
                     marker,
                     " ",
-                    /* @__PURE__ */ jsx7(Text7, { bold: isCursor, children: option.label }),
+                    /* @__PURE__ */ jsx10(Text8, { bold: isCursor, children: option.label }),
                   ],
                 }),
                 option.isOther
-                  ? /* @__PURE__ */ jsx7(Box6, {
+                  ? /* @__PURE__ */ jsx10(Box7, {
                       marginLeft: 4,
                       marginTop: 0,
                       borderStyle: "single",
@@ -7883,23 +9797,23 @@ function AskUserQuestionPrompt({ questions, onSubmit, onCancel }) {
                       paddingX: 1,
                       width: 64,
                       children: otherText
-                        ? /* @__PURE__ */ jsxs6(Text7, {
+                        ? /* @__PURE__ */ jsxs7(Text8, {
                             color: "white",
                             children: [
                               otherText,
                               isCursor
-                                ? /* @__PURE__ */ jsx7(Text7, { color: "cyanBright", children: "\u258C" })
+                                ? /* @__PURE__ */ jsx10(Text8, { color: "cyanBright", children: "\u258C" })
                                 : null,
                             ],
                           })
-                        : /* @__PURE__ */ jsx7(Text7, {
+                        : /* @__PURE__ */ jsx10(Text8, {
                             dimColor: true,
                             children: isCursor ? "type your answer here" : "type a custom answer",
                           }),
                     })
                   : null,
                 option.description
-                  ? /* @__PURE__ */ jsxs6(Text7, { dimColor: true, children: [" ", option.description] })
+                  ? /* @__PURE__ */ jsxs7(Text8, { dimColor: true, children: [" ", option.description] })
                   : null,
               ],
             },
@@ -7907,9 +9821,9 @@ function AskUserQuestionPrompt({ questions, onSubmit, onCancel }) {
           );
         }),
       }),
-      /* @__PURE__ */ jsx7(Box6, {
+      /* @__PURE__ */ jsx10(Box7, {
         marginTop: 1,
-        children: /* @__PURE__ */ jsx7(Text7, {
+        children: /* @__PURE__ */ jsx10(Text8, {
           dimColor: true,
           children:
             statusMessage ??
@@ -7962,6 +9876,672 @@ function buildAnswerForQuestion(question, focusedOption, selectedValues, otherTe
     return trimmedOther || null;
   }
   return focusedOption.label;
+}
+
+// src/ui/McpStatusList.tsx
+import React9, { useState as useState7, useMemo as useMemo6, useCallback as useCallback2 } from "react";
+import { Box as Box8, Text as Text9, useInput as useInput4, useWindowSize as useWindowSize2 } from "ink";
+import { jsx as jsx11, jsxs as jsxs8 } from "react/jsx-runtime";
+function McpStatusList({ statuses, onCancel }) {
+  const { columns, rows } = useWindowSize2();
+  const [viewMode, setViewMode] = useState7("server-list");
+  const [selectedServerIndex, setSelectedServerIndex] = useState7(0);
+  const goBack = useCallback2(() => {
+    setViewMode("server-list");
+  }, []);
+  const enterDetail = useCallback2(() => {
+    const server = statuses[selectedServerIndex];
+    if (server && server.status === "ready") {
+      setViewMode("server-detail");
+    }
+  }, [statuses, selectedServerIndex]);
+  useInput4((input, key) => {
+    if (statuses.length === 0 && (key.escape || (key.ctrl && (input === "c" || input === "C")))) {
+      onCancel();
+    }
+  });
+  if (statuses.length === 0) {
+    return /* @__PURE__ */ jsxs8(Box8, {
+      flexDirection: "column",
+      marginLeft: 1,
+      paddingX: 1,
+      gap: 1,
+      borderStyle: "round",
+      borderDimColor: true,
+      children: [
+        /* @__PURE__ */ jsxs8(Box8, {
+          flexDirection: "column",
+          children: [
+            /* @__PURE__ */ jsx11(Text9, { color: "#229ac3", bold: true, children: "Manage MCP servers" }),
+            /* @__PURE__ */ jsx11(Text9, { dimColor: true, children: "0 servers" }),
+          ],
+        }),
+        /* @__PURE__ */ jsxs8(Box8, {
+          flexDirection: "column",
+          children: [
+            /* @__PURE__ */ jsx11(Text9, { dimColor: true, children: "No MCP servers configured." }),
+            /* @__PURE__ */ jsx11(Text9, {
+              dimColor: true,
+              children: "Add MCP servers to your settings to get started.",
+            }),
+          ],
+        }),
+        /* @__PURE__ */ jsx11(Text9, { dimColor: true, children: "Esc to close" }),
+      ],
+    });
+  }
+  if (viewMode === "server-detail") {
+    return /* @__PURE__ */ jsx11(ServerDetailView, {
+      server: statuses[selectedServerIndex],
+      onBack: goBack,
+      onCancel,
+      rows,
+      columns,
+    });
+  }
+  return /* @__PURE__ */ jsx11(ServerListView, {
+    statuses,
+    selectedIndex: selectedServerIndex,
+    onSelect: setSelectedServerIndex,
+    onEnter: enterDetail,
+    onCancel,
+    rows,
+    columns,
+  });
+}
+function ServerListView({ statuses, selectedIndex, onSelect, onEnter, onCancel, rows, columns }) {
+  const [scrollOffset, setScrollOffset] = useState7(0);
+  const serverCount = statuses.length;
+  const maxVisible = useMemo6(() => {
+    const reservedLines = 8;
+    const availableLines = Math.max(0, Math.min(rows, 30) - reservedLines);
+    return Math.max(1, Math.floor(availableLines / 3));
+  }, [rows]);
+  const labelColumnWidth = useMemo6(() => {
+    if (serverCount === 0) return 0;
+    const longestName = Math.max(...statuses.map((s) => s.name.length));
+    const contentWidth = longestName + 5;
+    const maxAllowed = Math.max(15, Math.floor((columns - 6) * 0.4));
+    return Math.min(contentWidth, maxAllowed);
+  }, [statuses, serverCount, columns]);
+  const safeIndex = useMemo6(() => {
+    if (serverCount === 0) return 0;
+    return Math.max(0, Math.min(selectedIndex, serverCount - 1));
+  }, [selectedIndex, serverCount]);
+  React9.useEffect(() => {
+    if (safeIndex < scrollOffset) {
+      setScrollOffset(safeIndex);
+    } else if (safeIndex >= scrollOffset + maxVisible) {
+      setScrollOffset(safeIndex - maxVisible + 1);
+    }
+  }, [safeIndex, scrollOffset, maxVisible]);
+  const visibleServers = useMemo6(() => {
+    return statuses.slice(scrollOffset, scrollOffset + maxVisible);
+  }, [statuses, scrollOffset, maxVisible]);
+  useInput4((input, key) => {
+    if (key.escape || (key.ctrl && (input === "c" || input === "C"))) {
+      onCancel();
+      return;
+    }
+    if (serverCount === 0) {
+      return;
+    }
+    if (key.upArrow) {
+      onSelect(Math.max(0, selectedIndex - 1));
+      return;
+    }
+    if (key.downArrow) {
+      onSelect(Math.min(serverCount - 1, selectedIndex + 1));
+      return;
+    }
+    if (key.pageUp) {
+      onSelect(Math.max(0, selectedIndex - maxVisible));
+      return;
+    }
+    if (key.pageDown) {
+      onSelect(Math.min(serverCount - 1, selectedIndex + maxVisible));
+      return;
+    }
+    if (key.home) {
+      onSelect(0);
+      return;
+    }
+    if (key.end) {
+      onSelect(serverCount - 1);
+    }
+    if (key.return) {
+      onEnter();
+      return;
+    }
+  });
+  const readyCount = statuses.filter((s) => s.status === "ready").length;
+  const startingCount = statuses.filter((s) => s.status === "starting").length;
+  const failedCount = statuses.filter((s) => s.status === "failed").length;
+  return /* @__PURE__ */ jsx11(Box8, {
+    flexDirection: "column",
+    width: Math.max(20, columns - 6),
+    height: Math.max(5, Math.min(rows - 1, 30)),
+    overflow: "hidden",
+    paddingX: 1,
+    marginTop: 1,
+    children: /* @__PURE__ */ jsxs8(Box8, {
+      flexDirection: "column",
+      borderStyle: "round",
+      borderDimColor: true,
+      flexGrow: 1,
+      overflow: "hidden",
+      children: [
+        /* @__PURE__ */ jsxs8(Box8, {
+          paddingX: 1,
+          gap: 1,
+          children: [
+            /* @__PURE__ */ jsx11(Text9, { bold: true, color: "#229ac3", children: "Manage MCP servers" }),
+            /* @__PURE__ */ jsxs8(Box8, {
+              gap: 1,
+              children: [
+                /* @__PURE__ */ jsx11(Text9, { dimColor: true, children: "(" }),
+                /* @__PURE__ */ jsxs8(Text9, { color: "green", bold: true, children: [readyCount, " ready,"] }),
+                /* @__PURE__ */ jsxs8(Text9, { color: "yellow", bold: true, children: [startingCount, " starting,"] }),
+                /* @__PURE__ */ jsxs8(Text9, { color: "red", bold: true, children: [failedCount, " failed"] }),
+                /* @__PURE__ */ jsx11(Text9, { dimColor: true, children: ")" }),
+              ],
+            }),
+          ],
+        }),
+        /* @__PURE__ */ jsxs8(Box8, {
+          borderTop: true,
+          borderBottom: true,
+          borderLeft: false,
+          borderRight: false,
+          borderStyle: "round",
+          borderDimColor: true,
+          flexDirection: "column",
+          flexGrow: 1,
+          paddingX: 1,
+          overflow: "hidden",
+          children: [
+            visibleServers.map((status, i) => {
+              const actualIndex = scrollOffset + i;
+              const isSelected = actualIndex === safeIndex;
+              return /* @__PURE__ */ jsx11(
+                ServerRow,
+                {
+                  status,
+                  selected: isSelected,
+                  labelColumnWidth,
+                },
+                `server-${status.name}`
+              );
+            }),
+            scrollOffset > 0 || scrollOffset + maxVisible < serverCount
+              ? /* @__PURE__ */ jsxs8(Box8, {
+                  marginTop: 1,
+                  children: [
+                    scrollOffset > 0
+                      ? /* @__PURE__ */ jsxs8(Text9, {
+                          dimColor: true,
+                          children: ["\u2026 ", scrollOffset, " servers above. "],
+                        })
+                      : null,
+                    scrollOffset + maxVisible < serverCount
+                      ? /* @__PURE__ */ jsxs8(Text9, {
+                          dimColor: true,
+                          children: ["\u2026 ", serverCount - scrollOffset - maxVisible, " servers below."],
+                        })
+                      : null,
+                  ],
+                })
+              : null,
+          ],
+        }),
+        /* @__PURE__ */ jsx11(Box8, {
+          paddingX: 1,
+          children: /* @__PURE__ */ jsx11(Text9, {
+            dimColor: true,
+            children: "\u2191/\u2193 navigate \xB7 Enter view details \xB7 Esc close",
+          }),
+        }),
+      ],
+    }),
+  });
+}
+function ServerRow({ status, selected, labelColumnWidth }) {
+  const icon = status.status === "ready" ? "\u2713" : status.status === "failed" ? "\u2717" : "\u25CF";
+  const color = status.status === "ready" ? "green" : status.status === "failed" ? "red" : "yellow";
+  const [dots, setDots] = React9.useState(0);
+  React9.useEffect(() => {
+    if (status.status !== "starting") return;
+    const interval = setInterval(() => {
+      setDots((d) => (d + 1) % 4);
+    }, 500);
+    return () => clearInterval(interval);
+  }, [status.status]);
+  const detail =
+    status.status === "ready"
+      ? `Ready (${status.toolCount} tools, ${status.promptCount} prompts, ${status.resourceCount} resources)`
+      : status.status === "failed"
+        ? `Failed`
+        : "Starting" + (dots > 0 ? ".".repeat(dots) : "   ");
+  return /* @__PURE__ */ jsxs8(Box8, {
+    flexDirection: "column",
+    marginBottom: 1,
+    children: [
+      /* @__PURE__ */ jsxs8(Box8, {
+        gap: 2,
+        children: [
+          /* @__PURE__ */ jsx11(Box8, {
+            width: labelColumnWidth,
+            flexShrink: 0,
+            children: /* @__PURE__ */ jsxs8(Text9, {
+              color: selected ? "#229ac3" : void 0,
+              children: [
+                selected ? "> " : "  ",
+                /* @__PURE__ */ jsxs8(Text9, { color, children: [icon, " "] }),
+                /* @__PURE__ */ jsx11(Text9, { bold: true, children: status.name }),
+              ],
+            }),
+          }),
+          /* @__PURE__ */ jsx11(Box8, {
+            flexGrow: 1,
+            children: /* @__PURE__ */ jsx11(Text9, { dimColor: true, children: detail }),
+          }),
+        ],
+      }),
+      status.status === "failed" && status.error ? /* @__PURE__ */ jsx11(ErrorRow, { error: status.error }) : null,
+    ],
+  });
+}
+function ServerDetailView({ server, onBack, onCancel, rows, columns }) {
+  const [activeIndex, setActiveIndex] = useState7(0);
+  const allItems = useMemo6(() => {
+    const items = [];
+    server.tools.forEach((tool) => items.push({ type: "tool", name: tool }));
+    server.prompts.forEach((prompt) => items.push({ type: "prompt", name: prompt }));
+    server.resources.forEach((resource) => items.push({ type: "resource", name: resource }));
+    return items;
+  }, [server]);
+  const totalItems = allItems.length;
+  const maxVisible = useMemo6(() => {
+    const reservedLines = 10;
+    const availableLines = Math.max(0, Math.min(rows, 30) - reservedLines);
+    return Math.max(1, availableLines);
+  }, [rows]);
+  const visibleStartRef = React9.useRef(0);
+  const visibleStart = useMemo6(() => {
+    if (totalItems === 0) return 0;
+    const currentStart = visibleStartRef.current;
+    let newStart = currentStart;
+    if (activeIndex < currentStart) {
+      newStart = activeIndex;
+    } else if (activeIndex >= currentStart + maxVisible) {
+      newStart = activeIndex - maxVisible + 1;
+    }
+    newStart = Math.max(0, Math.min(newStart, Math.max(0, totalItems - maxVisible)));
+    visibleStartRef.current = newStart;
+    return newStart;
+  }, [activeIndex, maxVisible, totalItems]);
+  const visibleItems = allItems.slice(visibleStart, visibleStart + maxVisible);
+  useInput4((input, key) => {
+    if (key.ctrl && (input === "c" || input === "C")) {
+      onCancel();
+      return;
+    }
+    if (key.escape) {
+      onBack();
+      return;
+    }
+    if (input === " " || key.return) {
+      onBack();
+      return;
+    }
+    if (key.upArrow) {
+      setActiveIndex((prev) => Math.max(0, prev - 1));
+      return;
+    }
+    if (key.downArrow) {
+      setActiveIndex((prev) => Math.min(totalItems - 1, prev + 1));
+      return;
+    }
+    if (key.pageUp) {
+      setActiveIndex((prev) => Math.max(0, prev - maxVisible));
+      return;
+    }
+    if (key.pageDown) {
+      setActiveIndex((prev) => Math.min(totalItems - 1, prev + maxVisible));
+      return;
+    }
+    if (key.home) {
+      setActiveIndex(0);
+      return;
+    }
+    if (key.end) {
+      setActiveIndex(totalItems - 1);
+    }
+  });
+  const icon = "\u2713";
+  const color = "green";
+  return /* @__PURE__ */ jsx11(Box8, {
+    flexDirection: "column",
+    width: Math.max(20, columns - 6),
+    height: Math.max(5, Math.min(rows - 1, 30)),
+    overflow: "hidden",
+    paddingX: 1,
+    marginTop: 1,
+    children: /* @__PURE__ */ jsxs8(Box8, {
+      flexDirection: "column",
+      borderStyle: "round",
+      borderDimColor: true,
+      flexGrow: 1,
+      overflow: "hidden",
+      children: [
+        /* @__PURE__ */ jsxs8(Box8, {
+          paddingX: 1,
+          gap: 1,
+          children: [
+            /* @__PURE__ */ jsxs8(Text9, { color, children: [icon, " "] }),
+            /* @__PURE__ */ jsx11(Text9, { bold: true, color: "#229ac3", wrap: "truncate-end", children: server.name }),
+            /* @__PURE__ */ jsx11(Text9, { dimColor: true, children: "\u2014 Details" }),
+          ],
+        }),
+        /* @__PURE__ */ jsx11(Box8, {
+          paddingX: 1,
+          marginLeft: 3,
+          children: /* @__PURE__ */ jsxs8(Text9, {
+            wrap: "truncate-end",
+            children: [
+              server.toolCount,
+              " tools, ",
+              server.promptCount,
+              " prompts, ",
+              server.resourceCount,
+              " resources",
+            ],
+          }),
+        }),
+        /* @__PURE__ */ jsxs8(Box8, {
+          borderTop: true,
+          borderBottom: true,
+          borderLeft: false,
+          borderRight: false,
+          borderStyle: "round",
+          borderDimColor: true,
+          flexDirection: "column",
+          flexGrow: 1,
+          paddingX: 1,
+          overflow: "hidden",
+          children: [
+            visibleStart > 0
+              ? /* @__PURE__ */ jsx11(Box8, {
+                  children: /* @__PURE__ */ jsx11(Text9, { dimColor: true, children: "\u25B2" }),
+                })
+              : /* @__PURE__ */ jsx11(Text9, { children: " " }),
+            /* @__PURE__ */ jsx11(Box8, {
+              paddingX: 1,
+              flexDirection: "column",
+              children:
+                visibleItems.length === 0
+                  ? /* @__PURE__ */ jsx11(Box8, {
+                      paddingY: 1,
+                      children: /* @__PURE__ */ jsx11(Text9, { dimColor: true, children: "No items available" }),
+                    })
+                  : visibleItems.map((item, idx) => {
+                      const actualIndex = visibleStart + idx;
+                      const isSelected = actualIndex === activeIndex;
+                      return /* @__PURE__ */ jsx11(
+                        ItemRow,
+                        { item, selected: isSelected },
+                        `${item.type}-${item.name}-${actualIndex}`
+                      );
+                    }),
+            }),
+            visibleStart > 0 || visibleStart + maxVisible < totalItems
+              ? /* @__PURE__ */ jsxs8(Box8, {
+                  marginTop: 1,
+                  gap: 1,
+                  children: [
+                    totalItems - visibleStart - maxVisible > 0
+                      ? /* @__PURE__ */ jsx11(Text9, { dimColor: true, children: "\u25BC" })
+                      : /* @__PURE__ */ jsx11(Text9, { children: " " }),
+                    visibleStart > 0
+                      ? /* @__PURE__ */ jsxs8(Text9, {
+                          dimColor: true,
+                          children: ["\u2026 ", visibleStart, " items above. "],
+                        })
+                      : null,
+                    totalItems - visibleStart - maxVisible > 0
+                      ? /* @__PURE__ */ jsxs8(Text9, {
+                          dimColor: true,
+                          children: ["\u2026 ", totalItems - visibleStart - maxVisible, " items below."],
+                        })
+                      : null,
+                  ],
+                })
+              : null,
+          ],
+        }),
+        /* @__PURE__ */ jsx11(Box8, {
+          paddingX: 1,
+          children: /* @__PURE__ */ jsx11(Text9, {
+            dimColor: true,
+            children: "\u2191/\u2193 scroll \xB7 Space/Enter back \xB7 Esc back \xB7 Ctrl+C close",
+          }),
+        }),
+      ],
+    }),
+  });
+}
+function ItemRow({ item, selected }) {
+  const icon = item.type === "tool" ? "\u{1F527}" : item.type === "prompt" ? "\u{1F4DD}" : "\u{1F4E6}";
+  return /* @__PURE__ */ jsxs8(Box8, {
+    height: 1,
+    flexDirection: "row",
+    children: [
+      /* @__PURE__ */ jsxs8(Text9, { dimColor: true, children: [icon, " "] }),
+      /* @__PURE__ */ jsx11(Text9, {
+        color: selected ? "#229ac3" : void 0,
+        dimColor: true,
+        wrap: "truncate-end",
+        children: item.name,
+      }),
+    ],
+  });
+}
+function ErrorRow({ error }) {
+  const lines = error.split("\n").filter((line) => line.trim().length > 0);
+  return /* @__PURE__ */ jsx11(Box8, {
+    flexDirection: "column",
+    marginLeft: 4,
+    marginTop: 0,
+    marginBottom: 0,
+    borderStyle: "round",
+    borderColor: "red",
+    borderDimColor: true,
+    children: lines.map((line, index) =>
+      /* @__PURE__ */ jsx11(
+        Box8,
+        { children: /* @__PURE__ */ jsx11(Text9, { color: "red", dimColor: true, children: line }) },
+        index
+      )
+    ),
+  });
+}
+
+// src/ui/ProcessStdoutView.tsx
+import React10, { useEffect as useEffect4, useMemo as useMemo7, useRef as useRef5, useState as useState8 } from "react";
+import { Box as Box9, Text as Text10 } from "ink";
+import { jsx as jsx12, jsxs as jsxs9 } from "react/jsx-runtime";
+var REFRESH_INTERVAL_MS = 150;
+var MAX_PANEL_HEIGHT = 30;
+var MIN_PANEL_HEIGHT = 5;
+var ProcessStdoutView = React10.memo(function ProcessStdoutView2({
+  processStdoutRef,
+  runningProcesses,
+  onDismiss,
+  onAdjustTimeout,
+  screenWidth,
+  screenHeight,
+}) {
+  const [stdoutText, setStdoutText] = useState8("");
+  const [scrollOffset, setScrollOffset] = useState8(0);
+  const [statusMessage, setStatusMessage] = useState8("");
+  const statusTimerRef = useRef5(null);
+  const panelHeight = Math.max(MIN_PANEL_HEIGHT, Math.min(screenHeight - 1, MAX_PANEL_HEIGHT));
+  const reservedRows = statusMessage ? 2 : 1;
+  const visibleLineLimit = Math.max(1, panelHeight - reservedRows);
+  useEffect4(() => {
+    const updateStdout = () => {
+      let text = "";
+      if (runningProcesses && runningProcesses.size > 0) {
+        for (const [pid, proc] of runningProcesses.entries()) {
+          const pidNum = Number(pid);
+          const stdout = processStdoutRef.current.get(pidNum) ?? "";
+          if (text) {
+            text += "\n";
+          }
+          if (runningProcesses.size > 1) {
+            text += `\u2500\u2500 Process ${pid} [${proc.command}] \u2500\u2500
+`;
+          }
+          text += stdout || "(no output yet)";
+        }
+      } else {
+        text = "(no running processes)";
+      }
+      setStdoutText(text);
+    };
+    updateStdout();
+    const interval = setInterval(updateStdout, REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [processStdoutRef, runningProcesses]);
+  useEffect4(() => {
+    return () => {
+      if (statusTimerRef.current) {
+        clearTimeout(statusTimerRef.current);
+      }
+    };
+  }, []);
+  const lines = useMemo7(() => stdoutText.split("\n"), [stdoutText]);
+  const timeoutProcess = useMemo7(() => getLatestTimeoutProcess(runningProcesses), [runningProcesses]);
+  const visibleLines = useMemo7(() => {
+    if (lines.length <= visibleLineLimit) {
+      return lines;
+    }
+    const outputLineLimit = Math.max(1, visibleLineLimit - 1);
+    const start = Math.max(0, lines.length - outputLineLimit - scrollOffset);
+    const slice = lines.slice(start, start + outputLineLimit);
+    if (lines.length > visibleLineLimit) {
+      slice.unshift(`... (${start} lines above \xB7 \u2191/\u2193 to scroll \xB7 ${lines.length} total lines) ...`);
+    }
+    return slice;
+  }, [lines, scrollOffset, visibleLineLimit]);
+  const setTemporaryStatus = (message) => {
+    setStatusMessage(message);
+    if (statusTimerRef.current) {
+      clearTimeout(statusTimerRef.current);
+    }
+    statusTimerRef.current = setTimeout(() => setStatusMessage(""), 2e3);
+  };
+  useTerminalInput(
+    (input, key) => {
+      if ((key.ctrl && (input === "o" || input === "O")) || key.escape) {
+        onDismiss();
+        return;
+      }
+      if (input === "+") {
+        const adjustment = onAdjustTimeout(BASH_TIMEOUT_INCREMENT_MS);
+        setTemporaryStatus(formatAdjustmentStatus(adjustment));
+        return;
+      }
+      if (input === "-") {
+        const adjustment = onAdjustTimeout(-BASH_TIMEOUT_DECREMENT_MS);
+        setTemporaryStatus(formatAdjustmentStatus(adjustment));
+        return;
+      }
+      if (key.upArrow) {
+        setScrollOffset((s) => Math.min(s + 10, Math.max(0, lines.length - visibleLineLimit)));
+        return;
+      }
+      if (key.downArrow) {
+        setScrollOffset((s) => Math.max(s - 10, 0));
+        return;
+      }
+      if (key.pageUp) {
+        setScrollOffset((s) => Math.min(s + visibleLineLimit, Math.max(0, lines.length - visibleLineLimit)));
+        return;
+      }
+      if (key.pageDown) {
+        setScrollOffset((s) => Math.max(s - visibleLineLimit, 0));
+        return;
+      }
+    },
+    { isActive: true }
+  );
+  return /* @__PURE__ */ jsxs9(Box9, {
+    flexDirection: "column",
+    width: screenWidth,
+    minWidth: 80,
+    height: panelHeight,
+    overflow: "hidden",
+    children: [
+      /* @__PURE__ */ jsxs9(Box9, {
+        borderStyle: "single",
+        borderBottom: true,
+        borderLeft: false,
+        borderRight: false,
+        borderTop: false,
+        children: [
+          /* @__PURE__ */ jsx12(Text10, { bold: true, children: "\u{1F4DF} Process Output" }),
+          /* @__PURE__ */ jsx12(Text10, {
+            dimColor: true,
+            children: ` (${formatTimeoutHint(
+              timeoutProcess?.entry
+            )} \xB7 +/- adjust \xB7 Ctrl+O or Esc to close \xB7 \u2191\u2193 PageUp/PageDown to scroll)`,
+          }),
+        ],
+      }),
+      /* @__PURE__ */ jsx12(Box9, {
+        flexDirection: "column",
+        paddingX: 1,
+        overflow: "hidden",
+        children: visibleLines.map((line, index) => /* @__PURE__ */ jsx12(Text10, { children: line }, `${index}`)),
+      }),
+      statusMessage
+        ? /* @__PURE__ */ jsx12(Box9, {
+            paddingX: 1,
+            children: /* @__PURE__ */ jsx12(Text10, { dimColor: true, children: statusMessage }),
+          })
+        : null,
+    ],
+  });
+});
+function getLatestTimeoutProcess(runningProcesses) {
+  if (!runningProcesses) {
+    return null;
+  }
+  let latest = null;
+  for (const [pid, entry] of runningProcesses.entries()) {
+    if (typeof entry.timeoutMs !== "number") {
+      continue;
+    }
+    latest = { pid, entry };
+  }
+  return latest;
+}
+function formatTimeoutHint(entry) {
+  if (!entry || typeof entry.timeoutMs !== "number") {
+    return "timeout unavailable";
+  }
+  return `timeout ${formatDuration(entry.timeoutMs)}`;
+}
+function formatAdjustmentStatus(adjustment) {
+  if (!adjustment) {
+    return "No adjustable Bash timeout";
+  }
+  return `Timeout set to ${formatDuration(adjustment.timeoutMs)}`;
+}
+function formatDuration(ms) {
+  const totalMinutes = Math.max(1, Math.round(ms / 6e4));
+  return `${totalMinutes}m`;
 }
 
 // src/ui/askUserQuestion.ts
@@ -8052,7 +10632,7 @@ function escapeAnswerPart(value) {
 }
 
 // src/ui/exitSummary.ts
-import chalk3 from "chalk";
+import chalk4 from "chalk";
 import gradientString from "gradient-string";
 var ANSI_RE = /\u001b\[[0-9;]*[a-zA-Z]/g;
 function visibleLength(text) {
@@ -8074,6 +10654,7 @@ function extractUsageFields(usage) {
     promptTokens: 0,
     completionTokens: 0,
     cachedTokens: 0,
+    totalReqs: 0,
   };
   if (!usage || typeof usage !== "object" || Array.isArray(usage)) {
     return empty;
@@ -8092,21 +10673,34 @@ function extractUsageFields(usage) {
   if (cachedTokens === 0 && typeof record.prompt_cache_hit_tokens === "number") {
     cachedTokens = record.prompt_cache_hit_tokens;
   }
-  return { promptTokens, completionTokens, cachedTokens };
+  const totalReqs = typeof record.total_reqs === "number" ? record.total_reqs : 0;
+  return { promptTokens, completionTokens, cachedTokens, totalReqs };
 }
 function buildExitSummaryText(input) {
-  const { session, messages, model } = input;
-  const assistantCount = messages.filter((m) => m.role === "assistant").length;
+  const { session } = input;
   const innerWidth = 98;
   const contentWidth = innerWidth - 4;
-  const borderColor = chalk3.hex("#229ac3");
-  const titleColor = gradientString("#229ac3", "#7d33f7");
+  const borderColor = chalk4.hex("#229ac3e6");
+  const titleColor = gradientString("#229ac3e6", "rgb(125 51 247 / 0.7)");
   const line = (text) => `${borderColor("\u2502")}  ${padRight(text, contentWidth)}  ${borderColor("\u2502")}`;
-  const header = chalk3.bold(titleColor("Goodbye!"));
+  const header = chalk4.bold(titleColor("Goodbye!"));
   const rows = ["", `${header}`, ""];
-  const usage = extractUsageFields(session?.usage ?? null);
-  const modelName = model ?? "unknown";
-  const hasUsage = usage.promptTokens > 0 || usage.completionTokens > 0;
+  const usageRows = Object.entries(session?.usagePerModel ?? {})
+    .map(([modelName, usage]) => ({
+      modelName,
+      usage: extractUsageFields(usage),
+    }))
+    .filter(
+      (row) =>
+        row.usage.totalReqs > 0 ||
+        row.usage.promptTokens > 0 ||
+        row.usage.completionTokens > 0 ||
+        row.usage.cachedTokens > 0
+    )
+    .sort(
+      (left, right) => right.usage.totalReqs - left.usage.totalReqs || left.modelName.localeCompare(right.modelName)
+    );
+  const hasUsage = usageRows.length > 0;
   if (hasUsage) {
     const colModel = 34;
     const colReqs = 8;
@@ -8121,19 +10715,21 @@ function buildExitSummaryText(input) {
       padLeft("Input Tokens", colInput) +
       padLeft("Output Tokens", colOutput) +
       padLeft("Cached Tokens", colCached);
-    rows.push(chalk3.bold(headerRow));
+    rows.push(chalk4.bold(headerRow));
     rows.push(divider);
-    const reqsStr = String(assistantCount).padStart(colReqs);
-    const inputStr = formatNumber(usage.promptTokens).padStart(colInput);
-    const outputStr = formatNumber(usage.completionTokens).padStart(colOutput);
-    const cachedStr = formatNumber(usage.cachedTokens).padStart(colCached);
-    const dataRow =
-      padRight(modelName, colModel) +
-      padRight(reqsStr, colReqs) +
-      padRight(chalk3.yellow(inputStr), colInput) +
-      padRight(chalk3.yellow(outputStr), colOutput) +
-      padRight(chalk3.yellow(cachedStr), colCached);
-    rows.push(dataRow);
+    for (const { modelName, usage } of usageRows) {
+      const reqsStr = formatNumber(usage.totalReqs).padStart(colReqs);
+      const inputStr = formatNumber(usage.promptTokens).padStart(colInput);
+      const outputStr = formatNumber(usage.completionTokens).padStart(colOutput);
+      const cachedStr = formatNumber(usage.cachedTokens).padStart(colCached);
+      const dataRow =
+        padRight(modelName, colModel) +
+        padRight(reqsStr, colReqs) +
+        padRight(chalk4.yellow(inputStr), colInput) +
+        padRight(chalk4.yellow(outputStr), colOutput) +
+        padRight(chalk4.yellow(cachedStr), colCached);
+      rows.push(dataRow);
+    }
     rows.push("");
   }
   rows.push("");
@@ -8145,37 +10741,52 @@ function buildExitSummaryText(input) {
 }
 
 // src/ui/App.tsx
-import { jsx as jsx8, jsxs as jsxs7 } from "react/jsx-runtime";
-function App({ projectRoot, version = "", onRestart }) {
+import { jsx as jsx13, jsxs as jsxs10 } from "react/jsx-runtime";
+var DEFAULT_MODEL = "deepseek-v4-pro";
+var DEFAULT_BASE_URL = "https://api.deepseek.com";
+function App({ projectRoot: projectRoot2, initialPrompt: initialPrompt2, onRestart }) {
   const { exit } = useApp2();
-  const { stdout, write } = useStdout3();
-  const { columns } = useTerminalSize();
-  const [view, setView] = useState7("chat");
-  const [busy, setBusy] = useState7(false);
-  const [skills, setSkills] = useState7([]);
-  const [messages, setMessages] = useState7([]);
-  const [sessions, setSessions] = useState7([]);
-  const [statusLine, setStatusLine] = useState7("");
-  const [errorLine, setErrorLine] = useState7(null);
-  const [streamProgress, setStreamProgress] = useState7(null);
-  const [runningProcesses, setRunningProcesses] = useState7(null);
-  const [activeStatus, setActiveStatus] = useState7(null);
-  const [dismissedQuestionIds, setDismissedQuestionIds] = useState7(() => /* @__PURE__ */ new Set());
-  const [isExiting, setIsExiting] = useState7(false);
-  const [showWelcome, setShowWelcome] = useState7(true);
-  const [welcomeNonce, setWelcomeNonce] = useState7(0);
-  const [resolvedSettings, setResolvedSettings] = useState7(() => resolveCurrentSettings2());
-  const [nowTick, setNowTick] = useState7(0);
-  const messagesRef = useRef3([]);
+  const { stdout, write } = useStdout2();
+  const { columns, rows } = useWindowSize3();
+  const { mode, setMode } = useRawModeContext();
+  const initialPromptSubmittedRef = useRef6(false);
+  const processStdoutRef = useRef6(/* @__PURE__ */ new Map());
+  const rawModeRef = useRef6(mode);
+  const writeRef = useRef6(write);
+  const lastRenderedColumnsRef = useRef6(null);
+  const messagesRef = useRef6([]);
+  const [view, setView] = useState9("chat");
+  const [busy, setBusy] = useState9(false);
+  const [skills, setSkills] = useState9([]);
+  const [messages, setMessages] = useState9([]);
+  const [sessions, setSessions] = useState9([]);
+  const [statusLine, setStatusLine] = useState9("");
+  const [errorLine, setErrorLine] = useState9(null);
+  const [streamProgress, setStreamProgress] = useState9(null);
+  const [runningProcesses, setRunningProcesses] = useState9(null);
+  const [activeStatus, setActiveStatus] = useState9(null);
+  const [dismissedQuestionIds, setDismissedQuestionIds] = useState9(() => /* @__PURE__ */ new Set());
+  const [isExiting, setIsExiting] = useState9(false);
+  const [showWelcome, setShowWelcome] = useState9(true);
+  const [welcomeNonce, setWelcomeNonce] = useState9(0);
+  const [resolvedSettings, setResolvedSettings] = useState9(() => resolveCurrentSettings(projectRoot2));
+  const [nowTick, setNowTick] = useState9(0);
+  const [mcpStatuses, setMcpStatuses] = useState9([]);
+  const [showProcessStdout, setShowProcessStdout] = useState9(false);
+  rawModeRef.current = mode;
   messagesRef.current = messages;
-  const sessionManager = useMemo4(() => {
+  const sessionManager = useMemo8(() => {
     return new SessionManager({
-      projectRoot,
-      createOpenAIClient: () => createOpenAIClient2(),
-      getResolvedSettings: () => resolveCurrentSettings2(),
+      projectRoot: projectRoot2,
+      createOpenAIClient: () => createOpenAIClient(projectRoot2),
+      getResolvedSettings: () => resolveCurrentSettings(projectRoot2),
       renderMarkdown: (text) => text,
       onAssistantMessage: (message) => {
         setMessages((prev) => [...prev, message]);
+        if (rawModeRef.current === "Raw scrollback mode" /* Raw */) {
+          process.stdout.write("\n");
+          process.stdout.write(renderMessageToStdout(message, rawModeRef.current) + "\n\n");
+        }
       },
       onSessionEntryUpdated: (entry) => {
         setStatusLine(buildStatusLine(entry));
@@ -8189,9 +10800,23 @@ function App({ projectRoot, version = "", onRestart }) {
         }
         setStreamProgress(progress);
       },
+      onMcpStatusChanged: () => {
+        setMcpStatuses(sessionManager.getMcpStatus());
+      },
+      onProcessStdout: (pid, chunk) => {
+        const buf = processStdoutRef.current;
+        const current = buf.get(pid) ?? "";
+        const MAX_STDOUT_BUFFER = 1e6;
+        if (current.length >= MAX_STDOUT_BUFFER) {
+          return;
+        }
+        const text = typeof chunk === "string" ? chunk : String(chunk);
+        const available = MAX_STDOUT_BUFFER - current.length;
+        buf.set(pid, current + text.slice(0, available));
+      },
     });
-  }, [projectRoot]);
-  useEffect6(() => {
+  }, [projectRoot2]);
+  useEffect5(() => {
     if (!busy) {
       return;
     }
@@ -8201,10 +10826,10 @@ function App({ projectRoot, version = "", onRestart }) {
   function loadVisibleMessages(manager, sessionId) {
     return manager.listSessionMessages(sessionId).filter((m) => m.visible);
   }
-  const refreshSessionsList = useCallback2(() => {
+  const refreshSessionsList = useCallback3(() => {
     setSessions(sessionManager.listSessions());
   }, [sessionManager]);
-  const refreshSkills = useCallback2(
+  const refreshSkills = useCallback3(
     async (sessionId) => {
       try {
         const list = await sessionManager.listSkills(sessionId ?? sessionManager.getActiveSessionId() ?? void 0);
@@ -8213,29 +10838,34 @@ function App({ projectRoot, version = "", onRestart }) {
     },
     [sessionManager]
   );
-  useEffect6(() => {
+  useEffect5(() => {
     refreshSessionsList();
     void refreshSkills();
   }, [refreshSessionsList, refreshSkills]);
-  const writeRef = useRef3(write);
+  useLayoutEffect2(() => {
+    const settings = resolveCurrentSettings(projectRoot2);
+    void sessionManager.initMcpServers(settings.mcpServers);
+  }, [projectRoot2, sessionManager]);
+  useEffect5(() => {
+    return () => {
+      sessionManager.dispose();
+    };
+  }, [sessionManager]);
   writeRef.current = write;
-  const handlePrompt = useCallback2(
+  const handlePrompt = useCallback3(
     async (submission) => {
       if (submission.command === "exit") {
         setIsExiting(true);
         setTimeout(() => {
           const activeSessionId = sessionManager.getActiveSessionId();
           const session = activeSessionId ? sessionManager.getSession(activeSessionId) : null;
-          const allMessages = activeSessionId
-            ? sessionManager.listSessionMessages(activeSessionId)
-            : messagesRef.current;
-          const resolved = resolveCurrentSettings2();
-          const summary = buildExitSummaryText({ session, messages: allMessages, model: resolved.model });
+          const summary = buildExitSummaryText({ session });
           process.stdout.write("\n");
-          process.stdout.write(chalk4.green("> /exit "));
+          process.stdout.write(chalk5.rgb(34, 154, 195)("> /exit "));
           process.stdout.write("\n\n");
           process.stdout.write(summary);
           process.stdout.write("\n\n");
+          sessionManager.dispose();
           exit();
         }, 0);
         return;
@@ -8265,6 +10895,18 @@ function App({ projectRoot, version = "", onRestart }) {
         setView("session-list");
         return;
       }
+      if (submission.command === "continue" && isCurrentSessionEmpty(sessionManager)) {
+        setShowWelcome(false);
+        refreshSessionsList();
+        setView("session-list");
+        return;
+      }
+      if (submission.command === "mcp") {
+        setShowWelcome(false);
+        setMcpStatuses(sessionManager.getMcpStatus());
+        setView("mcp-status");
+        return;
+      }
       const prompt = {
         text: submission.text,
         imageUrls: submission.imageUrls,
@@ -8275,13 +10917,15 @@ function App({ projectRoot, version = "", onRestart }) {
       const userDisplayContent =
         trimmedText ||
         (selectedSkillNames.length > 0 ? `Use skills: ${selectedSkillNames.join(", ")}` : "") ||
-        (submission.imageUrls.length > 0 ? "\u{1F5BC} Image" : "");
-      if (userDisplayContent) {
+        (submission.imageUrls.length > 0 ? "[Image]" : "");
+      if (userDisplayContent && submission.command !== "continue") {
         setMessages((prev) => [...prev, buildSyntheticUserMessage(userDisplayContent, submission.imageUrls.length)]);
       }
       setBusy(true);
       setErrorLine(null);
       setRunningProcesses(null);
+      setShowProcessStdout(false);
+      processStdoutRef.current.clear();
       try {
         await sessionManager.handleUserPrompt(prompt);
         await refreshSkills();
@@ -8297,26 +10941,77 @@ function App({ projectRoot, version = "", onRestart }) {
     },
     [exit, onRestart, sessionManager, refreshSkills, refreshSessionsList]
   );
-  const handleInterrupt = useCallback2(() => {
+  const handleInterrupt = useCallback3(() => {
     sessionManager.interruptActiveSession();
   }, [sessionManager]);
-  const handleModelConfigChange = useCallback2((selection) => {
-    const current = resolveCurrentSettings2();
-    const { changed } = writeModelConfigSelection(selection, current);
-    const next = resolveCurrentSettings2();
-    setResolvedSettings(next);
-    if (!changed) {
-      return "Model settings unchanged";
-    }
-    return `Model settings updated: ${formatModelConfig(current)} \u2192 ${formatModelConfig(next)}`;
+  const handleToggleProcessStdout = useCallback3(() => {
+    setShowProcessStdout(true);
   }, []);
-  const handleSubmit = useCallback2(
+  const handleDismissProcessStdout = useCallback3(() => {
+    setShowProcessStdout(false);
+  }, []);
+  const handleAdjustBashTimeout = useCallback3(
+    (deltaMs) => sessionManager.adjustActiveBashTimeout(deltaMs),
+    [sessionManager]
+  );
+  const handleModelConfigChange = useCallback3(
+    (selection) => {
+      const current = resolveCurrentSettings(projectRoot2);
+      const { changed } = writeModelConfigSelection(selection, current, projectRoot2);
+      const next = resolveCurrentSettings(projectRoot2);
+      setResolvedSettings(next);
+      if (!changed) {
+        return "Model settings unchanged";
+      }
+      const activeSessionId = sessionManager.getActiveSessionId();
+      const meta = {
+        isModelChange: true,
+      };
+      const content = `/model
+\u2514 Set model to ${selection.model} (${selection?.thinkingEnabled ? selection?.reasoningEffort : "no thinking"})`;
+      if (activeSessionId) {
+        sessionManager.addSessionSystemMessage(activeSessionId, content, true, meta);
+      } else {
+        const now = /* @__PURE__ */ new Date().toISOString();
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            sessionId: "local",
+            role: "system",
+            content,
+            contentParams: null,
+            messageParams: null,
+            compacted: false,
+            visible: true,
+            createTime: now,
+            updateTime: now,
+            meta,
+          },
+        ]);
+      }
+      return `Model settings updated: ${formatModelConfig(current)} \u2192 ${formatModelConfig(next)}`;
+    },
+    [projectRoot2, sessionManager]
+  );
+  const handleSubmit = useCallback3(
     (submission) => {
       void handlePrompt(submission);
     },
     [handlePrompt]
   );
-  const handleSelectSession = useCallback2(
+  useEffect5(() => {
+    if (initialPromptSubmittedRef.current || !initialPrompt2 || !initialPrompt2.trim()) {
+      return;
+    }
+    initialPromptSubmittedRef.current = true;
+    handleSubmit({
+      text: initialPrompt2,
+      imageUrls: [],
+      selectedSkills: void 0,
+    });
+  }, [handleSubmit, initialPrompt2]);
+  const handleSelectSession = useCallback3(
     async (sessionId) => {
       const currentSessionId = sessionManager.getActiveSessionId();
       if (currentSessionId !== sessionId) {
@@ -8339,27 +11034,73 @@ function App({ projectRoot, version = "", onRestart }) {
     },
     [sessionManager, refreshSkills]
   );
-  const [stableColumns, setStableColumns] = useState7(columns);
-  useEffect6(() => {
-    const timer = setTimeout(() => setStableColumns(columns), 100);
-    return () => clearTimeout(timer);
-  }, [columns]);
-  const lastRenderedColumnsRef = useRef3(null);
-  useEffect6(() => {
+  const handleRawModeChange = useCallback3(
+    (nextMode) => {
+      const activeSessionId = sessionManager.getActiveSessionId();
+      setMode(nextMode);
+      setShowWelcome(false);
+      setMessages([]);
+      process.stdout.write("\x1B[2J\x1B[3J\x1B[H");
+      setTimeout(() => {
+        if (nextMode === "Raw scrollback mode" /* Raw */) {
+          const allMessages = activeSessionId ? loadVisibleMessages(sessionManager, activeSessionId) : [];
+          for (const msg of allMessages) {
+            process.stdout.write("\n");
+            process.stdout.write(renderMessageToStdout(msg, nextMode) + "\n\n");
+          }
+          if (allMessages.length > 0) {
+            process.stdout.write("\n\n");
+            process.stdout.write(chalk5.dim("Press ESC to exit raw mode"));
+          } else {
+            process.stdout.write("\n");
+            process.stdout.write(chalk5.dim("(No messages in this session yet. Start chatting to see them here.)"));
+            process.stdout.write("\n\n");
+            process.stdout.write(chalk5.dim("Press ESC to exit raw mode"));
+          }
+        } else if (activeSessionId) {
+          handleSelectSession(activeSessionId);
+        } else {
+          setWelcomeNonce((n) => n + 1);
+          setShowWelcome(true);
+        }
+      }, 200);
+    },
+    [handleSelectSession, sessionManager, setMode]
+  );
+  useEffect5(() => {
     if (!stdout?.isTTY) {
       return;
     }
-    if (stableColumns <= 0) {
+    if (columns <= 0) {
       return;
     }
     if (lastRenderedColumnsRef.current === null) {
-      lastRenderedColumnsRef.current = stableColumns;
+      lastRenderedColumnsRef.current = columns;
       return;
     }
-    if (lastRenderedColumnsRef.current === stableColumns) {
+    if (lastRenderedColumnsRef.current === columns) {
       return;
     }
-    lastRenderedColumnsRef.current = stableColumns;
+    lastRenderedColumnsRef.current = columns;
+    if (mode === "Raw scrollback mode" /* Raw */) {
+      process.stdout.write("\x1B[2J\x1B[3J\x1B[H");
+      const activeSessionId2 = sessionManager.getActiveSessionId();
+      const allMessages = activeSessionId2 ? loadVisibleMessages(sessionManager, activeSessionId2) : [];
+      for (const msg of allMessages) {
+        process.stdout.write("\n");
+        process.stdout.write(renderMessageToStdout(msg, mode) + "\n\n");
+      }
+      if (allMessages.length > 0) {
+        process.stdout.write("\n\n");
+        process.stdout.write(chalk5.dim("Press ESC to exit raw mode"));
+      } else {
+        process.stdout.write("\n");
+        process.stdout.write(chalk5.dim("(No messages in this session yet. Start chatting to see them here.)"));
+        process.stdout.write("\n\n");
+        process.stdout.write(chalk5.dim("Press ESC to exit raw mode"));
+      }
+      return;
+    }
     writeRef.current("\x1B[2J\x1B[H");
     setMessages([]);
     setShowWelcome(false);
@@ -8371,24 +11112,24 @@ function App({ projectRoot, version = "", onRestart }) {
       setMessages(nextMessages);
       setShowWelcome(true);
     }, 0);
-  }, [busy, sessionManager, stableColumns, stdout]);
-  const screenWidth = useMemo4(() => stableColumns ?? stdout?.columns ?? 80, [stableColumns, stdout]);
-  const promptHistory = useMemo4(() => {
+  }, [busy, mode, sessionManager, columns, stdout]);
+  const screenWidth = useMemo8(() => columns ?? stdout?.columns ?? 80, [columns, stdout]);
+  const screenHeight = useMemo8(() => rows ?? stdout?.rows ?? 24, [rows, stdout]);
+  const promptHistory = useMemo8(() => {
     return messages
       .filter((message) => message.role === "user" && typeof message.content === "string")
       .map((message) => (message.content ?? "").trim())
       .filter((content) => content.length > 0);
   }, [messages]);
   const expandedThinkingId = findExpandedThinkingId(messages);
-  const pendingQuestion = useMemo4(() => findPendingAskUserQuestion(messages, activeStatus), [activeStatus, messages]);
+  const pendingQuestion = useMemo8(() => findPendingAskUserQuestion(messages, activeStatus), [activeStatus, messages]);
   const shouldShowQuestionPrompt = Boolean(pendingQuestion && !dismissedQuestionIds.has(pendingQuestion.messageId));
-  const loadingText = useMemo4(
+  const loadingText = useMemo8(
     () => (busy ? buildLoadingText({ progress: streamProgress, processes: runningProcesses, now: Date.now() }) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- nowTick forces periodic recalculation for spinner animation
     [busy, streamProgress, runningProcesses, nowTick]
   );
-  const welcomeSettings = resolvedSettings;
-  const welcomeItem = useMemo4(
+  const welcomeItem = useMemo8(
     () => ({
       id: `__welcome__${welcomeNonce}`,
       sessionId: "",
@@ -8403,13 +11144,16 @@ function App({ projectRoot, version = "", onRestart }) {
     }),
     [welcomeNonce]
   );
-  const staticItems = useMemo4(() => {
+  const staticItems = useMemo8(() => {
+    if (mode === "Raw scrollback mode" /* Raw */) {
+      return [];
+    }
     if (showWelcome && view === "chat") {
       return [welcomeItem, ...messages];
     }
     return messages;
-  }, [showWelcome, view, messages, welcomeItem]);
-  const handleQuestionAnswers = useCallback2(
+  }, [mode, showWelcome, view, messages, welcomeItem]);
+  const handleQuestionAnswers = useCallback3(
     (answers) => {
       void handlePrompt({
         text: formatAskUserQuestionAnswers(answers),
@@ -8418,77 +11162,98 @@ function App({ projectRoot, version = "", onRestart }) {
     },
     [handlePrompt]
   );
-  const handleQuestionCancel = useCallback2(() => {
+  const handleQuestionCancel = useCallback3(() => {
     if (!pendingQuestion) {
       return;
     }
     setDismissedQuestionIds((prev) => new Set(prev).add(pendingQuestion.messageId));
   }, [pendingQuestion]);
-  return /* @__PURE__ */ jsxs7(Box7, {
+  if (mode === "Raw scrollback mode" /* Raw */) {
+    return /* @__PURE__ */ jsx13(RawModeExitPrompt, { onExit: (prev) => handleRawModeChange(prev) });
+  }
+  return /* @__PURE__ */ jsxs10(Box10, {
     flexDirection: "column",
     width: screenWidth,
     minWidth: 80,
     overflowX: "visible",
     children: [
-      /* @__PURE__ */ jsx8(Static, {
+      /* @__PURE__ */ jsx13(Static, {
         items: staticItems,
         children: (item) => {
           if (item.id.startsWith("__welcome__")) {
-            return /* @__PURE__ */ jsx8(
+            return /* @__PURE__ */ jsx13(
               WelcomeScreen,
               {
-                projectRoot,
-                settings: welcomeSettings,
+                projectRoot: projectRoot2,
+                settings: resolvedSettings,
                 skills,
-                version,
                 width: screenWidth,
               },
               item.id
             );
           }
-          return /* @__PURE__ */ jsx8(
+          return /* @__PURE__ */ jsx13(
             MessageView,
-            { message: item, collapsed: isCollapsedThinking(item, expandedThinkingId) },
+            {
+              message: item,
+              collapsed: isCollapsedThinking(item, expandedThinkingId),
+              width: screenWidth,
+            },
             item.id
           );
         },
       }),
       statusLine
-        ? /* @__PURE__ */ jsx8(Box7, {
-            children: /* @__PURE__ */ jsx8(Text8, { dimColor: true, children: statusLine }),
+        ? /* @__PURE__ */ jsx13(Box10, {
+            children: /* @__PURE__ */ jsx13(Text11, { dimColor: true, children: statusLine }),
           })
         : null,
       errorLine
-        ? /* @__PURE__ */ jsx8(Box7, {
-            children: /* @__PURE__ */ jsxs7(Text8, { color: "red", children: ["Error: ", errorLine] }),
+        ? /* @__PURE__ */ jsx13(Box10, {
+            children: /* @__PURE__ */ jsxs10(Text11, { color: "red", children: ["Error: ", errorLine] }),
           })
         : null,
-      view === "session-list"
-        ? /* @__PURE__ */ jsx8(SessionList, {
-            sessions,
-            onSelect: (id) => void handleSelectSession(id),
-            onCancel: () => setView("chat"),
+      showProcessStdout
+        ? /* @__PURE__ */ jsx13(ProcessStdoutView, {
+            processStdoutRef,
+            runningProcesses,
+            onDismiss: handleDismissProcessStdout,
+            onAdjustTimeout: handleAdjustBashTimeout,
+            screenWidth,
+            screenHeight,
           })
-        : shouldShowQuestionPrompt && pendingQuestion && !busy
-          ? /* @__PURE__ */ jsx8(AskUserQuestionPrompt, {
-              questions: pendingQuestion.questions,
-              onSubmit: handleQuestionAnswers,
-              onCancel: handleQuestionCancel,
+        : view === "session-list"
+          ? /* @__PURE__ */ jsx13(SessionList, {
+              sessions,
+              onSelect: (id) => void handleSelectSession(id),
+              onCancel: () => setView("chat"),
             })
-          : isExiting
-            ? null
-            : /* @__PURE__ */ jsx8(PromptInput, {
-                screenWidth,
-                skills,
-                modelConfig: resolvedSettings,
-                promptHistory,
-                busy,
-                loadingText,
-                onSubmit: handleSubmit,
-                onModelConfigChange: handleModelConfigChange,
-                onInterrupt: handleInterrupt,
-                placeholder: "Type your message...",
-              }),
+          : view === "mcp-status"
+            ? /* @__PURE__ */ jsx13(McpStatusList, { statuses: mcpStatuses, onCancel: () => setView("chat") })
+            : shouldShowQuestionPrompt && pendingQuestion && !busy
+              ? /* @__PURE__ */ jsx13(AskUserQuestionPrompt, {
+                  questions: pendingQuestion.questions,
+                  onSubmit: handleQuestionAnswers,
+                  onCancel: handleQuestionCancel,
+                })
+              : isExiting
+                ? null
+                : /* @__PURE__ */ jsx13(PromptInput, {
+                    projectRoot: projectRoot2,
+                    screenWidth,
+                    skills,
+                    modelConfig: resolvedSettings,
+                    promptHistory,
+                    busy,
+                    loadingText,
+                    runningProcesses,
+                    onSubmit: handleSubmit,
+                    onModelConfigChange: handleModelConfigChange,
+                    onRawModeChange: handleRawModeChange,
+                    onInterrupt: handleInterrupt,
+                    onToggleProcessStdout: handleToggleProcessStdout,
+                    placeholder: "Type your message...",
+                  }),
     ],
   });
 }
@@ -8522,6 +11287,10 @@ function buildSyntheticUserMessage(content, imageCount) {
     updateTime: now,
   };
 }
+function isCurrentSessionEmpty(sessionManager) {
+  const activeSessionId = sessionManager.getActiveSessionId();
+  return !activeSessionId || !sessionManager.getSession(activeSessionId);
+}
 function buildStatusLine(entry) {
   const parts = [];
   parts.push(`status: ${entry.status}`);
@@ -8533,9 +11302,14 @@ function buildStatusLine(entry) {
   }
   return parts.join(" \xB7 ");
 }
-function readSettings2() {
+function readSettings() {
+  return readSettingsFile(getUserSettingsPath());
+}
+function readProjectSettings(projectRoot2 = process.cwd()) {
+  return readSettingsFile(getProjectSettingsPath(projectRoot2));
+}
+function readSettingsFile(settingsPath) {
   try {
-    const settingsPath = getSettingsPath();
     if (!fs12.existsSync(settingsPath)) {
       return null;
     }
@@ -8546,8 +11320,15 @@ function readSettings2() {
   }
 }
 function writeSettings(settings) {
-  const settingsPath = getSettingsPath();
-  fs12.mkdirSync(path12.dirname(settingsPath), { recursive: true });
+  const settingsPath = getUserSettingsPath();
+  writeSettingsFile(settingsPath, settings);
+}
+function writeProjectSettings(settings, projectRoot2 = process.cwd()) {
+  const settingsPath = getProjectSettingsPath(projectRoot2);
+  writeSettingsFile(settingsPath, settings);
+}
+function writeSettingsFile(settingsPath, settings) {
+  fs12.mkdirSync(path13.dirname(settingsPath), { recursive: true });
   fs12.writeFileSync(
     settingsPath,
     `${JSON.stringify(settings, null, 2)}
@@ -8555,22 +11336,33 @@ function writeSettings(settings) {
     "utf8"
   );
 }
-function writeModelConfigSelection(selection, current = resolveCurrentSettings2()) {
-  const rawSettings = readSettings2();
+function writeModelConfigSelection(selection, current = resolveCurrentSettings(), projectRoot2 = process.cwd()) {
+  const projectSettingsPath = getProjectSettingsPath(projectRoot2);
+  const shouldWriteProjectSettings = fs12.existsSync(projectSettingsPath);
+  const rawSettings = shouldWriteProjectSettings ? readProjectSettings(projectRoot2) : readSettings();
   const result = applyModelConfigSelection(rawSettings, current, selection);
   if (result.changed) {
-    writeSettings(result.settings);
+    if (shouldWriteProjectSettings) {
+      writeProjectSettings(result.settings, projectRoot2);
+    } else {
+      writeSettings(result.settings);
+    }
   }
   return result;
 }
-function resolveCurrentSettings2() {
-  return resolveSettings(readSettings2(), {
-    model: DEFAULT_MODEL,
-    baseURL: DEFAULT_BASE_URL,
-  });
+function resolveCurrentSettings(projectRoot2 = process.cwd()) {
+  return resolveSettingsSources(
+    readSettings(),
+    readProjectSettings(projectRoot2),
+    {
+      model: DEFAULT_MODEL,
+      baseURL: DEFAULT_BASE_URL,
+    },
+    process.env
+  );
 }
-function createOpenAIClient2() {
-  const settings = resolveCurrentSettings2();
+function createOpenAIClient(projectRoot2 = process.cwd()) {
+  const settings = resolveCurrentSettings(projectRoot2);
   if (!settings.apiKey) {
     return {
       client: null,
@@ -8581,10 +11373,11 @@ function createOpenAIClient2() {
       debugLogEnabled: settings.debugLogEnabled,
       notify: settings.notify,
       webSearchTool: settings.webSearchTool,
-      machineId: getMachineId2(),
+      env: settings.env,
+      machineId: getMachineId(),
     };
   }
-  const client = new OpenAI2({
+  const client = new OpenAI({
     apiKey: settings.apiKey,
     baseURL: settings.baseURL || void 0,
   });
@@ -8597,12 +11390,13 @@ function createOpenAIClient2() {
     debugLogEnabled: settings.debugLogEnabled,
     notify: settings.notify,
     webSearchTool: settings.webSearchTool,
-    machineId: getMachineId2(),
+    env: settings.env,
+    machineId: getMachineId(),
   };
 }
-function getMachineId2() {
+function getMachineId() {
   try {
-    const idPath = path12.join(os9.homedir(), ".deepcode", "machine-id");
+    const idPath = path13.join(os9.homedir(), ".deepcode", "machine-id");
     if (fs12.existsSync(idPath)) {
       const raw = fs12.readFileSync(idPath, "utf8").trim();
       if (raw) {
@@ -8610,15 +11404,18 @@ function getMachineId2() {
       }
     }
     const generated = `${os9.hostname()}-${Math.random().toString(36).slice(2)}-${Date.now()}`;
-    fs12.mkdirSync(path12.dirname(idPath), { recursive: true });
+    fs12.mkdirSync(path13.dirname(idPath), { recursive: true });
     fs12.writeFileSync(idPath, generated, "utf8");
     return generated;
   } catch {
     return void 0;
   }
 }
-function getSettingsPath() {
-  return path12.join(os9.homedir(), ".deepcode", "settings.json");
+function getUserSettingsPath() {
+  return path13.join(os9.homedir(), ".deepcode", "settings.json");
+}
+function getProjectSettingsPath(projectRoot2) {
+  return path13.join(projectRoot2, ".deepcode", "settings.json");
 }
 function formatThinkingMode(settings) {
   if (!settings.thinkingEnabled) {
@@ -8630,13 +11427,25 @@ function formatModelConfig(settings) {
   return `${settings.model}, ${formatThinkingMode(settings)}`;
 }
 
+// src/ui/AppContainer.tsx
+import { jsx as jsx14 } from "react/jsx-runtime";
+var AppContainer = ({ version, projectRoot: projectRoot2, initialPrompt: initialPrompt2, onRestart }) => {
+  return /* @__PURE__ */ jsx14(AppContext.Provider, {
+    value: { version },
+    children: /* @__PURE__ */ jsx14(RawModeProvider, {
+      children: /* @__PURE__ */ jsx14(App, { initialPrompt: initialPrompt2, projectRoot: projectRoot2, onRestart }),
+    }),
+  });
+};
+var AppContainer_default = AppContainer;
+
 // src/ui/UpdatePrompt.tsx
-import { useState as useState8 } from "react";
-import { Box as Box8, Text as Text9, useApp as useApp3, useInput } from "ink";
-import { jsx as jsx9, jsxs as jsxs8 } from "react/jsx-runtime";
+import { useState as useState10 } from "react";
+import { Box as Box11, Text as Text12, useApp as useApp3, useInput as useInput5 } from "ink";
+import { jsx as jsx15, jsxs as jsxs11 } from "react/jsx-runtime";
 function UpdatePrompt({ currentVersion, latestVersion, installCommand, onSelect }) {
   const { exit } = useApp3();
-  const [selectedIndex, setSelectedIndex] = useState8(0);
+  const [selectedIndex, setSelectedIndex] = useState10(0);
   const options = [
     {
       value: "install",
@@ -8651,7 +11460,7 @@ function UpdatePrompt({ currentVersion, latestVersion, installCommand, onSelect 
       label: `Ignore this version (${latestVersion})`,
     },
   ];
-  useInput((input, key) => {
+  useInput5((input, key) => {
     if (key.upArrow) {
       setSelectedIndex((index) => (index - 1 + options.length) % options.length);
       return;
@@ -8675,29 +11484,29 @@ function UpdatePrompt({ currentVersion, latestVersion, installCommand, onSelect 
       exit();
     }
   });
-  return /* @__PURE__ */ jsxs8(Box8, {
+  return /* @__PURE__ */ jsxs11(Box11, {
     flexDirection: "column",
     marginY: 1,
     children: [
-      /* @__PURE__ */ jsxs8(Text9, {
+      /* @__PURE__ */ jsxs11(Text12, {
         bold: true,
         children: ["Deep Code latest version has been released: ", currentVersion, " -> ", latestVersion],
       }),
-      /* @__PURE__ */ jsx9(Box8, {
+      /* @__PURE__ */ jsx15(Box11, {
         flexDirection: "column",
         marginTop: 1,
         children: options.map((option, index) => {
           const selected = index === selectedIndex;
-          return /* @__PURE__ */ jsxs8(
-            Text9,
+          return /* @__PURE__ */ jsxs11(
+            Text12,
             { color: selected ? "green" : void 0, children: [selected ? "> " : "  ", index + 1, ". ", option.label] },
             option.value
           );
         }),
       }),
-      /* @__PURE__ */ jsx9(Box8, {
+      /* @__PURE__ */ jsx15(Box11, {
         marginTop: 1,
-        children: /* @__PURE__ */ jsx9(Text9, {
+        children: /* @__PURE__ */ jsx15(Text12, {
           dimColor: true,
           children: "Use Up/Down to choose, Enter to confirm, Esc to ignore once.",
         }),
@@ -8707,13 +11516,6 @@ function UpdatePrompt({ currentVersion, latestVersion, installCommand, onSelect 
 }
 
 // src/updateCheck.ts
-import { spawn as spawn4 } from "child_process";
-import React8 from "react";
-import * as fs13 from "fs";
-import * as os10 from "os";
-import * as path13 from "path";
-import { render } from "ink";
-import chalk5 from "chalk";
 var UPDATE_STATE_FILE = "update-check.json";
 var NPM_VIEW_TIMEOUT_MS = 5e3;
 var MAX_NPM_VIEW_OUTPUT_CHARS = 64 * 1024;
@@ -8745,7 +11547,7 @@ async function promptForPendingUpdate(packageInfo2) {
       writeUpdateState({ ...state, pending: null });
       process.stdout.write(
         `
-${chalk5.red("Deep Code has been updated. Please restart the CLI to use the new version.")}
+${chalk6.red("Deep Code has been updated. Please restart the CLI to use the new version.")}
 
 `
       );
@@ -8805,10 +11607,10 @@ function compareVersions(a, b) {
   return 0;
 }
 function getUpdateStatePath() {
-  return path13.join(os10.homedir(), ".deepcode", UPDATE_STATE_FILE);
+  return path14.join(os10.homedir(), ".deepcode", UPDATE_STATE_FILE);
 }
 async function promptUpdateChoice({ currentVersion, latestVersion, installCommand }) {
-  return new Promise((resolve6) => {
+  return new Promise((resolve7) => {
     let selected = false;
     let instance = null;
     const handleSelect = (choice) => {
@@ -8816,11 +11618,11 @@ async function promptUpdateChoice({ currentVersion, latestVersion, installComman
         return;
       }
       selected = true;
-      resolve6(choice);
+      resolve7(choice);
       instance?.unmount();
     };
     instance = render(
-      React8.createElement(UpdatePrompt, {
+      React13.createElement(UpdatePrompt, {
         currentVersion,
         latestVersion,
         installCommand,
@@ -8831,24 +11633,23 @@ async function promptUpdateChoice({ currentVersion, latestVersion, installComman
   });
 }
 async function runNpmInstallGlobal(installSpec) {
-  return new Promise((resolve6) => {
-    const child = spawn4("npm", ["install", "-g", installSpec], {
+  return new Promise((resolve7) => {
+    const child = spawnNpm(["install", "-g", installSpec], {
       stdio: "inherit",
-      shell: process.platform === "win32",
     });
     child.on("error", (error) => {
       process.stderr.write(`Failed to start npm install: ${error.message}
 `);
-      resolve6(false);
+      resolve7(false);
     });
     child.on("close", (code) => {
       if (code === 0) {
-        resolve6(true);
+        resolve7(true);
         return;
       }
       process.stderr.write(`npm install exited with code ${code ?? "unknown"}.
 `);
-      resolve6(false);
+      resolve7(false);
     });
   });
 }
@@ -8864,14 +11665,13 @@ async function fetchLatestNpmVersion(packageName) {
   return parseNpmViewVersion(result.stdout);
 }
 function runNpmViewLatestVersion(packageName, registry, timeoutMs) {
-  return new Promise((resolve6) => {
+  return new Promise((resolve7) => {
     const args2 = ["view", packageName, "dist-tags.latest", "--json"];
     if (registry) {
       args2.push("--registry", registry);
     }
-    const child = spawn4("npm", args2, {
+    const child = spawnNpm(args2, {
       stdio: ["ignore", "pipe", "pipe"],
-      shell: process.platform === "win32",
     });
     let stdout = "";
     let settled = false;
@@ -8881,10 +11681,14 @@ function runNpmViewLatestVersion(packageName, registry, timeoutMs) {
       }
       settled = true;
       clearTimeout(timer);
-      resolve6(result);
+      resolve7(result);
     };
     const timer = setTimeout(() => {
-      child.kill();
+      if (typeof child.pid === "number") {
+        killProcessTree(child.pid, "SIGTERM", { killGroupOnNonWindows: false });
+      } else {
+        child.kill();
+      }
       finish({ ok: false });
     }, timeoutMs);
     child.stdout?.on("data", (chunk) => {
@@ -8899,6 +11703,21 @@ function runNpmViewLatestVersion(packageName, registry, timeoutMs) {
       finish(code === 0 ? { ok: true, stdout } : { ok: false });
     });
   });
+}
+function spawnNpm(args2, options) {
+  if (process.platform === "win32") {
+    return spawn5(["npm", ...args2.map(quoteCmdArg)].join(" "), [], {
+      ...options,
+      shell: true,
+    });
+  }
+  return spawn5("npm", args2, {
+    ...options,
+    shell: false,
+  });
+}
+function quoteCmdArg(arg) {
+  return `"${String(arg).replace(/"/g, '\\"')}"`;
 }
 function parseNpmViewVersion(output) {
   const trimmed = output.trim();
@@ -8931,7 +11750,7 @@ function readUpdateState() {
 }
 function writeUpdateState(state) {
   const statePath = getUpdateStatePath();
-  fs13.mkdirSync(path13.dirname(statePath), { recursive: true });
+  fs13.mkdirSync(path14.dirname(statePath), { recursive: true });
   fs13.writeFileSync(
     statePath,
     `${JSON.stringify(state, null, 2)}
@@ -8955,27 +11774,196 @@ function parseVersion(value) {
 
 // src/headless.ts
 import * as readline from "readline";
-import * as fs14 from "fs";
 function jsonReplacer(_key, value) {
   if (value instanceof Map) {
-    return Object.fromEntries(value);
+    const obj = {};
+    for (const [k, v] of value) obj[k] = v;
+    return obj;
   }
   return value;
 }
-function serializeEntry(entry) {
-  const processes = entry.processes ? Object.fromEntries(entry.processes) : null;
-  return { ...entry, processes };
+async function runHeadlessWithOptions(options, packageVersion) {
+  const projectRoot2 =
+    options.projectRoot && options.projectRoot.trim().length > 0 ? options.projectRoot : process.cwd();
+  const input = options.input ?? process.stdin;
+  const output = options.output ?? process.stdout;
+  const createClient = options.createOpenAIClient ?? createOpenAIClient;
+  const exitOnClose = options.exitOnClose ?? true;
+  function emit(event) {
+    output.write(`${JSON.stringify(event, jsonReplacer)}
+`);
+  }
+  function getResolvedSettings() {
+    return resolveCurrentSettings(projectRoot2);
+  }
+  let sessionId = null;
+  const sessionManager = new SessionManager({
+    projectRoot: projectRoot2,
+    createOpenAIClient: () => createClient(projectRoot2),
+    getResolvedSettings,
+    renderMarkdown: (text) => text,
+    // headless mode does not render markdown
+    onAssistantMessage: (message, shouldConnect) => {
+      emit({
+        event: "assistant_message",
+        sessionId: message.sessionId,
+        messageId: message.id,
+        role: message.role,
+        content: message.content,
+        contentParams: message.contentParams,
+        meta: message.meta,
+        shouldConnect,
+      });
+    },
+    onSessionEntryUpdated: (entry) => {
+      emit({
+        event: "session_updated",
+        session: entry,
+      });
+    },
+    onMcpStatusChanged: () => {
+      emit({ event: "mcp_status_changed" });
+    },
+    onProcessStdout: (pid, chunk) => {
+      emit({
+        event: "process_stdout",
+        sessionId,
+        pid,
+        chunk,
+      });
+    },
+  });
+  await sessionManager.initMcpServers(getResolvedSettings().mcpServers);
+  emit({
+    event: "initialized",
+    version: packageVersion,
+    projectRoot: projectRoot2,
+    model: getResolvedSettings().model,
+  });
+  const rl = readline.createInterface({ input, terminal: false });
+  let closing = false;
+  function handleClose() {
+    if (closing) return;
+    closing = true;
+    sessionManager.dispose();
+    if (exitOnClose) {
+      process.exit(0);
+    }
+  }
+  rl.on("close", handleClose);
+  rl.on("line", (line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    let message;
+    try {
+      message = JSON.parse(trimmed);
+    } catch {
+      emit({ event: "error", error: "Invalid JSON" });
+      return;
+    }
+    const method = typeof message.method === "string" ? message.method : "";
+    const id = message.id;
+    const params = message.params ?? {};
+    void handleMethod(method, id, params).catch((error) => {
+      const errMessage = error instanceof Error ? error.message : String(error);
+      emit({ event: "error", id, error: errMessage });
+    });
+  });
+  async function handleMethod(method, id, params) {
+    switch (method) {
+      case "initialize": {
+        break;
+      }
+      case "chat": {
+        const text = typeof params.text === "string" ? params.text : "";
+        const imageUrls = Array.isArray(params.imageUrls) ? params.imageUrls : void 0;
+        const userPrompt = { text };
+        if (imageUrls && imageUrls.length > 0) {
+          userPrompt.imageUrls = imageUrls;
+        }
+        await sessionManager.handleUserPrompt(userPrompt);
+        const activeId = sessionManager.getActiveSessionId();
+        if (activeId && activeId !== sessionId) {
+          sessionId = activeId;
+          emit({ event: "session_created", sessionId });
+        }
+        emit({ event: "chat_done", id });
+        break;
+      }
+      case "interrupt": {
+        sessionManager.interruptActiveSession();
+        emit({ event: "interrupted", id });
+        break;
+      }
+      case "list_sessions": {
+        const sessions = sessionManager.listSessions();
+        emit({ event: "sessions", id, sessions });
+        break;
+      }
+      case "list_messages": {
+        const sid = typeof params.sessionId === "string" ? params.sessionId : (sessionId ?? "");
+        const messages = sessionManager.listSessionMessages(sid);
+        emit({ event: "messages", id, sessionId: sid, messages });
+        break;
+      }
+      case "set_session": {
+        const sid = typeof params.sessionId === "string" ? params.sessionId : null;
+        sessionManager.setActiveSessionId(sid);
+        sessionId = sid;
+        emit({ event: "session_set", id, sessionId: sid });
+        break;
+      }
+      case "new_session": {
+        sessionManager.setActiveSessionId(null);
+        sessionId = null;
+        emit({ event: "session_cleared", id });
+        break;
+      }
+      case "delete_session": {
+        emit({ event: "ack", id });
+        break;
+      }
+      case "list_skills": {
+        const skills = await sessionManager.listSkills(sessionId ?? void 0);
+        emit({ event: "skills", id, skills });
+        break;
+      }
+      case "load_skill": {
+        const skillPath = typeof params.path === "string" ? params.path : "";
+        const skills = [
+          {
+            name: typeof params.name === "string" ? params.name : "unknown",
+            path: skillPath,
+            description: typeof params.description === "string" ? params.description : "",
+          },
+        ];
+        const userPrompt = { text: "/continue", skills };
+        await sessionManager.handleUserPrompt(userPrompt);
+        emit({ event: "skill_loaded", id });
+        break;
+      }
+      case "adjust_bash_timeout": {
+        const deltaMs = typeof params.deltaMs === "number" ? params.deltaMs : 0;
+        const result = sessionManager.adjustActiveBashTimeout(deltaMs);
+        emit({ event: "bash_timeout_adjusted", id, result });
+        break;
+      }
+      default:
+        emit({ event: "error", id, error: `Unknown method: ${method}` });
+        break;
+    }
+  }
 }
 function parseHeadlessArgs(args2) {
-  const options = {};
+  const opts = {};
   for (let i = 0; i < args2.length; i += 1) {
     const arg = args2[i];
     if (arg === "--project-root" && i + 1 < args2.length) {
-      options.projectRoot = args2[i + 1];
+      opts.projectRoot = args2[i + 1];
       i += 1;
     }
   }
-  return options;
+  return opts;
 }
 async function runHeadless(args2, packageVersion, overrides = {}) {
   const opts = parseHeadlessArgs(args2);
@@ -8987,196 +11975,9 @@ async function runHeadless(args2, packageVersion, overrides = {}) {
     packageVersion
   );
 }
-async function runHeadlessWithOptions(options, packageVersion) {
-  const projectRoot =
-    options.projectRoot && options.projectRoot.trim().length > 0 ? options.projectRoot : process.cwd();
-  const input = options.input ?? process.stdin;
-  const output = options.output ?? process.stdout;
-  const createOpenAIClient3 = options.createOpenAIClient ?? createOpenAIClient;
-  const exitOnClose = options.exitOnClose ?? true;
-  function emit(event) {
-    output.write(`${JSON.stringify(event, jsonReplacer)}
-`);
-  }
-  const manager = new SessionManager({
-    projectRoot,
-    createOpenAIClient: createOpenAIClient3,
-    getResolvedSettings: () => resolveCurrentSettings(),
-    renderMarkdown: (text) => text,
-    onAssistantMessage: (message) => {
-      emit({ type: "message", message });
-    },
-    onSessionEntryUpdated: (entry) => {
-      emit({ type: "session", entry: serializeEntry(entry) });
-    },
-    onLlmStreamProgress: (progress) => {
-      emit({
-        type: "stream",
-        sessionId: progress.sessionId,
-        phase: progress.phase,
-        estimatedTokens: progress.estimatedTokens,
-        formattedTokens: progress.formattedTokens,
-      });
-    },
-  });
-  emit({
-    type: "ready",
-    version: packageVersion,
-    machineId: getMachineId(),
-    projectRoot,
-  });
-  const rl = readline.createInterface({ input, terminal: false });
-  let chain = Promise.resolve();
-  rl.on("line", (line) => {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      return;
-    }
-    let inbound;
-    try {
-      inbound = JSON.parse(trimmed);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      emit({ type: "error", error: `Invalid JSON: ${message}` });
-      return;
-    }
-    chain = chain
-      .then(() => handleInbound(inbound))
-      .catch((err) => {
-        const message = err instanceof Error ? err.message : String(err);
-        emit({ type: "error", error: `Internal error: ${message}` });
-      });
-  });
-  return new Promise((resolve6) => {
-    rl.on("close", () => {
-      chain.finally(() => {
-        if (exitOnClose) {
-          process.exit(0);
-        }
-        resolve6();
-      });
-    });
-  });
-  async function handleInbound(inbound) {
-    switch (inbound.type) {
-      case "interrupt": {
-        manager.interruptActiveSession();
-        if (inbound.id) {
-          emit({ type: "ack", id: inbound.id });
-        }
-        return;
-      }
-      case "list_sessions": {
-        const sessions = manager.listSessions().map(serializeEntry);
-        emit({ type: "sessions_list", id: inbound.id, sessions });
-        return;
-      }
-      case "new_session": {
-        manager.setActiveSessionId(null);
-        emit({ type: "ack", id: inbound.id });
-        return;
-      }
-      case "load_session": {
-        manager.setActiveSessionId(inbound.sessionId);
-        const messages = manager.listSessionMessages(inbound.sessionId).filter((m) => m.visible);
-        emit({
-          type: "session_loaded",
-          id: inbound.id,
-          sessionId: inbound.sessionId,
-          messages,
-        });
-        return;
-      }
-      case "submit": {
-        try {
-          const prompt = {
-            text: inbound.text,
-            imageUrls: inbound.imageUrls,
-            skills: inbound.skills,
-          };
-          await manager.handleUserPrompt(prompt);
-          const sessionId = manager.getActiveSessionId();
-          const session = sessionId ? manager.getSession(sessionId) : null;
-          emit({
-            type: "done",
-            id: inbound.id,
-            status: session?.status ?? "completed",
-          });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          emit({ type: "error", id: inbound.id, error: message });
-          emit({ type: "done", id: inbound.id, status: "failed" });
-        }
-        return;
-      }
-      case "change_project_root": {
-        const newPath = inbound.path.trim();
-        if (!newPath) {
-          emit({ type: "error", id: inbound.id, error: "path must be a non-empty string" });
-          return;
-        }
-        try {
-          const stat = fs14.statSync(newPath);
-          if (!stat.isDirectory()) {
-            emit({ type: "error", id: inbound.id, error: `path is not a directory: ${newPath}` });
-            return;
-          }
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          emit({ type: "error", id: inbound.id, error: `cannot access directory: ${message}` });
-          return;
-        }
-        try {
-          manager.interruptActiveSession();
-          manager.changeProjectRoot(newPath);
-          writeLastProjectRoot(newPath);
-          const skills = await manager.listSkills();
-          emit({ type: "project_root_changed", id: inbound.id, path: newPath, skills });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          emit({ type: "error", id: inbound.id, error: `Failed to change project root: ${message}` });
-        }
-        return;
-      }
-      case "list_slash_commands": {
-        try {
-          const sessionId = manager.getActiveSessionId() ?? void 0;
-          const skills = await manager.listSkills(sessionId);
-          const commands = buildSlashCommands(skills);
-          emit({ type: "slash_commands", id: inbound.id, commands });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          emit({ type: "error", id: inbound.id, error: `Failed to list slash commands: ${message}` });
-        }
-        return;
-      }
-      case "read_clipboard_image": {
-        try {
-          const image = readClipboardImage();
-          if (image) {
-            emit({ type: "clipboard_image", id: inbound.id, dataUrl: image.dataUrl });
-          } else {
-            emit({ type: "clipboard_image", id: inbound.id, error: "No image in clipboard" });
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          emit({ type: "clipboard_image", id: inbound.id, error: message });
-        }
-        return;
-      }
-      default: {
-        const value = inbound;
-        emit({
-          type: "error",
-          error: `Unknown inbound type: ${String(value.type)}`,
-        });
-      }
-    }
-  }
-}
 
 // src/cli.tsx
-import { jsx as jsx10 } from "react/jsx-runtime";
+import { jsx as jsx16 } from "react/jsx-runtime";
 var args = process.argv.slice(2);
 var packageInfo = readPackageInfo();
 if (args.includes("--version") || args.includes("-v")) {
@@ -9190,16 +11991,19 @@ if (args.includes("--help") || args.includes("-h")) {
       "deepcode - Deep Code CLI",
       "",
       "Usage:",
-      "  deepcode               Launch the interactive TUI in the current directory",
-      "  deepcode headless      Run a headless NDJSON server over stdio (for native frontends)",
-      "  deepcode --version     Print the version",
-      "  deepcode --help        Show this help",
+      "  deepcode                              Launch the interactive TUI in the current directory",
+      "  deepcode headless                     Run a headless NDJSON server over stdio (for native frontends)",
+      "  deepcode -p <prompt>                  Launch with a pre-filled prompt",
+      "  deepcode --prompt <prompt>            Same as -p",
+      "  deepcode --version                    Print the version",
+      "  deepcode --help                       Show this help",
       "",
       "Headless options:",
-      "  --project-root <path>  Use the given directory as the project root (default: cwd)",
+      "  --project-root <path>                 Use the given directory as the project root (default: cwd)",
       "",
       "Configuration:",
-      "  ~/.deepcode/settings.json   API key, model, base URL",
+      "  ~/.deepcode/settings.json    User-level API key, model, base URL",
+      "  ./.deepcode/settings.json    Project-level settings",
       "  ~/.agents/skills/*/SKILL.md  User-level skills",
       "  ./.agents/skills/*/SKILL.md  Project-level skills",
       "  ./.deepcode/skills/*/SKILL.md Legacy project-level skills",
@@ -9217,14 +12021,24 @@ if (args.includes("--help") || args.includes("-h")) {
       "  /new             Start a fresh conversation",
       "  /init            Initialize an AGENTS.md file with instructions for LLM",
       "  /resume          Pick a previous conversation to continue",
+      "  /continue        Continue the active conversation, or resume one if empty",
       "  /exit            Quit",
       "  ctrl+d twice     Quit",
     ].join("\n") + "\n"
   );
   process.exit(0);
 }
+function extractInitialPrompt(args2) {
+  const promptIndex = args2.findIndex((arg) => arg === "-p" || arg === "--prompt");
+  if (promptIndex !== -1 && promptIndex + 1 < args2.length) {
+    return args2[promptIndex + 1];
+  }
+  return void 0;
+}
+var initialPrompt = extractInitialPrompt(args);
+var projectRoot = process.cwd();
+configureWindowsShell();
 if (args[0] === "headless") {
-  configureWindowsShell();
   void runHeadless(args.slice(1), packageInfo.version || "unknown").catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`deepcode headless: ${message}
@@ -9232,7 +12046,6 @@ if (args[0] === "headless") {
     process.exit(1);
   });
 } else {
-  configureWindowsShell();
   if (!process.stdin.isTTY) {
     process.stderr.write(
       "deepcode requires an interactive terminal (TTY). Re-run from a real terminal session, or use `deepcode headless` for a programmatic interface.\n"
@@ -9245,21 +12058,27 @@ async function main() {
   const updatePromptResult = await promptForPendingUpdate(packageInfo);
   const restartRef = { current: null };
   function startApp() {
+    let restarting = false;
+    const appInitialPrompt = initialPrompt;
+    initialPrompt = void 0;
     const inkInstance = render2(
-      /* @__PURE__ */ jsx10(App, {
-        projectRoot: process.cwd(),
+      /* @__PURE__ */ jsx16(AppContainer_default, {
+        projectRoot,
         version: packageInfo.version,
+        initialPrompt: appInitialPrompt,
         onRestart: () => restartRef.current?.(),
       }),
       { exitOnCtrlC: false }
     );
     restartRef.current = () => {
+      restarting = true;
       process.stdout.write("\x1B[2J\x1B[3J\x1B[H");
       inkInstance.unmount();
       startApp();
     };
     inkInstance.waitUntilExit().then(() => {
-      if (!restartRef.current) {
+      if (!restarting) {
+        restartRef.current = null;
         process.exit(0);
       }
     });
@@ -9282,21 +12101,7 @@ function configureWindowsShell() {
 }
 function readPackageInfo() {
   try {
-    const bundleDir = dirname9(fileURLToPath3(import.meta.url));
-    const packageJsonCandidates = [resolve5(bundleDir, "../package.json"), resolve5(bundleDir, "package.json")];
-    const packageJson = packageJsonCandidates
-      .map((candidate) => {
-        try {
-          return readFileSync10(candidate, "utf8");
-        } catch {
-          return "";
-        }
-      })
-      .find((content) => content.length > 0);
-    if (!packageJson) {
-      return { name: "@vegamo/deepcode-cli", version: "" };
-    }
-    const pkg = JSON.parse(packageJson);
+    const pkg = require_package();
     return {
       name: typeof pkg.name === "string" ? pkg.name : "@vegamo/deepcode-cli",
       version: typeof pkg.version === "string" ? pkg.version : "",
