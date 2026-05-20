@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 env:
-  NODE_VERSION: "22"
+  NODE_VERSION: "22.15.0"
   XCODEGEN_VERSION: "2.42.0"
 
 jobs:
