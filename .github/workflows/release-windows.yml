@@ -1,0 +1,196 @@
+name: Release Windows App
+
+on:
+  push:
+    tags:
+      - "windows-v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Tag to release (e.g. windows-v0.2.3)"
+        required: true
+        default: "windows-v0.0.0-dev"
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: "18.20.4"
+  DOTNET_VERSION: "8.0.x"
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - name: Resolve tag name
+        id: tag
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            "name=${{ inputs.tag_name }}" >> $env:GITHUB_OUTPUT
+          } else {
+            "name=$env:GITHUB_REF_NAME" >> $env:GITHUB_OUTPUT
+          }
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install JS deps
+        shell: bash
+        run: npm ci
+
+      - name: Build CLI bundle
+        shell: bash
+        # We cannot use `npm run build` here: on Windows, npm spawns lifecycle
+        # scripts via cmd.exe regardless of the outer shell, and cmd.exe does
+        # not honor the POSIX single-quotes around the esbuild --banner:js arg,
+        # turning `node'` into a phantom second input file. Call the binaries
+        # directly so this bash invocation does the quoting.
+        run: |
+          npx tsc -p ./ --noEmit
+          ./node_modules/.bin/esbuild ./src/cli.tsx \
+            --bundle --platform=node --format=esm --target=node18 \
+            --outfile=dist/cli.mjs \
+            --banner:js='#!/usr/bin/env node' \
+            --jsx=automatic --jsx-import-source=react \
+            --packages=external \
+            --log-override:empty-import-meta=silent
+          chmod +x dist/cli.mjs || true
+
+      - name: Run tests (non-blocking on Windows)
+        shell: bash
+        # The CLI test suite has pre-existing Windows incompatibilities
+        # (POSIX-only path assertions in welcomeScreen.test, missing external
+        # binaries in web-search-handler.test, etc.). The macOS workflow is the
+        # authoritative gate for correctness; here we run them for visibility
+        # but do not fail the build.
+        continue-on-error: true
+        run: ./node_modules/.bin/tsx --test src/tests/*.test.ts
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Generate placeholder app icon
+        shell: pwsh
+        # Convert the macOS app's 256x256 PNG into a .ico so the WPF
+        # ApplicationIcon / NotifyIcon have a real image. Falls back to a 1x1
+        # transparent ICO if the PNG isn't present, so the build never blocks
+        # on icon assets.
+        run: |
+          Add-Type -AssemblyName System.Drawing
+          $dst = "apps/windows-tray/DeepCode/Resources/DeepCode.ico"
+          $src = "apps/macos-menubar/DeepCode/Resources/Assets.xcassets/AppIcon.appiconset/icon_256x256.png"
+          if (Test-Path $src) {
+            $bmp = [System.Drawing.Bitmap]::FromFile((Resolve-Path $src))
+            $icon = [System.Drawing.Icon]::FromHandle($bmp.GetHicon())
+            $fs = [System.IO.File]::OpenWrite((Join-Path (Get-Location) $dst))
+            $icon.Save($fs)
+            $fs.Close()
+            $bmp.Dispose()
+          } else {
+            # 16-byte minimal ICO header for a 1x1 transparent icon
+            [byte[]]$bytes = 0,0,1,0,1,0,1,1,0,0,1,0,32,0,0x68,0,0,0,0x16,0,0,0,0x28,0,0,0,1,0,0,0,2,0,0,0,1,0,32,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+            [System.IO.File]::WriteAllBytes((Join-Path (Get-Location) $dst), $bytes)
+          }
+          Write-Host "Wrote $dst ($((Get-Item $dst).Length) bytes)"
+
+      - name: Stage sidecar resources
+        shell: pwsh
+        run: |
+          $sidecar = "apps/windows-tray/DeepCode/Resources/sidecar"
+          if (Test-Path $sidecar) {
+            Get-ChildItem -Path $sidecar -Force -Exclude '.gitkeep' | Remove-Item -Recurse -Force
+          } else {
+            New-Item -ItemType Directory -Path $sidecar -Force | Out-Null
+          }
+          Copy-Item dist/cli.mjs "$sidecar/cli.mjs" -Force
+          Copy-Item package.json "$sidecar/package.json" -Force
+
+          # prod-only node_modules
+          $work = New-Item -ItemType Directory -Path (Join-Path $env:TEMP "sidecar-prod") -Force
+          Copy-Item package.json (Join-Path $work "package.json")
+          Copy-Item package-lock.json (Join-Path $work "package-lock.json")
+          Push-Location $work
+          npm ci --omit=dev --ignore-scripts
+          Pop-Location
+          Copy-Item (Join-Path $work "node_modules") "$sidecar/node_modules" -Recurse -Force
+          Remove-Item $work -Recurse -Force
+
+          # docs/tools used by the system prompt assembly at runtime
+          New-Item -ItemType Directory -Path "$sidecar/docs/tools" -Force | Out-Null
+          Copy-Item docs/tools/* "$sidecar/docs/tools/" -Recurse -Force
+
+      - name: Download Node.exe
+        shell: pwsh
+        run: |
+          $ver = "v$env:NODE_VERSION"
+          $url = "https://nodejs.org/dist/$ver/node-$ver-win-x64.zip"
+          Invoke-WebRequest $url -OutFile node.zip
+          Expand-Archive node.zip -DestinationPath nodebin -Force
+          Copy-Item "nodebin/node-$ver-win-x64/node.exe" "apps/windows-tray/DeepCode/Resources/sidecar/node.exe" -Force
+          Remove-Item node.zip
+          Remove-Item nodebin -Recurse -Force
+
+      - name: Resolve marketing version
+        id: version
+        shell: pwsh
+        run: |
+          $name = "${{ steps.tag.outputs.name }}"
+          $ver = $name -replace '^windows-v', ''
+          $ver = $ver -replace '-.*$', ''
+          if ([string]::IsNullOrEmpty($ver)) { $ver = "0.0.0" }
+          "version=$ver" >> $env:GITHUB_OUTPUT
+
+      - name: Publish (self-contained, single-file)
+        shell: pwsh
+        run: |
+          dotnet publish apps/windows-tray/DeepCode/DeepCode.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:Version=${{ steps.version.outputs.version }} `
+            -p:AssemblyVersion=${{ steps.version.outputs.version }}.0 `
+            -p:FileVersion=${{ steps.version.outputs.version }}.0 `
+            -o build/publish
+
+      - name: Assemble portable bundle
+        shell: pwsh
+        run: |
+          # Layout next to the .exe:
+          #   DeepCode.exe
+          #   sidecar\node.exe, cli.mjs, package.json, node_modules\, docs\tools\
+          $dst = "build/publish/sidecar"
+          New-Item -ItemType Directory -Path $dst -Force | Out-Null
+          Copy-Item apps/windows-tray/DeepCode/Resources/sidecar/* $dst -Recurse -Force
+
+          $tag = "${{ steps.tag.outputs.name }}"
+          $zip = "build/DeepCode-$tag-win-x64.zip"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path "build/publish/*" -DestinationPath $zip
+          Write-Host "Created $zip"
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeepCode-${{ steps.tag.outputs.name }}-win-x64
+          path: build/DeepCode-${{ steps.tag.outputs.name }}-win-x64.zip
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: ${{ steps.tag.outputs.name }}
+          files: build/DeepCode-${{ steps.tag.outputs.name }}-win-x64.zip
+          generate_release_notes: true
+          prerelease: ${{ contains(steps.tag.outputs.name, '-rc') || contains(steps.tag.outputs.name, '-dev') }}

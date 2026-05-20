@@ -1,0 +1,60 @@
+name: DeepCode
+options:
+  bundleIdPrefix: com.vegamo.deepcode
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    PRODUCT_BUNDLE_IDENTIFIER: com.vegamo.deepcode.menubar
+    INFOPLIST_FILE: DeepCode/Info.plist
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGNING_ALLOWED: "NO"
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: "NO"
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    GENERATE_INFOPLIST_FILE: "NO"
+
+targets:
+  DeepCode:
+    type: application
+    platform: macOS
+    sources:
+      - path: DeepCode
+        excludes:
+          - "Resources/sidecar/**"
+          - "Info.plist"
+    resources:
+      - path: DeepCode/Resources/Assets.xcassets
+    settings:
+      base:
+        PRODUCT_NAME: DeepCode
+    postBuildScripts:
+      - name: Copy sidecar bundle
+        # Embeds the staged sidecar directory (cli.mjs, node binary, node_modules,
+        # docs/tools) into the app bundle. We avoid the standard "Copy Bundle
+        # Resources" phase because folder references lose the executable bit on
+        # the universal `node` binary; rsync + explicit chmod preserves it.
+        runOnlyWhenInstalling: false
+        shell: /bin/bash
+        script: |
+          set -euo pipefail
+          SRC="${SRCROOT}/DeepCode/Resources/sidecar"
+          DST="${BUILT_PRODUCTS_DIR}/${WRAPPER_NAME}/Contents/Resources/sidecar"
+          if [ ! -d "$SRC" ]; then
+            echo "warning: sidecar source $SRC missing; the app will not be runnable. Run apps/macos-menubar/scripts/stage-sidecar.sh."
+            exit 0
+          fi
+          mkdir -p "$DST"
+          rsync -a --delete \
+            --exclude '.gitkeep' \
+            --exclude '.DS_Store' \
+            "$SRC/" "$DST/"
+          if [ -f "$DST/node" ]; then
+            chmod +x "$DST/node"
+          fi
