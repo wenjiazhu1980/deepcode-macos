@@ -5,32 +5,34 @@
  * so native frontends (macOS, Windows apps) can drive the CLI engine
  * without a terminal.
  *
- * Protocol:
- *   stdin  ←  JSON lines (one JSON object per line)
- *   stdout →  JSON lines (one JSON object per line)
+ * Protocol (matches macOS app's ServerEvent / ClientCommand):
+ *   stdin  ←  JSON lines with "type" field (ClientCommand)
+ *   stdout →  JSON lines with "type" field (ServerEvent)
  *
- * Inbound methods:
- *   initialize        – Set up the session (project root, model, etc.)
- *   chat              – Send a user prompt
- *   interrupt         – Abort the active model turn
- *   list_sessions     – Return all session entries
- *   list_messages     – Return messages for a given session
- *   set_session       – Switch the active session
- *   new_session       – Start a fresh session
- *   delete_session    – Remove a session
- *   load_skill        – Load a skill into the current session
- *   list_skills       – List available skills
- *   adjust_bash_timeout – Adjust the timeout for a running bash process
+ * Inbound types (App → CLI):
+ *   submit              – Send a user prompt
+ *   interrupt           – Abort the active model turn
+ *   list_sessions       – Return all session entries
+ *   load_session        – Load a specific session
+ *   new_session         – Start a fresh session
+ *   change_project_root – Change the project root directory
+ *   list_slash_commands – List available slash commands
+ *   read_clipboard_image – Read image from clipboard
+ *
+ * Outbound types (CLI → App):
+ *   ready               – Initialization complete
+ *   session             – Session entry update
+ *   stream              – LLM streaming progress
+ *   message             – Assistant or system message
+ *   sessions_list       – List of sessions
+ *   session_loaded      – Messages for a loaded session
+ *   error               – Error response
+ *   done                – Command completed
+ *   ack                 – Acknowledgement
  */
 
 import * as readline from "readline";
-import {
-  SessionManager,
-  type SessionEntry,
-  type SessionMessage,
-  type UserPromptContent,
-  type SkillInfo,
-} from "./session";
+import { SessionManager, type SessionEntry, type SessionMessage, type UserPromptContent } from "./session";
 import { resolveCurrentSettings, createOpenAIClient } from "./ui/App";
 
 // ---------------------------------------------------------------------------
@@ -85,47 +87,57 @@ export async function runHeadlessWithOptions(options: HeadlessOptions, packageVe
     projectRoot,
     createOpenAIClient: () => createClient(projectRoot),
     getResolvedSettings,
-    renderMarkdown: (text: string) => text, // headless mode does not render markdown
-    onAssistantMessage: (message: SessionMessage, shouldConnect: boolean) => {
+    renderMarkdown: (text: string) => text,
+    onAssistantMessage: (message: SessionMessage, _shouldConnect: boolean) => {
       emit({
-        event: "assistant_message",
-        sessionId: message.sessionId,
-        messageId: message.id,
-        role: message.role,
-        content: message.content,
-        contentParams: message.contentParams,
-        meta: message.meta,
-        shouldConnect,
+        type: "message",
+        id: message.id,
+        message: {
+          id: message.id,
+          sessionId: message.sessionId,
+          role: message.role,
+          content: message.content,
+          visible: message.visible,
+          createTime: message.createTime,
+          meta: message.meta,
+          messageParams: message.messageParams,
+        },
       });
     },
     onSessionEntryUpdated: (entry: SessionEntry) => {
       emit({
-        event: "session_updated",
-        session: entry,
+        type: "session",
+        entry: {
+          id: entry.id,
+          summary: entry.summary,
+          assistantReply: entry.assistantReply,
+          assistantThinking: entry.assistantThinking,
+          assistantRefusal: entry.assistantRefusal,
+          status: entry.status,
+          failReason: entry.failReason,
+          activeTokens: entry.activeTokens,
+          createTime: entry.createTime,
+          updateTime: entry.updateTime,
+        },
       });
     },
     onMcpStatusChanged: () => {
-      emit({ event: "mcp_status_changed" });
+      // Silently ignore – the app does not handle this event type
     },
-    onProcessStdout: (pid: number, chunk: string) => {
-      emit({
-        event: "process_stdout",
-        sessionId,
-        pid,
-        chunk,
-      });
+    onProcessStdout: (_pid: number, _chunk: string) => {
+      // Process stdout is not exposed via the protocol
     },
   });
 
   await sessionManager.initMcpServers(getResolvedSettings().mcpServers);
 
-  // ---- version announcement -----------------------------------------------
+  // ---- ready announcement -------------------------------------------------
 
   emit({
-    event: "initialized",
+    type: "ready",
     version: packageVersion,
+    machineId: null,
     projectRoot,
-    model: getResolvedSettings().model,
   });
 
   // ---- read inbound JSON lines --------------------------------------------
@@ -153,36 +165,40 @@ export async function runHeadlessWithOptions(options: HeadlessOptions, packageVe
     try {
       message = JSON.parse(trimmed) as Record<string, unknown>;
     } catch {
-      emit({ event: "error", error: "Invalid JSON" });
+      emit({ type: "error", error: "Invalid JSON" });
       return;
     }
 
-    const method = typeof message.method === "string" ? message.method : "";
-    const id = message.id;
-    const params = (message.params ?? {}) as Record<string, unknown>;
+    const type = typeof message.type === "string" ? message.type : "";
+    const id = typeof message.id === "string" ? message.id : "";
 
-    void handleMethod(method, id, params).catch((error) => {
+    void handleCommand(type, id, message).catch((error) => {
       const errMessage = error instanceof Error ? error.message : String(error);
-      emit({ event: "error", id, error: errMessage });
+      emit({ type: "error", id, message: errMessage });
     });
   });
 
-  // ---- method dispatch ----------------------------------------------------
+  // ---- command dispatch ---------------------------------------------------
 
-  async function handleMethod(method: string, id: unknown, params: Record<string, unknown>): Promise<void> {
-    switch (method) {
-      case "initialize": {
-        // Re-initialize with potentially new project root
-        break;
-      }
-
-      case "chat": {
-        const text = typeof params.text === "string" ? params.text : "";
-        const imageUrls = Array.isArray(params.imageUrls) ? (params.imageUrls as string[]) : undefined;
+  async function handleCommand(type: string, id: string, raw: Record<string, unknown>): Promise<void> {
+    switch (type) {
+      case "submit": {
+        const text = typeof raw.text === "string" ? raw.text : "";
+        const imageUrls = Array.isArray(raw.imageUrls) ? (raw.imageUrls as string[]) : undefined;
+        const skills = Array.isArray(raw.skills)
+          ? (raw.skills as Array<{ name: string; path: string; description: string }>)
+          : undefined;
 
         const userPrompt: UserPromptContent = { text };
         if (imageUrls && imageUrls.length > 0) {
           userPrompt.imageUrls = imageUrls;
+        }
+        if (skills && skills.length > 0) {
+          userPrompt.skills = skills.map((s) => ({
+            name: s.name,
+            path: s.path,
+            description: s.description,
+          }));
         }
 
         await sessionManager.handleUserPrompt(userPrompt);
@@ -191,83 +207,100 @@ export async function runHeadlessWithOptions(options: HeadlessOptions, packageVe
         const activeId = sessionManager.getActiveSessionId();
         if (activeId && activeId !== sessionId) {
           sessionId = activeId;
-          emit({ event: "session_created", sessionId });
         }
 
-        emit({ event: "chat_done", id });
+        emit({ type: "done", id, status: "completed" });
         break;
       }
 
       case "interrupt": {
         sessionManager.interruptActiveSession();
-        emit({ event: "interrupted", id });
+        emit({ type: "ack", id });
         break;
       }
 
       case "list_sessions": {
         const sessions = sessionManager.listSessions();
-        emit({ event: "sessions", id, sessions });
+        emit({
+          type: "sessions_list",
+          id,
+          sessions: sessions.map((e) => ({
+            id: e.id,
+            summary: e.summary,
+            assistantReply: e.assistantReply,
+            assistantThinking: e.assistantThinking,
+            assistantRefusal: e.assistantRefusal,
+            status: e.status,
+            failReason: e.failReason,
+            activeTokens: e.activeTokens,
+            createTime: e.createTime,
+            updateTime: e.updateTime,
+          })),
+        });
         break;
       }
 
-      case "list_messages": {
-        const sid = typeof params.sessionId === "string" ? params.sessionId : (sessionId ?? "");
-        const messages = sessionManager.listSessionMessages(sid);
-        emit({ event: "messages", id, sessionId: sid, messages });
-        break;
-      }
-
-      case "set_session": {
-        const sid = typeof params.sessionId === "string" ? params.sessionId : null;
+      case "load_session": {
+        const sid = typeof raw.sessionId === "string" ? raw.sessionId : "";
         sessionManager.setActiveSessionId(sid);
         sessionId = sid;
-        emit({ event: "session_set", id, sessionId: sid });
+        const messages = sessionManager.listSessionMessages(sid);
+        emit({
+          type: "session_loaded",
+          id,
+          sessionId: sid,
+          messages: messages.map((m) => ({
+            id: m.id,
+            sessionId: m.sessionId,
+            role: m.role,
+            content: m.content,
+            visible: m.visible,
+            createTime: m.createTime,
+            meta: m.meta,
+            messageParams: m.messageParams,
+          })),
+        });
         break;
       }
 
       case "new_session": {
         sessionManager.setActiveSessionId(null);
         sessionId = null;
-        emit({ event: "session_cleared", id });
+        emit({ type: "ack", id });
         break;
       }
 
-      case "delete_session": {
-        // Not yet implemented at session manager level – just acknowledge
-        emit({ event: "ack", id });
+      case "change_project_root": {
+        // Not dynamically changeable – just acknowledge
+        emit({ type: "ack", id });
         break;
       }
 
-      case "list_skills": {
-        const skills = await sessionManager.listSkills(sessionId ?? undefined);
-        emit({ event: "skills", id, skills });
+      case "list_slash_commands": {
+        // Return a minimal set of slash commands
+        emit({
+          type: "slash_commands",
+          id,
+          commands: [
+            { kind: "new", name: "/new", label: "New Session", description: "Start a fresh conversation" },
+            { kind: "exit", name: "/exit", label: "Exit", description: "Quit the application" },
+          ],
+        });
         break;
       }
 
-      case "load_skill": {
-        const skillPath = typeof params.path === "string" ? params.path : "";
-        const skills: SkillInfo[] = [
-          {
-            name: typeof params.name === "string" ? params.name : "unknown",
-            path: skillPath,
-            description: typeof params.description === "string" ? params.description : "",
-          },
-        ];
-        const userPrompt: UserPromptContent = { text: "/continue", skills };
-        await sessionManager.handleUserPrompt(userPrompt);
-        emit({ event: "skill_loaded", id });
-        break;
-      }
-
-      case "adjust_bash_timeout": {
-        const deltaMs = typeof params.deltaMs === "number" ? params.deltaMs : 0;
-        const result = sessionManager.adjustActiveBashTimeout(deltaMs);
-        emit({ event: "bash_timeout_adjusted", id, result });
+      case "read_clipboard_image": {
+        emit({
+          type: "clipboard_image",
+          id,
+          dataUrl: null,
+          error: "Clipboard image reading not supported in headless mode",
+        });
         break;
       }
 
       default:
-        emit({ event: "error", id, error: `Unknown method: ${method}` });
+        emit({ type: "error", id, message: `Unknown command type: ${type}` });
         break;
     }
   }

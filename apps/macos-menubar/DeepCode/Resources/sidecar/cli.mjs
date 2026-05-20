@@ -11802,43 +11802,48 @@ async function runHeadlessWithOptions(options, packageVersion) {
     createOpenAIClient: () => createClient(projectRoot2),
     getResolvedSettings,
     renderMarkdown: (text) => text,
-    // headless mode does not render markdown
-    onAssistantMessage: (message, shouldConnect) => {
+    onAssistantMessage: (message, _shouldConnect) => {
       emit({
-        event: "assistant_message",
-        sessionId: message.sessionId,
-        messageId: message.id,
-        role: message.role,
-        content: message.content,
-        contentParams: message.contentParams,
-        meta: message.meta,
-        shouldConnect,
+        type: "message",
+        id: message.id,
+        message: {
+          id: message.id,
+          sessionId: message.sessionId,
+          role: message.role,
+          content: message.content,
+          visible: message.visible,
+          createTime: message.createTime,
+          meta: message.meta,
+          messageParams: message.messageParams,
+        },
       });
     },
     onSessionEntryUpdated: (entry) => {
       emit({
-        event: "session_updated",
-        session: entry,
+        type: "session",
+        entry: {
+          id: entry.id,
+          summary: entry.summary,
+          assistantReply: entry.assistantReply,
+          assistantThinking: entry.assistantThinking,
+          assistantRefusal: entry.assistantRefusal,
+          status: entry.status,
+          failReason: entry.failReason,
+          activeTokens: entry.activeTokens,
+          createTime: entry.createTime,
+          updateTime: entry.updateTime,
+        },
       });
     },
-    onMcpStatusChanged: () => {
-      emit({ event: "mcp_status_changed" });
-    },
-    onProcessStdout: (pid, chunk) => {
-      emit({
-        event: "process_stdout",
-        sessionId,
-        pid,
-        chunk,
-      });
-    },
+    onMcpStatusChanged: () => {},
+    onProcessStdout: (_pid, _chunk) => {},
   });
   await sessionManager.initMcpServers(getResolvedSettings().mcpServers);
   emit({
-    event: "initialized",
+    type: "ready",
     version: packageVersion,
+    machineId: null,
     projectRoot: projectRoot2,
-    model: getResolvedSettings().model,
   });
   const rl = readline.createInterface({ input, terminal: false });
   let closing = false;
@@ -11858,98 +11863,120 @@ async function runHeadlessWithOptions(options, packageVersion) {
     try {
       message = JSON.parse(trimmed);
     } catch {
-      emit({ event: "error", error: "Invalid JSON" });
+      emit({ type: "error", error: "Invalid JSON" });
       return;
     }
-    const method = typeof message.method === "string" ? message.method : "";
-    const id = message.id;
-    const params = message.params ?? {};
-    void handleMethod(method, id, params).catch((error) => {
+    const type2 = typeof message.type === "string" ? message.type : "";
+    const id = typeof message.id === "string" ? message.id : "";
+    void handleCommand(type2, id, message).catch((error) => {
       const errMessage = error instanceof Error ? error.message : String(error);
-      emit({ event: "error", id, error: errMessage });
+      emit({ type: "error", id, message: errMessage });
     });
   });
-  async function handleMethod(method, id, params) {
-    switch (method) {
-      case "initialize": {
-        break;
-      }
-      case "chat": {
-        const text = typeof params.text === "string" ? params.text : "";
-        const imageUrls = Array.isArray(params.imageUrls) ? params.imageUrls : void 0;
+  async function handleCommand(type2, id, raw) {
+    switch (type2) {
+      case "submit": {
+        const text = typeof raw.text === "string" ? raw.text : "";
+        const imageUrls = Array.isArray(raw.imageUrls) ? raw.imageUrls : void 0;
+        const skills = Array.isArray(raw.skills) ? raw.skills : void 0;
         const userPrompt = { text };
         if (imageUrls && imageUrls.length > 0) {
           userPrompt.imageUrls = imageUrls;
+        }
+        if (skills && skills.length > 0) {
+          userPrompt.skills = skills.map((s) => ({
+            name: s.name,
+            path: s.path,
+            description: s.description,
+          }));
         }
         await sessionManager.handleUserPrompt(userPrompt);
         const activeId = sessionManager.getActiveSessionId();
         if (activeId && activeId !== sessionId) {
           sessionId = activeId;
-          emit({ event: "session_created", sessionId });
         }
-        emit({ event: "chat_done", id });
+        emit({ type: "done", id, status: "completed" });
         break;
       }
       case "interrupt": {
         sessionManager.interruptActiveSession();
-        emit({ event: "interrupted", id });
+        emit({ type: "ack", id });
         break;
       }
       case "list_sessions": {
         const sessions = sessionManager.listSessions();
-        emit({ event: "sessions", id, sessions });
+        emit({
+          type: "sessions_list",
+          id,
+          sessions: sessions.map((e) => ({
+            id: e.id,
+            summary: e.summary,
+            assistantReply: e.assistantReply,
+            assistantThinking: e.assistantThinking,
+            assistantRefusal: e.assistantRefusal,
+            status: e.status,
+            failReason: e.failReason,
+            activeTokens: e.activeTokens,
+            createTime: e.createTime,
+            updateTime: e.updateTime,
+          })),
+        });
         break;
       }
-      case "list_messages": {
-        const sid = typeof params.sessionId === "string" ? params.sessionId : (sessionId ?? "");
-        const messages = sessionManager.listSessionMessages(sid);
-        emit({ event: "messages", id, sessionId: sid, messages });
-        break;
-      }
-      case "set_session": {
-        const sid = typeof params.sessionId === "string" ? params.sessionId : null;
+      case "load_session": {
+        const sid = typeof raw.sessionId === "string" ? raw.sessionId : "";
         sessionManager.setActiveSessionId(sid);
         sessionId = sid;
-        emit({ event: "session_set", id, sessionId: sid });
+        const messages = sessionManager.listSessionMessages(sid);
+        emit({
+          type: "session_loaded",
+          id,
+          sessionId: sid,
+          messages: messages.map((m) => ({
+            id: m.id,
+            sessionId: m.sessionId,
+            role: m.role,
+            content: m.content,
+            visible: m.visible,
+            createTime: m.createTime,
+            meta: m.meta,
+            messageParams: m.messageParams,
+          })),
+        });
         break;
       }
       case "new_session": {
         sessionManager.setActiveSessionId(null);
         sessionId = null;
-        emit({ event: "session_cleared", id });
+        emit({ type: "ack", id });
         break;
       }
-      case "delete_session": {
-        emit({ event: "ack", id });
+      case "change_project_root": {
+        emit({ type: "ack", id });
         break;
       }
-      case "list_skills": {
-        const skills = await sessionManager.listSkills(sessionId ?? void 0);
-        emit({ event: "skills", id, skills });
+      case "list_slash_commands": {
+        emit({
+          type: "slash_commands",
+          id,
+          commands: [
+            { kind: "new", name: "/new", label: "New Session", description: "Start a fresh conversation" },
+            { kind: "exit", name: "/exit", label: "Exit", description: "Quit the application" },
+          ],
+        });
         break;
       }
-      case "load_skill": {
-        const skillPath = typeof params.path === "string" ? params.path : "";
-        const skills = [
-          {
-            name: typeof params.name === "string" ? params.name : "unknown",
-            path: skillPath,
-            description: typeof params.description === "string" ? params.description : "",
-          },
-        ];
-        const userPrompt = { text: "/continue", skills };
-        await sessionManager.handleUserPrompt(userPrompt);
-        emit({ event: "skill_loaded", id });
-        break;
-      }
-      case "adjust_bash_timeout": {
-        const deltaMs = typeof params.deltaMs === "number" ? params.deltaMs : 0;
-        const result = sessionManager.adjustActiveBashTimeout(deltaMs);
-        emit({ event: "bash_timeout_adjusted", id, result });
+      case "read_clipboard_image": {
+        emit({
+          type: "clipboard_image",
+          id,
+          dataUrl: null,
+          error: "Clipboard image reading not supported in headless mode",
+        });
         break;
       }
       default:
-        emit({ event: "error", id, error: `Unknown method: ${method}` });
+        emit({ type: "error", id, message: `Unknown command type: ${type2}` });
         break;
     }
   }
