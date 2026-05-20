@@ -54,7 +54,7 @@ jobs:
           SIDECAR_DIR=apps/macos-menubar/DeepCode/Resources/sidecar
           rm -rf "$SIDECAR_DIR"
           mkdir -p "$SIDECAR_DIR"
-          cp dist/cli.mjs "$SIDECAR_DIR/"
+          cp dist/cli.js "$SIDECAR_DIR/cli.mjs"
           cp package.json "$SIDECAR_DIR/"
           # Stage prod-only node_modules for the sidecar.
           mkdir -p /tmp/sidecar-prod

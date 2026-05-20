@@ -55,12 +55,12 @@ jobs:
           npx tsc -p ./ --noEmit
           ./node_modules/.bin/esbuild ./src/cli.tsx \
             --bundle --platform=node --format=esm --target=node22 \
-            --outfile=dist/cli.mjs \
+            --outfile=dist/cli.js \
             --banner:js='#!/usr/bin/env node' \
             --jsx=automatic --jsx-import-source=react \
             --packages=external \
             --log-override:empty-import-meta=silent
-          chmod +x dist/cli.mjs || true
+          chmod +x dist/cli.js || true
 
       - name: Run tests (non-blocking on Windows)
         shell: bash
@@ -109,7 +109,7 @@ jobs:
           } else {
             New-Item -ItemType Directory -Path $sidecar -Force | Out-Null
           }
-          Copy-Item dist/cli.mjs "$sidecar/cli.mjs" -Force
+          Copy-Item dist/cli.js "$sidecar/cli.mjs" -Force
           Copy-Item package.json "$sidecar/package.json" -Force
 
           # prod-only node_modules
