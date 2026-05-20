@@ -122,9 +122,11 @@ jobs:
           Copy-Item (Join-Path $work "node_modules") "$sidecar/node_modules" -Recurse -Force
           Remove-Item $work -Recurse -Force
 
-          # docs/tools used by the system prompt assembly at runtime
-          New-Item -ItemType Directory -Path "$sidecar/docs/tools" -Force | Out-Null
-          Copy-Item docs/tools/* "$sidecar/docs/tools/" -Recurse -Force
+          # docs/tools used by the system prompt assembly at runtime (if present)
+          if (Test-Path "docs/tools") {
+            New-Item -ItemType Directory -Path "$sidecar/docs/tools" -Force | Out-Null
+            Copy-Item docs/tools/* "$sidecar/docs/tools/" -Recurse -Force
+          }
 
       - name: Download Node.exe
         shell: pwsh

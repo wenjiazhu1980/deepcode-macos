@@ -62,9 +62,11 @@ jobs:
           (cd /tmp/sidecar-prod && npm ci --omit=dev --ignore-scripts)
           mkdir -p "$SIDECAR_DIR/node_modules"
           cp -R /tmp/sidecar-prod/node_modules/. "$SIDECAR_DIR/node_modules/"
-          # Ship docs/tools/* used at runtime by SYSTEM prompt assembly.
-          mkdir -p "$SIDECAR_DIR/docs/tools"
-          cp -R docs/tools/. "$SIDECAR_DIR/docs/tools/"
+          # Ship docs/tools/* used at runtime by SYSTEM prompt assembly (if present).
+          if [ -d "docs/tools" ]; then
+            mkdir -p "$SIDECAR_DIR/docs/tools"
+            cp -R docs/tools/. "$SIDECAR_DIR/docs/tools/"
+          fi
 
       - name: Download universal Node binary
         run: |
