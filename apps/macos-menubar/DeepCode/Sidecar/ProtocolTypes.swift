@@ -28,6 +28,7 @@ enum ClientCommand: Encodable {
     case changeProjectRoot(id: String, path: String)
     case listSlashCommands(id: String)
     case readClipboardImage(id: String)
+    case readImageFile(id: String, path: String)
 
     private enum CodingKeys: String, CodingKey {
         case type, id, text, sessionId, path
@@ -70,6 +71,10 @@ enum ClientCommand: Encodable {
         case let .readClipboardImage(id):
             try container.encode("read_clipboard_image", forKey: .type)
             try container.encode(id, forKey: .id)
+        case let .readImageFile(id, filePath):
+            try container.encode("read_image_file", forKey: .type)
+            try container.encode(id, forKey: .id)
+            try container.encode(filePath, forKey: .path)
         }
     }
 }
@@ -137,6 +142,7 @@ enum ServerEvent: Decodable {
     case projectRootChanged(id: String, path: String, skills: [SkillInfo])
     case slashCommands(id: String, commands: [SlashCommandItem])
     case clipboardImage(id: String, dataUrl: String?, error: String?)
+    case imageFile(id: String, dataUrl: String?, mimeType: String?, fileName: String?, fileSize: Int?, error: String?)
     case unknown(rawType: String)
 
     private enum CodingKeys: String, CodingKey {
@@ -150,7 +156,7 @@ enum ServerEvent: Decodable {
         case status
         case path, skills
         case commands
-        case dataUrl
+        case dataUrl, mimeType, fileName, fileSize
     }
 
     init(from decoder: Decoder) throws {
@@ -208,6 +214,14 @@ enum ServerEvent: Decodable {
             let dataUrl = try container.decodeIfPresent(String.self, forKey: .dataUrl)
             let error = try container.decodeIfPresent(String.self, forKey: .error)
             self = .clipboardImage(id: id, dataUrl: dataUrl, error: error)
+        case "image_file":
+            let id = try container.decode(String.self, forKey: .id)
+            let dataUrl = try container.decodeIfPresent(String.self, forKey: .dataUrl)
+            let mimeType = try container.decodeIfPresent(String.self, forKey: .mimeType)
+            let fileName = try container.decodeIfPresent(String.self, forKey: .fileName)
+            let fileSize = try container.decodeIfPresent(Int.self, forKey: .fileSize)
+            let error = try container.decodeIfPresent(String.self, forKey: .error)
+            self = .imageFile(id: id, dataUrl: dataUrl, mimeType: mimeType, fileName: fileName, fileSize: fileSize, error: error)
         default:
             self = .unknown(rawType: type)
         }

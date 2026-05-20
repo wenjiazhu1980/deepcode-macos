@@ -147,6 +147,16 @@ struct InputBar: View {
                 .buttonStyle(.borderless)
                 .help("粘贴图片 (⌘V)")
 
+                // Read image file button
+                Button {
+                    viewModel.readImageFile()
+                } label: {
+                    Image(systemName: "photo")
+                        .imageScale(.medium)
+                }
+                .buttonStyle(.borderless)
+                .help("选择本地图片文件")
+
                 TextField("发送消息给 DeepSeek…", text: $viewModel.inputText, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...6)

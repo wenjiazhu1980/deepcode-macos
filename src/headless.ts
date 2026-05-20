@@ -18,6 +18,7 @@
  *   change_project_root – Change the project root directory
  *   list_slash_commands – List available slash commands
  *   read_clipboard_image – Read image from clipboard
+ *   read_image_file     – Read image from local file path
  *
  * Outbound types (CLI → App):
  *   ready               – Initialization complete
@@ -29,11 +30,15 @@
  *   error               – Error response
  *   done                – Command completed
  *   ack                 – Acknowledgement
+ *   image_file          – Image file read result (dataUrl, mimeType, etc.)
  */
 
+import * as fs from "fs";
+import * as path from "path";
 import * as readline from "readline";
 import { SessionManager, type SessionEntry, type SessionMessage, type UserPromptContent } from "./session";
 import { resolveCurrentSettings, createOpenAIClient } from "./ui/App";
+import { readClipboardImage } from "./ui/clipboard";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -290,12 +295,87 @@ export async function runHeadlessWithOptions(options: HeadlessOptions, packageVe
       }
 
       case "read_clipboard_image": {
-        emit({
-          type: "clipboard_image",
-          id,
-          dataUrl: null,
-          error: "Clipboard image reading not supported in headless mode",
-        });
+        try {
+          const image = readClipboardImage();
+          if (image) {
+            emit({
+              type: "image_file",
+              id,
+              dataUrl: image.dataUrl,
+              mimeType: image.mimeType,
+            });
+          } else {
+            emit({
+              type: "image_file",
+              id,
+              dataUrl: null,
+              error: "No image found in clipboard",
+            });
+          }
+        } catch (error) {
+          const errMessage = error instanceof Error ? error.message : String(error);
+          emit({ type: "image_file", id, dataUrl: null, error: errMessage });
+        }
+        break;
+      }
+
+      case "read_image_file": {
+        const filePath = typeof raw.path === "string" ? raw.path : "";
+        if (!filePath) {
+          emit({ type: "image_file", id, dataUrl: null, error: "Missing file path" });
+          break;
+        }
+
+        try {
+          // Resolve relative paths against project root
+          const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(projectRoot, filePath);
+
+          // Check if file exists
+          if (!fs.existsSync(resolvedPath)) {
+            emit({ type: "image_file", id, dataUrl: null, error: `File not found: ${filePath}` });
+            break;
+          }
+
+          // Read file
+          const buffer = fs.readFileSync(resolvedPath);
+
+          // Determine MIME type from extension
+          const ext = path.extname(resolvedPath).toLowerCase();
+          const mimeMap: Record<string, string> = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".gif": "image/gif",
+            ".webp": "image/webp",
+            ".bmp": "image/bmp",
+            ".tiff": "image/tiff",
+            ".tif": "image/tiff",
+            ".svg": "image/svg+xml",
+          };
+          const mimeType = mimeMap[ext] || "application/octet-stream";
+
+          // Check if it's a supported image type
+          if (!mimeType.startsWith("image/")) {
+            emit({ type: "image_file", id, dataUrl: null, error: `Unsupported file type: ${ext}` });
+            break;
+          }
+
+          // Convert to data URL
+          const base64 = buffer.toString("base64");
+          const dataUrl = `data:${mimeType};base64,${base64}`;
+
+          emit({
+            type: "image_file",
+            id,
+            dataUrl,
+            mimeType,
+            fileName: path.basename(resolvedPath),
+            fileSize: buffer.length,
+          });
+        } catch (error) {
+          const errMessage = error instanceof Error ? error.message : String(error);
+          emit({ type: "image_file", id, dataUrl: null, error: errMessage });
+        }
         break;
       }
 

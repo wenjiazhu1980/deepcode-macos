@@ -267,7 +267,7 @@ function gitExecPathToBashCandidates(execPath) {
 function gitExecutableToBashCandidates(gitPath) {
   return [pathWin32.join(gitPath, "..", "..", "bin", "bash.exe"), pathWin32.join(gitPath, "..", "bin", "bash.exe")];
 }
-function firstExistingWindowsPath(candidates, existsSync11) {
+function firstExistingWindowsPath(candidates, existsSync12) {
   const seen = /* @__PURE__ */ new Set();
   for (const candidate of candidates) {
     const normalized = pathWin32.resolve(candidate);
@@ -276,7 +276,7 @@ function firstExistingWindowsPath(candidates, existsSync11) {
       continue;
     }
     seen.add(key);
-    if (getShellKind(normalized) === "bash" && existsSync11(normalized)) {
+    if (getShellKind(normalized) === "bash" && existsSync12(normalized)) {
       return normalized;
     }
   }
@@ -1153,7 +1153,7 @@ function buildShellCommand(command) {
   return { shellPath, shellArgs: ["-c", wrappedCommand], marker };
 }
 async function executeShellCommand(shellPath, shellArgs, cwd, command, context) {
-  return new Promise((resolve7) => {
+  return new Promise((resolve8) => {
     const detached = process.platform !== "win32";
     const configuredEnv = context.createOpenAIClient?.().env ?? {};
     const minTimeoutMs = context.bashMinTimeoutMs;
@@ -1241,7 +1241,7 @@ async function executeShellCommand(shellPath, shellArgs, cwd, command, context) 
         context.onProcessTimeoutControl?.(pid, null);
         context.onProcessExit?.(pid);
       }
-      resolve7({
+      resolve8({
         stdout,
         stderr,
         exitCode: typeof code === "number" ? code : null,
@@ -1517,8 +1517,8 @@ function formatZodError(error) {
   if (!issue) {
     return "Invalid tool input.";
   }
-  const path15 = issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
-  return `${path15}${issue.message}`;
+  const path16 = issue.path.length > 0 ? `${issue.path.join(".")}: ` : "";
+  return `${path16}${issue.message}`;
 }
 
 // src/common/state.ts
@@ -3014,7 +3014,7 @@ async function executeDefaultWebSearch(query, llmContext, context) {
   }
 }
 async function runWebSearchScript(scriptPath, query, context, configuredEnv) {
-  return new Promise((resolve7) => {
+  return new Promise((resolve8) => {
     const child = spawn3(scriptPath, [query], {
       cwd: context.projectRoot,
       env: { ...process.env, ...configuredEnv },
@@ -3040,7 +3040,7 @@ async function runWebSearchScript(scriptPath, query, context, configuredEnv) {
       if (typeof pid === "number") {
         context.onProcessExit?.(pid);
       }
-      resolve7({
+      resolve8({
         stdout,
         stderr,
         exitCode: typeof code === "number" ? code : null,
@@ -3520,7 +3520,7 @@ var McpClient = class {
   stderrBuffer = "";
   notificationHandler = null;
   async connect(timeoutMs) {
-    return new Promise((resolve7, reject) => {
+    return new Promise((resolve8, reject) => {
       const childEnv = {
         ...process.env,
         ...this.env,
@@ -3581,7 +3581,7 @@ var McpClient = class {
             return;
           }
           this.sendNotification("notifications/initialized");
-          resolve7();
+          resolve8();
         })
         .catch(reject);
     });
@@ -3652,7 +3652,7 @@ var McpClient = class {
     }
   }
   sendRequest(method, params, timeoutMs = 3e4) {
-    return new Promise((resolve7, reject) => {
+    return new Promise((resolve8, reject) => {
       const id = this.nextId++;
       const request = {
         jsonrpc: "2.0",
@@ -3668,7 +3668,7 @@ var McpClient = class {
           )
         );
       }, timeoutMs);
-      this.pendingRequests.set(id, { resolve: resolve7, reject, timer });
+      this.pendingRequests.set(id, { resolve: resolve8, reject, timer });
       this.writeLine(JSON.stringify(request));
     });
   }
@@ -7056,11 +7056,11 @@ function readClipboardImage() {
   return null;
 }
 async function readClipboardImageAsync() {
-  return new Promise((resolve7, reject) => {
+  return new Promise((resolve8, reject) => {
     setImmediate(() => {
       try {
         const result = readClipboardImage();
-        resolve7(result);
+        resolve8(result);
       } catch (error) {
         reject(error);
       }
@@ -11610,7 +11610,7 @@ function getUpdateStatePath() {
   return path14.join(os10.homedir(), ".deepcode", UPDATE_STATE_FILE);
 }
 async function promptUpdateChoice({ currentVersion, latestVersion, installCommand }) {
-  return new Promise((resolve7) => {
+  return new Promise((resolve8) => {
     let selected = false;
     let instance = null;
     const handleSelect = (choice) => {
@@ -11618,7 +11618,7 @@ async function promptUpdateChoice({ currentVersion, latestVersion, installComman
         return;
       }
       selected = true;
-      resolve7(choice);
+      resolve8(choice);
       instance?.unmount();
     };
     instance = render(
@@ -11633,23 +11633,23 @@ async function promptUpdateChoice({ currentVersion, latestVersion, installComman
   });
 }
 async function runNpmInstallGlobal(installSpec) {
-  return new Promise((resolve7) => {
+  return new Promise((resolve8) => {
     const child = spawnNpm(["install", "-g", installSpec], {
       stdio: "inherit",
     });
     child.on("error", (error) => {
       process.stderr.write(`Failed to start npm install: ${error.message}
 `);
-      resolve7(false);
+      resolve8(false);
     });
     child.on("close", (code) => {
       if (code === 0) {
-        resolve7(true);
+        resolve8(true);
         return;
       }
       process.stderr.write(`npm install exited with code ${code ?? "unknown"}.
 `);
-      resolve7(false);
+      resolve8(false);
     });
   });
 }
@@ -11665,7 +11665,7 @@ async function fetchLatestNpmVersion(packageName) {
   return parseNpmViewVersion(result.stdout);
 }
 function runNpmViewLatestVersion(packageName, registry, timeoutMs) {
-  return new Promise((resolve7) => {
+  return new Promise((resolve8) => {
     const args2 = ["view", packageName, "dist-tags.latest", "--json"];
     if (registry) {
       args2.push("--registry", registry);
@@ -11681,7 +11681,7 @@ function runNpmViewLatestVersion(packageName, registry, timeoutMs) {
       }
       settled = true;
       clearTimeout(timer);
-      resolve7(result);
+      resolve8(result);
     };
     const timer = setTimeout(() => {
       if (typeof child.pid === "number") {
@@ -11773,6 +11773,8 @@ function parseVersion(value) {
 }
 
 // src/headless.ts
+import * as fs14 from "fs";
+import * as path15 from "path";
 import * as readline from "readline";
 function jsonReplacer(_key, value) {
   if (value instanceof Map) {
@@ -11967,12 +11969,73 @@ async function runHeadlessWithOptions(options, packageVersion) {
         break;
       }
       case "read_clipboard_image": {
-        emit({
-          type: "clipboard_image",
-          id,
-          dataUrl: null,
-          error: "Clipboard image reading not supported in headless mode",
-        });
+        try {
+          const image = readClipboardImage();
+          if (image) {
+            emit({
+              type: "image_file",
+              id,
+              dataUrl: image.dataUrl,
+              mimeType: image.mimeType,
+            });
+          } else {
+            emit({
+              type: "image_file",
+              id,
+              dataUrl: null,
+              error: "No image found in clipboard",
+            });
+          }
+        } catch (error) {
+          const errMessage = error instanceof Error ? error.message : String(error);
+          emit({ type: "image_file", id, dataUrl: null, error: errMessage });
+        }
+        break;
+      }
+      case "read_image_file": {
+        const filePath = typeof raw.path === "string" ? raw.path : "";
+        if (!filePath) {
+          emit({ type: "image_file", id, dataUrl: null, error: "Missing file path" });
+          break;
+        }
+        try {
+          const resolvedPath = path15.isAbsolute(filePath) ? filePath : path15.resolve(projectRoot2, filePath);
+          if (!fs14.existsSync(resolvedPath)) {
+            emit({ type: "image_file", id, dataUrl: null, error: `File not found: ${filePath}` });
+            break;
+          }
+          const buffer = fs14.readFileSync(resolvedPath);
+          const ext = path15.extname(resolvedPath).toLowerCase();
+          const mimeMap = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".gif": "image/gif",
+            ".webp": "image/webp",
+            ".bmp": "image/bmp",
+            ".tiff": "image/tiff",
+            ".tif": "image/tiff",
+            ".svg": "image/svg+xml",
+          };
+          const mimeType = mimeMap[ext] || "application/octet-stream";
+          if (!mimeType.startsWith("image/")) {
+            emit({ type: "image_file", id, dataUrl: null, error: `Unsupported file type: ${ext}` });
+            break;
+          }
+          const base64 = buffer.toString("base64");
+          const dataUrl = `data:${mimeType};base64,${base64}`;
+          emit({
+            type: "image_file",
+            id,
+            dataUrl,
+            mimeType,
+            fileName: path15.basename(resolvedPath),
+            fileSize: buffer.length,
+          });
+        } catch (error) {
+          const errMessage = error instanceof Error ? error.message : String(error);
+          emit({ type: "image_file", id, dataUrl: null, error: errMessage });
+        }
         break;
       }
       default:

@@ -241,6 +241,34 @@ final class ChatViewModel: ObservableObject {
         addImageAttachment(image)
     }
 
+    func readImageFile() {
+        guard sidecar.isRunning else {
+            appendSystem("Sidecar 进程未运行，无法读取图片")
+            return
+        }
+
+        // For MenuBarExtra apps, we need to activate the app and use async panel
+        NSApp.activate(ignoringOtherApps: true)
+
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "选择图片"
+        panel.message = "选择要附加的图片文件"
+        panel.allowedContentTypes = [.image]
+
+        // Use begin with completion handler for MenuBarExtra compatibility
+        panel.begin { [weak self] response in
+            guard let self = self, response == .OK, let url = panel.url else { return }
+            let path = url.path
+            Task { @MainActor in
+                let id = UUID().uuidString
+                self.sidecar.send(.readImageFile(id: id, path: path))
+            }
+        }
+    }
+
     func addImageAttachment(_ image: NSImage) {
         guard let tiffData = image.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiffData),
@@ -351,6 +379,19 @@ final class ChatViewModel: ObservableObject {
         case let .clipboardImage(_, dataUrl, error):
             if let error = error {
                 appendSystem("剪贴板图片: \(error)")
+            } else if let dataUrl = dataUrl {
+                // Convert dataUrl back to NSImage
+                if let base64Range = dataUrl.range(of: ";base64,") {
+                    let base64 = String(dataUrl[base64Range.upperBound...])
+                    if let data = Data(base64Encoded: base64),
+                       let image = NSImage(data: data) {
+                        addImageAttachment(image)
+                    }
+                }
+            }
+        case let .imageFile(_, dataUrl, _, _, _, error):
+            if let error = error {
+                appendSystem("读取图片文件: \(error)")
             } else if let dataUrl = dataUrl {
                 // Convert dataUrl back to NSImage
                 if let base64Range = dataUrl.range(of: ";base64,") {
