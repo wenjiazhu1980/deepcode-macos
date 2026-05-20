@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 env:
-  NODE_VERSION: "18.20.4"
+  NODE_VERSION: "22"
   DOTNET_VERSION: "8.0.x"
 
 jobs:
@@ -54,7 +54,7 @@ jobs:
         run: |
           npx tsc -p ./ --noEmit
           ./node_modules/.bin/esbuild ./src/cli.tsx \
-            --bundle --platform=node --format=esm --target=node18 \
+            --bundle --platform=node --format=esm --target=node22 \
             --outfile=dist/cli.mjs \
             --banner:js='#!/usr/bin/env node' \
             --jsx=automatic --jsx-import-source=react \
